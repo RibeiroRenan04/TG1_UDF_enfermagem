@@ -142,7 +142,7 @@ O projeto é composto por três repositórios no GitHub:
 
 ```
 RibeiroRenan04/EstagioCheckAPI        ← Backend (.NET) + Database (SQL)
-RibeiroRenan04/<FRONTEND_REPO>        ← Frontend (Angular)
+RibeiroRenan04/<EstagioCheckFront>        ← Frontend (Angular)
 RibeiroRenan04/TG1_UDF_enfermagem     ← Repositório Consolidado (espelho)
                 ├── backend/
                 └── frontend/
