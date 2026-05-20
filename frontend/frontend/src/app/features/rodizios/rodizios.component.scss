@@ -1,0 +1,49 @@
+.form-card { margin-bottom: 16px; }
+
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  mat-form-field { flex: 1; min-width: 180px; }
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+}
+
+.group-panel {
+  margin-bottom: 8px;
+  border-radius: 0.75rem !important;
+}
+
+.schedules-list { padding: 8px 0; }
+
+.schedule-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f4f8;
+  color: #374151;
+  font-size: 0.875rem;
+
+  mat-icon { color: #00ADEE; font-size: 18px; width: 18px; height: 18px; }
+}
+
+.schedule-shift, .schedule-type {
+  font-size: 0.75rem;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-weight: 500;
+}
+
+.empty-state.small {
+  color: #9ca3af;
+  font-size: 0.85rem;
+  padding: 8px 0;
+}

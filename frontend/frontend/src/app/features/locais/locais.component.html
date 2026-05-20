@@ -1,0 +1,87 @@
+<div class="page-header">
+  <h1>Locais de Estágio</h1>
+  <button mat-raised-button color="primary" (click)="openCreate()">
+    <mat-icon>add</mat-icon> Novo local
+  </button>
+</div>
+
+<!-- Formulário -->
+<mat-card class="form-card" *ngIf="showForm()">
+  <mat-card-header>
+    <mat-card-title>{{ editing() ? 'Editar' : 'Novo' }} local</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <form [formGroup]="form" (ngSubmit)="save()" class="form-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>Nome</mat-label>
+        <input matInput formControlName="name">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Endereço</mat-label>
+        <input matInput formControlName="address">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Latitude</mat-label>
+        <input matInput type="number" formControlName="latitude" step="0.000001">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Longitude</mat-label>
+        <input matInput type="number" formControlName="longitude" step="0.000001">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Raio (metros)</mat-label>
+        <input matInput type="number" formControlName="radiusMeters">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Início do turno</mat-label>
+        <input matInput formControlName="shiftStart" placeholder="07:00">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Fim do turno</mat-label>
+        <input matInput formControlName="shiftEnd" placeholder="13:00">
+      </mat-form-field>
+      <div class="form-actions">
+        <button mat-button type="button" (click)="showForm.set(false)">Cancelar</button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid">Salvar</button>
+      </div>
+    </form>
+  </mat-card-content>
+</mat-card>
+
+<!-- Lista -->
+<mat-card *ngIf="!loading()">
+  <mat-card-content>
+    <table mat-table [dataSource]="locations()" class="full-width" *ngIf="locations().length; else empty">
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef>Nome</th>
+        <td mat-cell *matCellDef="let l">{{ l.name }}</td>
+      </ng-container>
+      <ng-container matColumnDef="address">
+        <th mat-header-cell *matHeaderCellDef>Endereço</th>
+        <td mat-cell *matCellDef="let l">{{ l.address }}</td>
+      </ng-container>
+      <ng-container matColumnDef="radius">
+        <th mat-header-cell *matHeaderCellDef>Raio</th>
+        <td mat-cell *matCellDef="let l">{{ l.radiusMeters }}m</td>
+      </ng-container>
+      <ng-container matColumnDef="shift">
+        <th mat-header-cell *matHeaderCellDef>Turno</th>
+        <td mat-cell *matCellDef="let l">{{ l.shiftStart }} – {{ l.shiftEnd }}</td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let l">
+          <button mat-icon-button (click)="openEdit(l)"><mat-icon>edit</mat-icon></button>
+          <button mat-icon-button color="warn" (click)="delete(l.id)"><mat-icon>delete</mat-icon></button>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+    <ng-template #empty>
+      <div class="empty-state"><mat-icon>business</mat-icon><p>Nenhum local cadastrado.</p></div>
+    </ng-template>
+  </mat-card-content>
+</mat-card>
+
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>

@@ -1,0 +1,53 @@
+<div class="primeiro-acesso-container">
+  <mat-card class="pa-card">
+    <mat-card-header>
+      <div class="brand">
+        <img src="assets/logo-udf.svg" alt="UDF" class="brand-logo">
+      </div>
+    </mat-card-header>
+
+    <mat-card-content>
+      <div class="welcome-header">
+        <mat-icon class="welcome-icon">waving_hand</mat-icon>
+        <h2>Olá, {{ (user()?.fullName || '').split(' ')[0] }}!</h2>
+        <p>
+          Este é seu <strong>primeiro acesso</strong>. Para continuar, você precisa
+          definir uma nova senha e confirmar seu e-mail acadêmico <strong>&#64;cs.udf.edu.br</strong>.
+        </p>
+      </div>
+
+      <form [formGroup]="form" (ngSubmit)="onSubmit()" class="form">
+
+        <mat-form-field appearance="outline">
+          <mat-label>E-mail acadêmico (&#64;cs.udf.edu.br)</mat-label>
+          <input matInput type="email" formControlName="email" placeholder="rgm&#64;cs.udf.edu.br">
+          <mat-icon matPrefix>school</mat-icon>
+          <mat-error *ngIf="form.get('email')?.hasError('required')">Campo obrigatório</mat-error>
+          <mat-error *ngIf="form.get('email')?.hasError('pattern')">Use somente e-mail &#64;cs.udf.edu.br</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Nova senha</mat-label>
+          <input matInput [type]="hidePass ? 'password' : 'text'" formControlName="newPassword" autocomplete="new-password">
+          <button mat-icon-button matSuffix type="button" (click)="hidePass = !hidePass">
+            <mat-icon>{{ hidePass ? 'visibility_off' : 'visibility' }}</mat-icon>
+          </button>
+          <mat-hint>Mínimo 8 caracteres</mat-hint>
+          <mat-error *ngIf="form.get('newPassword')?.hasError('minlength')">Mínimo 8 caracteres</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Confirmar nova senha</mat-label>
+          <input matInput type="password" formControlName="confirmPassword" autocomplete="new-password">
+          <mat-error *ngIf="form.hasError('mismatch')">As senhas não conferem</mat-error>
+        </mat-form-field>
+
+        <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid || busy()">
+          <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
+          <span *ngIf="!busy()">Concluir cadastro e entrar</span>
+        </button>
+
+      </form>
+    </mat-card-content>
+  </mat-card>
+</div>

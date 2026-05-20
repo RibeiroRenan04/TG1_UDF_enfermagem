@@ -1,0 +1,46 @@
+<div class="page-header">
+  <h1>Relatórios</h1>
+  <button mat-stroked-button (click)="exportCsv()" [disabled]="!rows().length">
+    <mat-icon>download</mat-icon> Exportar CSV
+  </button>
+</div>
+
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+
+<mat-card *ngIf="!loading()">
+  <mat-card-content>
+    <table mat-table [dataSource]="rows()" class="full-width" *ngIf="rows().length; else empty">
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef>Aluno</th>
+        <td mat-cell *matCellDef="let r">{{ r.studentName }}</td>
+      </ng-container>
+      <ng-container matColumnDef="group">
+        <th mat-header-cell *matHeaderCellDef>Turma</th>
+        <td mat-cell *matCellDef="let r">{{ r.groupName }}</td>
+      </ng-container>
+      <ng-container matColumnDef="totalHours">
+        <th mat-header-cell *matHeaderCellDef>Horas</th>
+        <td mat-cell *matCellDef="let r">{{ r.totalHours | number:'1.0-1' }}h</td>
+      </ng-container>
+      <ng-container matColumnDef="pendencies">
+        <th mat-header-cell *matHeaderCellDef>Pendências</th>
+        <td mat-cell *matCellDef="let r">
+          <span [class]="r.pendenciesCount > 0 ? 'chip-irregular' : 'chip-aprovado'">{{ r.pendenciesCount }}</span>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="certificate">
+        <th mat-header-cell *matHeaderCellDef>Certificado</th>
+        <td mat-cell *matCellDef="let r">
+          <mat-icon [color]="r.certificateReady ? 'primary' : 'warn'">
+            {{ r.certificateReady ? 'check_circle' : 'cancel' }}
+          </mat-icon>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+    <ng-template #empty>
+      <div class="empty-state"><mat-icon>bar_chart</mat-icon><p>Nenhum dado de relatório.</p></div>
+    </ng-template>
+  </mat-card-content>
+</mat-card>

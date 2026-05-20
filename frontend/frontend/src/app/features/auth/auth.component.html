@@ -1,0 +1,166 @@
+<div class="auth-container">
+  <mat-card class="auth-card">
+    <mat-card-header>
+      <div class="brand">
+        <img src="assets/logo.png" alt="UDF Centro Universitário" class="brand-logo">
+        <h4 class="brand-title">EstágioCheck</h4>
+      </div>
+      <mat-card-subtitle class="brand-subtitle">Sistema de Controle de Estágios</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+
+      <!-- ════ VIEW 0: Login / Cadastro ════ -->
+      <ng-container *ngIf="view() === 0">
+        <mat-tab-group [(selectedIndex)]="selectedTab" animationDuration="200ms">
+
+          <!-- Login -->
+          <mat-tab label="Entrar">
+            <form [formGroup]="loginForm" (ngSubmit)="onLogin()" class="form">
+              <mat-form-field appearance="outline">
+                <mat-label>E-mail ou RGM</mat-label>
+                <input matInput formControlName="email" autocomplete="email">
+                <mat-error *ngIf="loginForm.get('email')?.hasError('required')">Campo obrigatório</mat-error>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Senha</mat-label>
+                <input matInput [type]="hidePass ? 'password' : 'text'" formControlName="password" autocomplete="current-password">
+                <button mat-icon-button matSuffix type="button" (click)="hidePass = !hidePass">
+                  <mat-icon>{{ hidePass ? 'visibility_off' : 'visibility' }}</mat-icon>
+                </button>
+                <mat-error *ngIf="loginForm.get('password')?.hasError('minlength')">Mínimo 6 caracteres</mat-error>
+              </mat-form-field>
+
+              <button mat-raised-button color="primary" type="submit"
+                      [disabled]="loginForm.invalid || busy()">
+                <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
+                <span *ngIf="!busy()">Entrar</span>
+              </button>
+
+              <button mat-button type="button" class="forgot-btn" (click)="goToForgot()">
+                Esqueceu a senha?
+              </button>
+            </form>
+          </mat-tab>
+
+          <!-- Cadastro -->
+          <mat-tab label="Cadastrar">
+            <form [formGroup]="registerForm" (ngSubmit)="onRegister()" class="form">
+              <mat-form-field appearance="outline">
+                <mat-label>Nome completo</mat-label>
+                <input matInput formControlName="fullName">
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>E-mail institucional (&#64;cs.udf.edu.br)</mat-label>
+                <input matInput type="email" formControlName="email">
+                <mat-error *ngIf="registerForm.get('email')?.hasError('pattern')">Use seu e-mail &#64;cs.udf.edu.br</mat-error>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>RGM (Matrícula)</mat-label>
+                <input matInput formControlName="matricula">
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Perfil</mat-label>
+                <mat-select formControlName="role">
+                  <mat-option value="aluno">Aluno</mat-option>
+                  <mat-option value="preceptor">Preceptor (enfermeiro)</mat-option>
+                  <mat-option value="supervisor">Professor supervisor</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Senha</mat-label>
+                <input matInput type="password" formControlName="password" autocomplete="new-password">
+                <mat-error *ngIf="registerForm.get('password')?.hasError('minlength')">Mínimo 6 caracteres</mat-error>
+              </mat-form-field>
+
+              <button mat-raised-button color="primary" type="submit"
+                      [disabled]="registerForm.invalid || busy()">
+                <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
+                <span *ngIf="!busy()">Criar conta</span>
+              </button>
+            </form>
+          </mat-tab>
+
+        </mat-tab-group>
+      </ng-container>
+
+      <!-- ════ VIEW 1: Informar e-mail ════ -->
+      <ng-container *ngIf="view() === 1">
+        <div class="recovery-header">
+          <mat-icon class="recovery-icon">lock_reset</mat-icon>
+          <h2>Recuperar senha</h2>
+          <p>Informe seu e-mail acadêmico <strong>&#64;cs.udf.edu.br</strong> para receber o código de verificação.</p>
+        </div>
+        <form [formGroup]="forgotForm" (ngSubmit)="onSendCode()" class="form">
+          <mat-form-field appearance="outline">
+            <mat-label>E-mail acadêmico</mat-label>
+            <input matInput type="email" formControlName="forgotEmail" placeholder="rgm&#64;cs.udf.edu.br">
+            <mat-error *ngIf="forgotForm.get('forgotEmail')?.hasError('pattern')">Use seu e-mail &#64;cs.udf.edu.br</mat-error>
+            <mat-error *ngIf="forgotForm.get('forgotEmail')?.hasError('required')">Campo obrigatório</mat-error>
+          </mat-form-field>
+          <button mat-raised-button color="primary" type="submit" [disabled]="forgotForm.get('forgotEmail')?.invalid || busy()">
+            <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
+            <span *ngIf="!busy()">Enviar código</span>
+          </button>
+          <button mat-button type="button" (click)="goToLogin()">← Voltar ao login</button>
+        </form>
+      </ng-container>
+
+      <!-- ════ VIEW 2: Inserir código ════ -->
+      <ng-container *ngIf="view() === 2">
+        <div class="recovery-header">
+          <mat-icon class="recovery-icon">mark_email_read</mat-icon>
+          <h2>Código enviado!</h2>
+          <p>Verifique sua caixa de entrada em <strong>{{ forgotForm.get('forgotEmail')?.value }}</strong> e insira o código de 6 dígitos.</p>
+        </div>
+        <form [formGroup]="codeForm" (ngSubmit)="onVerifyCode()" class="form">
+          <mat-form-field appearance="outline">
+            <mat-label>Código de verificação</mat-label>
+            <input matInput formControlName="code" maxlength="6" placeholder="000000">
+            <mat-error *ngIf="codeForm.get('code')?.hasError('minlength')">O código tem 6 dígitos</mat-error>
+          </mat-form-field>
+          <button mat-raised-button color="primary" type="submit" [disabled]="codeForm.invalid || busy()">
+            <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
+            <span *ngIf="!busy()">Verificar código</span>
+          </button>
+          <button mat-button type="button" (click)="onSendCode()">Reenviar código</button>
+          <button mat-button type="button" (click)="view.set(1)">← Voltar</button>
+        </form>
+      </ng-container>
+
+      <!-- ════ VIEW 3: Nova senha ════ -->
+      <ng-container *ngIf="view() === 3">
+        <div class="recovery-header">
+          <mat-icon class="recovery-icon">lock_open</mat-icon>
+          <h2>Nova senha</h2>
+          <p>Crie uma senha forte para sua conta.</p>
+        </div>
+        <form [formGroup]="resetForm" (ngSubmit)="onResetPassword()" class="form">
+          <mat-form-field appearance="outline">
+            <mat-label>Nova senha</mat-label>
+            <input matInput [type]="hideNewPass ? 'password' : 'text'" formControlName="newPassword" autocomplete="new-password">
+            <button mat-icon-button matSuffix type="button" (click)="hideNewPass = !hideNewPass">
+              <mat-icon>{{ hideNewPass ? 'visibility_off' : 'visibility' }}</mat-icon>
+            </button>
+            <mat-error *ngIf="resetForm.get('newPassword')?.hasError('minlength')">Mínimo 8 caracteres</mat-error>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Confirmar nova senha</mat-label>
+            <input matInput type="password" formControlName="confirmPassword" autocomplete="new-password">
+            <mat-error *ngIf="resetForm.hasError('mismatch')">As senhas não conferem</mat-error>
+          </mat-form-field>
+          <button mat-raised-button color="primary" type="submit" [disabled]="resetForm.invalid || busy()">
+            <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
+            <span *ngIf="!busy()">Redefinir senha</span>
+          </button>
+        </form>
+      </ng-container>
+
+    </mat-card-content>
+  </mat-card>
+</div>

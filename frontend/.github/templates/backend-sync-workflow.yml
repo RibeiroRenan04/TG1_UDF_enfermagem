@@ -1,0 +1,98 @@
+name: "🔄 Sync: Backend → Consolidado"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE — copie este arquivo para:
+#   EstagioCheckBackend/.github/workflows/sync-to-consolidated.yml
+#
+# Dispara quando há push na branch principal do repositório BACKEND.
+# Copia os arquivos para a pasta /backend do repositório consolidado.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: sync-backend-to-consolidated
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: "Sincronizar Backend → Consolidado"
+    runs-on: ubuntu-latest
+
+    # Proteção anti-loop
+    if: "!contains(github.event.head_commit.message, '[sync-bot]')"
+
+    steps:
+      # ── 1. Checkout do repositório FONTE (este repo — backend) ────────────
+      - name: "📥 Checkout — Repositório Backend"
+        uses: actions/checkout@v4
+        with:
+          path: source
+          fetch-depth: 1
+
+      # ── 2. Checkout do repositório CONSOLIDADO ───────────────────────────
+      - name: "📥 Checkout — Repositório Consolidado"
+        uses: actions/checkout@v4
+        with:
+          # ⚠️ ALTERE para o nome completo do seu repositório consolidado:
+          repository: RibeiroRenan04/EstagioCheck
+          token: ${{ secrets.PAT_TOKEN }}
+          path: consolidated
+          fetch-depth: 1
+
+      # ── 3. Sincronização via rsync ─────────────────────────────────────
+      - name: "🔄 Sincronizar arquivos via rsync"
+        run: |
+          mkdir -p consolidated/backend
+
+          rsync -av --delete \
+            --exclude='.git/' \
+            --exclude='node_modules/' \
+            --exclude='bin/' \
+            --exclude='obj/' \
+            --exclude='dist/' \
+            --exclude='build/' \
+            --exclude='out/' \
+            --exclude='.cache/' \
+            --exclude='coverage/' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='!.env.example' \
+            --exclude='*.log' \
+            --exclude='*.tmp' \
+            --exclude='*.temp' \
+            --exclude='.DS_Store' \
+            --exclude='Thumbs.db' \
+            --exclude='Desktop.ini' \
+            source/ consolidated/backend/
+
+      # ── 4. Commit e Push no consolidado ──────────────────────────────────
+      - name: "📝 Commit e Push no Consolidado"
+        working-directory: consolidated
+        env:
+          GH_SHA: ${{ github.sha }}
+          GH_MSG: ${{ github.event.head_commit.message }}
+          GH_REPO: ${{ github.repository }}
+          GH_ACTOR: ${{ github.actor }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "✅ Nenhuma alteração detectada. Sincronização desnecessária."
+            exit 0
+          fi
+
+          git commit \
+            -m "chore(sync/backend): ${GH_MSG} [sync-bot]" \
+            -m "Origem: ${GH_REPO}@${GH_SHA}" \
+            -m "Executado por: ${GH_ACTOR}"
+
+          git push
+          echo "✅ Backend sincronizado com sucesso!"

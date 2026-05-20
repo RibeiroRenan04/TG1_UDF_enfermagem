@@ -1,0 +1,131 @@
+<div class="page-header">
+  <h1>Usuários</h1>
+  <p>Gerencie alunos por semestre e turno; importe listas acadêmicas.</p>
+</div>
+
+<div class="actions-bar">
+  <button mat-stroked-button (click)="openCadastrarStaffDialog()">
+    <mat-icon>person_add</mat-icon> Novo preceptor/supervisor
+  </button>
+  <button mat-raised-button color="primary" (click)="openImportDialog()">
+    <mat-icon>upload</mat-icon> Importar lista
+  </button>
+</div>
+
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+
+<ng-container *ngIf="!loading()">
+
+  <!-- ══ Alunos ativos ═══════════════════════════════════════════════════════ -->
+  <mat-card class="panel-card">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>group</mat-icon>
+      <mat-card-title>Alunos ativos</mat-card-title>
+      <mat-card-subtitle>Organizados por semestre e turno. {{ activeStudents().length + uncategorizedStudents().length }} ativo(s).</mat-card-subtitle>
+      <span class="card-actions">
+        <button mat-icon-button color="warn" matTooltip="Avançar semestre (7°→8°, 8°→Formado)"
+                [disabled]="advancingBusy()" (click)="onAdvanceSemester()">
+          <mat-spinner *ngIf="advancingBusy()" diameter="20"></mat-spinner>
+          <mat-icon *ngIf="!advancingBusy()">fast_forward</mat-icon>
+        </button>
+      </span>
+    </mat-card-header>
+
+    <mat-card-content>
+      <mat-tab-group animationDuration="150ms">
+        <mat-tab *ngFor="let tab of tabs" [label]="tab.label + ' (' + countForTab(tab) + ')'">
+          <div class="student-list" *ngIf="studentsForTab(tab).length; else emptyTab">
+            <div class="student-row" *ngFor="let s of studentsForTab(tab)">
+              <div class="student-avatar">{{ s.fullName.charAt(0).toUpperCase() }}</div>
+              <div class="student-info">
+                <div class="student-name">{{ s.fullName }}</div>
+                <div class="student-meta">RGM: {{ s.rgm || s.matricula || '—' }}</div>
+              </div>
+              <mat-chip *ngIf="s.mustChangePassword || s.mustSetEmail" class="chip-pending-access">
+                Pendente 1° acesso
+              </mat-chip>
+              <div class="student-email">{{ s.email || '—' }}</div>
+            </div>
+          </div>
+          <ng-template #emptyTab>
+            <div class="empty-state"><p>Nenhum aluno em {{ tab.label }}.</p></div>
+          </ng-template>
+        </mat-tab>
+
+        <!-- Sem categoria -->
+        <mat-tab [label]="'Sem categoria (' + uncategorizedStudents().length + ')'">
+          <div class="student-list" *ngIf="uncategorizedStudents().length; else emptyUncategorized">
+            <div class="student-row" *ngFor="let s of uncategorizedStudents()">
+              <div class="student-avatar">{{ s.fullName.charAt(0).toUpperCase() }}</div>
+              <div class="student-info">
+                <div class="student-name">{{ s.fullName }}</div>
+                <div class="student-meta">RGM: {{ s.rgm || s.matricula || '—' }}</div>
+              </div>
+              <div class="student-email">{{ s.email || '—' }}</div>
+            </div>
+          </div>
+          <ng-template #emptyUncategorized>
+            <div class="empty-state"><p>Nenhum aluno sem categoria.</p></div>
+          </ng-template>
+        </mat-tab>
+      </mat-tab-group>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- ══ Alunos inativos (formados) ════════════════════════════════════════ -->
+  <mat-card class="panel-card">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>archive</mat-icon>
+      <mat-card-title>Alunos inativos</mat-card-title>
+      <mat-card-subtitle>Concluintes (7° e 8° semestres aprovados). Histórico preservado.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="student-list" *ngIf="inactiveStudents().length; else emptyInactive">
+        <div class="student-row" *ngFor="let s of inactiveStudents()">
+          <div class="student-avatar inactive-avatar">{{ s.fullName.charAt(0).toUpperCase() }}</div>
+          <div class="student-info">
+            <div class="student-name">{{ s.fullName }}</div>
+            <div class="student-meta">RGM: {{ s.rgm || s.matricula || '—' }}</div>
+          </div>
+          <div class="student-email">{{ s.email || '—' }}</div>
+        </div>
+      </div>
+      <ng-template #emptyInactive>
+        <div class="empty-state"><p>Nenhum aluno inativo.</p></div>
+      </ng-template>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- ══ Preceptores e supervisores ════════════════════════════════════════ -->
+  <mat-card class="panel-card">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>badge</mat-icon>
+      <mat-card-title>Preceptores e supervisores</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <table mat-table [dataSource]="staff()" class="full-width" *ngIf="staff().length; else emptyStaff">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Nome</th>
+          <td mat-cell *matCellDef="let u"><strong>{{ u.fullName }}</strong></td>
+        </ng-container>
+        <ng-container matColumnDef="email">
+          <th mat-header-cell *matHeaderCellDef>E-mail</th>
+          <td mat-cell *matCellDef="let u">{{ u.email }}</td>
+        </ng-container>
+        <ng-container matColumnDef="role">
+          <th mat-header-cell *matHeaderCellDef>Perfil</th>
+          <td mat-cell *matCellDef="let u">
+            <span class="role-chip" [class.role-supervisor]="u.role === 'supervisor'">{{ u.role | titlecase }}</span>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="displayedStaffCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedStaffCols;"></tr>
+      </table>
+      <ng-template #emptyStaff>
+        <div class="empty-state"><mat-icon>badge</mat-icon><p>Nenhum preceptor ou supervisor.</p></div>
+      </ng-template>
+    </mat-card-content>
+  </mat-card>
+
+</ng-container>
+

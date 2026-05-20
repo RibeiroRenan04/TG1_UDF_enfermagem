@@ -1,0 +1,86 @@
+.actions-bar {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.panel-card {
+  margin-bottom: 20px;
+
+  mat-card-header {
+    align-items: center;
+    .card-actions { margin-left: auto; }
+  }
+}
+
+.full-width { width: 100%; }
+
+// ── Student list ──────────────────────────────────────────────────────────────
+.student-list { padding: 8px 0; }
+
+.student-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid #f0f4f8;
+  transition: background-color 0.15s ease;
+
+  &:last-child { border-bottom: none; }
+  &:hover { background: rgb(0 173 238 / 0.04); border-radius: 8px; }
+}
+
+.student-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #00ADEE;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(0,173,238,0.2);
+}
+
+.inactive-avatar {
+  background: #9ca3af;
+  border-color: rgba(156,163,175,0.2);
+}
+
+.student-info { flex: 1; min-width: 0; }
+.student-name { font-weight: 600; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #0A0A0A; }
+.student-meta { font-size: 0.75rem; color: #6B7280; margin-top: 1px; }
+.student-email { font-size: 0.8rem; color: #6B7280; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+
+.chip-pending-access {
+  background: #fef9c3 !important;
+  color: #854d0e !important;
+  font-size: 0.7rem !important;
+  height: 22px !important;
+  border-radius: 9999px !important;
+}
+
+// ── Staff table ───────────────────────────────────────────────────────────────
+.role-chip {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.role-supervisor {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.mat-mdc-row {
+  transition: background-color 0.15s ease;
+  &:hover { background: rgb(0 173 238 / 0.04) !important; }
+}

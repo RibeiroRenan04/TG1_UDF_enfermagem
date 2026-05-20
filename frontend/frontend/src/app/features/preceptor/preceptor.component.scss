@@ -1,0 +1,14 @@
+.full-width { width: 100%; }
+
+.mat-mdc-header-cell {
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  color: #6B7280 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mat-mdc-row {
+  transition: background-color 0.15s ease;
+  &:hover { background: rgb(0 173 238 / 0.04) !important; }
+}

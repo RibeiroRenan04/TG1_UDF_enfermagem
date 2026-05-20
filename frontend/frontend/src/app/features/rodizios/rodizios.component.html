@@ -1,0 +1,65 @@
+<div class="page-header">
+  <h1>Rodízios / Turmas</h1>
+  <button mat-raised-button color="primary" (click)="showGroupForm.set(!showGroupForm())">
+    <mat-icon>add</mat-icon> Nova turma
+  </button>
+</div>
+
+<!-- Formulário turma -->
+<mat-card class="form-card" *ngIf="showGroupForm()">
+  <mat-card-header><mat-card-title>Nova turma</mat-card-title></mat-card-header>
+  <mat-card-content>
+    <form [formGroup]="groupForm" (ngSubmit)="saveGroup()" class="form-row">
+      <mat-form-field appearance="outline">
+        <mat-label>Código</mat-label>
+        <input matInput formControlName="code">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Nome</mat-label>
+        <input matInput formControlName="name">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Descrição</mat-label>
+        <input matInput formControlName="description">
+      </mat-form-field>
+      <div class="form-actions">
+        <button mat-button type="button" (click)="showGroupForm.set(false)">Cancelar</button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="groupForm.invalid">Criar</button>
+      </div>
+    </form>
+  </mat-card-content>
+</mat-card>
+
+<!-- Lista turmas -->
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+
+<mat-accordion *ngIf="!loading()">
+  <mat-expansion-panel *ngFor="let g of groups()" class="group-panel">
+    <mat-expansion-panel-header>
+      <mat-panel-title>{{ g.name }}</mat-panel-title>
+      <mat-panel-description>{{ g.code }}</mat-panel-description>
+    </mat-expansion-panel-header>
+
+    <div class="schedules-list">
+      <div class="schedule-item" *ngFor="let s of (schedulesByGroup()[g.id] ?? [])">
+        <mat-icon>calendar_today</mat-icon>
+        <span class="schedule-period">{{ s.startDate | date:'dd/MM' }} – {{ s.endDate | date:'dd/MM/yy' }}</span>
+        <span class="schedule-shift">{{ s.shift }}</span>
+        <span class="schedule-type">{{ s.activityType }}</span>
+      </div>
+      <div class="empty-state small" *ngIf="!(schedulesByGroup()[g.id]?.length)">
+        Nenhuma escala cadastrada.
+      </div>
+    </div>
+
+    <mat-action-row>
+      <button mat-button color="warn" (click)="deleteGroup(g.id)">
+        <mat-icon>delete</mat-icon> Excluir turma
+      </button>
+    </mat-action-row>
+  </mat-expansion-panel>
+</mat-accordion>
+
+<div class="empty-state" *ngIf="!loading() && !groups().length">
+  <mat-icon>group</mat-icon><p>Nenhuma turma cadastrada.</p>
+</div>

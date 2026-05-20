@@ -1,0 +1,72 @@
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+
+  @media (min-width: 640px) { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+}
+
+.stat-card {
+  padding: 20px 16px;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px -8px rgb(0 173 238 / 0.25) !important;
+  }
+
+  .stat-icon {
+    font-size: 36px;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 10px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+
+    &.blue   { color: #00ADEE; }
+    &.green  { color: #16a34a; }
+    &.orange { color: #854d0e; }
+    &.purple { color: #7c3aed; }
+  }
+
+  .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #0A0A0A;
+  }
+
+  .stat-label {
+    color: #6B7280;
+    font-size: 0.8rem;
+    margin-top: 4px;
+  }
+}
+
+.pendencies-card { margin-bottom: 24px; }
+
+.pendency-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f4f8;
+
+  &:last-child { border-bottom: none; }
+
+  .pendency-date {
+    color: #6B7280;
+    font-size: 0.82rem;
+    min-width: 90px;
+  }
+
+  .pendency-reason {
+    flex: 1;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+}
+

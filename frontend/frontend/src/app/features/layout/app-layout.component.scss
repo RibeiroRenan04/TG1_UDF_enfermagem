@@ -1,0 +1,163 @@
+// ── App Shell ─────────────────────────────────────────────────────────────────
+.app-container {
+  height: 100vh;
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+.sidenav {
+  width: 256px;
+  display: flex;
+  flex-direction: column;
+  background: #0B427A;  // Catalina Blue
+  color: #f0f8ff;
+  padding: 0;
+  border-right: 0 !important;
+
+  @media (min-width: 1024px) { width: 288px; }
+
+  // Brand header
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px;
+    height: 64px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    background: #082f58; // sidebar-dark
+    flex-shrink: 0;
+  }
+
+  .brand-logo {
+    height: 36px;
+    width: auto;
+    filter: brightness(0) invert(1);
+    flex-shrink: 0;
+  }
+
+  .brand-title {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    color: #ffffff;
+    margin: 0 !important;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // Nav links
+  mat-nav-list {
+    padding: 12px 8px !important;
+
+    a {
+      color: rgba(240, 248, 255, 0.85);
+      border-radius: 8px;
+      margin: 2px 0;
+      font-size: 0.875rem;
+      transition: background-color 0.15s ease, color 0.15s ease;
+
+      mat-icon { color: rgba(240,248,255,0.6); transition: color 0.15s ease; }
+
+      &:hover {
+        background: rgba(0, 173, 238, 0.15);
+        color: #ffffff;
+        mat-icon { color: #8ED1FC; }
+      }
+
+      &.active-link {
+        background: #00ADEE;
+        color: #ffffff;
+        font-weight: 600;
+        box-shadow: 0 2px 8px -2px rgb(0 173 238 / 0.5);
+        mat-icon { color: #ffffff; }
+      }
+    }
+  }
+}
+
+.spacer { flex: 1; }
+
+// ── User info block ───────────────────────────────────────────────────────────
+.user-info {
+  padding: 10px 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #00ADEE;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
+  .user-details { flex: 1; min-width: 0; }
+
+  .user-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .user-email {
+    font-size: 0.7rem;
+    color: rgba(240,248,255,0.55);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .user-role {
+    font-size: 0.65rem;
+    color: rgba(240,248,255,0.4);
+  }
+
+  .logout-btn {
+    color: rgba(240,248,255,0.7);
+    flex-shrink: 0;
+    &:hover { color: #ffffff; background: rgba(0,173,238,0.2) !important; }
+  }
+}
+
+// ── Toolbar (mobile header) ───────────────────────────────────────────────────
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #0B427A !important;
+  box-shadow: 0 1px 3px 0 rgb(11 66 122 / 0.2) !important;
+  height: 56px !important;
+}
+
+.toolbar-title {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+// ── Page content ──────────────────────────────────────────────────────────────
+.content {
+  padding: 16px;
+  min-height: calc(100vh - 56px);
+
+  @media (min-width: 640px) { padding: 24px; }
+  @media (min-width: 1024px) { padding: 32px; }
+}
+
+// Wrapper max-width
+mat-sidenav-content > .content > * {
+  max-width: 1280px;
+}
+

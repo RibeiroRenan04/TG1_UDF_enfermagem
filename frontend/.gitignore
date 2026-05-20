@@ -1,0 +1,76 @@
+﻿# ──────────────────────────────────────────────────────────────
+#  .gitignore — EstágioCheckFront (Angular + Node.js)
+# ──────────────────────────────────────────────────────────────
+
+# ── Dependências ──────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+
+# ── Build / dist ──────────────────────────────────────────────
+dist/
+frontend/dist/
+out/
+build/
+
+# ── Cache Angular / CLI ───────────────────────────────────────
+.angular/
+frontend/.angular/
+**/.angular/cache/
+**/.angular/cli.log
+
+# ── Cache de ferramentas ──────────────────────────────────────
+.cache/
+**/.cache/
+.npm/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+.sass-cache/
+
+# ── Ambiente e segredos ───────────────────────────────────────
+.env
+.env.*
+!.env.example
+frontend/src/environments/environment.ts
+frontend/src/environments/environment.prod.ts
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Cobertura de testes ───────────────────────────────────────
+coverage/
+frontend/coverage/
+*.lcov
+
+# ── IDEs e editores ───────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.history/
+
+# ── Sistema operacional ───────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+
+# ── Arquivos temporários ──────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+
+# ── Pacotes / instaladores ────────────────────────────────────
+*.zip
+*.tar.gz

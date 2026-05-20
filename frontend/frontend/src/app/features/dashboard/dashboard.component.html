@@ -1,0 +1,51 @@
+<div class="page-header">
+  <h1>Painel</h1>
+</div>
+
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+
+<ng-container *ngIf="stats() as s">
+  <div class="stats-grid">
+    <mat-card class="stat-card">
+      <mat-icon class="stat-icon blue">check_circle</mat-icon>
+      <div class="stat-value">{{ s.total }}</div>
+      <div class="stat-label">Registros totais</div>
+    </mat-card>
+    <mat-card class="stat-card">
+      <mat-icon class="stat-icon green">access_time</mat-icon>
+      <div class="stat-value">{{ s.hours | number:'1.0-1' }}h</div>
+      <div class="stat-label">Horas registradas</div>
+    </mat-card>
+    <mat-card class="stat-card">
+      <mat-icon class="stat-icon orange">warning</mat-icon>
+      <div class="stat-value">{{ s.irregular }}</div>
+      <div class="stat-label">Registros irregulares</div>
+    </mat-card>
+    <mat-card class="stat-card" *ngIf="role() === 'supervisor'">
+      <mat-icon class="stat-icon purple">people</mat-icon>
+      <div class="stat-value">{{ s.totalStudents ?? 0 }}</div>
+      <div class="stat-label">Alunos</div>
+    </mat-card>
+  </div>
+
+  <mat-card class="pendencies-card" *ngIf="s.pendencies?.length">
+    <mat-card-header>
+      <mat-card-title>Pendências</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="pendency-item" *ngFor="let p of s.pendencies">
+        <span class="pendency-date">{{ p.pendencyDate | date:'dd/MM/yyyy' }}</span>
+        <span class="pendency-reason">{{ p.locationName }}</span>
+      </div>
+    </mat-card-content>
+    <mat-card-actions *ngIf="role() === 'aluno'">
+      <a mat-button routerLink="/app/check-in">Registrar presença</a>
+    </mat-card-actions>
+  </mat-card>
+
+  <div class="empty-state" *ngIf="!s.pendencies?.length && role() === 'aluno'">
+    <mat-icon>check_circle_outline</mat-icon>
+    <p>Sem pendências!</p>
+    <a mat-raised-button color="primary" routerLink="/app/check-in">Novo registro</a>
+  </div>
+</ng-container>

@@ -1,0 +1,51 @@
+<mat-sidenav-container class="app-container">
+
+  <!-- Sidenav -->
+  <mat-sidenav #sidenav mode="side" [opened]="sidenavOpen" class="sidenav">
+    <div class="brand">
+      <img src="assets/logo.png" alt="EstágioCheck" class="brand-logo">
+      <span class="brand-title">EstágioCheck</span>
+    </div>
+
+    <mat-nav-list>
+      <a mat-list-item
+         *ngFor="let item of navItems()"
+         [routerLink]="item.path"
+         routerLinkActive="active-link"
+         [routerLinkActiveOptions]="{ exact: item.path === '/app' }">
+        <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+        <span matListItemTitle>{{ item.label }}</span>
+      </a>
+    </mat-nav-list>
+
+    <div class="spacer"></div>
+
+    <div class="user-info">
+      <div class="user-avatar">{{ (user()?.fullName || user()?.email || 'U').charAt(0).toUpperCase() }}</div>
+      <div class="user-details">
+        <div class="user-name">{{ user()?.fullName }}</div>
+        <div class="user-email">{{ user()?.email }}</div>
+        <div class="user-role">{{ role() | titlecase }}</div>
+      </div>
+      <button mat-icon-button (click)="logout()" class="logout-btn" matTooltip="Sair">
+        <mat-icon>logout</mat-icon>
+      </button>
+    </div>
+  </mat-sidenav>
+
+  <!-- Main content -->
+  <mat-sidenav-content>
+    <mat-toolbar color="primary" class="toolbar">
+      <button mat-icon-button (click)="sidenav.toggle(); sidenavOpen = !sidenavOpen">
+        <mat-icon>menu</mat-icon>
+      </button>
+      <span class="toolbar-title">EstágioCheck</span>
+    </mat-toolbar>
+
+    <div class="content">
+      <router-outlet></router-outlet>
+    </div>
+  </mat-sidenav-content>
+
+</mat-sidenav-container>
+
