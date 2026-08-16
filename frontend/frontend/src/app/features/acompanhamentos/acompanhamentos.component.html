@@ -1,19 +1,29 @@
 <div class="page-header">
-  <h1>Acompanhamentos Formativos</h1>
-  <button mat-raised-button color="primary" *ngIf="role() !== 'aluno'" (click)="openCreate()">
+  <div>
+    <h1>Acompanhamentos Formativos</h1>
+    <p class="page-subtitle" *ngIf="podeRegistrar()">Registre o acompanhamento do aluno e finalize para que ele dê ciência.</p>
+    <p class="page-subtitle" *ngIf="podeDarCiencia()">Confira os acompanhamentos realizados pelo preceptor e registre sua ciência.</p>
+    <p class="page-subtitle" *ngIf="somenteLeitura()">Consulta dos relatórios finalizados pelos preceptores.</p>
+  </div>
+  <button mat-raised-button color="primary" *ngIf="podeRegistrar()" (click)="openCreate()">
     <mat-icon>add</mat-icon> Novo acompanhamento
   </button>
 </div>
 
-<!-- Formulário -->
-<mat-card class="form-card" *ngIf="showForm()">
-  <mat-card-header><mat-card-title>Novo acompanhamento formativo</mat-card-title></mat-card-header>
+<!-- Formulário — exclusivo do preceptor -->
+<mat-card class="form-card" *ngIf="showForm() && podeRegistrar()">
+  <mat-card-header>
+    <mat-card-title>{{ selectedFollowup() ? 'Editar acompanhamento' : 'Novo acompanhamento formativo' }}</mat-card-title>
+  </mat-card-header>
   <mat-card-content>
     <form [formGroup]="form" (ngSubmit)="save()">
+
+      <h3>Identificação do aluno</h3>
       <div class="student-row">
         <mat-form-field appearance="outline" class="rgm-field">
           <mat-label>RGM do aluno</mat-label>
-          <input matInput formControlName="rgm" (change)="lookupRgm()" (keyup.enter)="lookupRgm()">
+          <input matInput formControlName="rgm" (change)="lookupRgm()" (keyup.enter)="lookupRgm()"
+                 [readonly]="!!selectedFollowup()">
           <mat-spinner matSuffix *ngIf="lookingUp()" diameter="18"></mat-spinner>
         </mat-form-field>
         <mat-form-field appearance="outline" class="name-field">
@@ -21,63 +31,87 @@
           <input matInput [value]="studentName()" readonly placeholder="Preenchido pelo RGM">
         </mat-form-field>
       </div>
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Período</mat-label>
-        <input matInput formControlName="periodo">
-      </mat-form-field>
 
-      <h3>Postura Profissional</h3>
-      <div class="score-grid">
-        <div class="score-item">
-          <div class="score-head"><label>Pontualidade</label><span>{{ form.get('posturaPontualidade')?.value }}</span></div>
-          <mat-slider min="1" max="5" step="1"><input matSliderThumb formControlName="posturaPontualidade"></mat-slider>
-        </div>
-        <div class="score-item">
-          <div class="score-head"><label>Ética</label><span>{{ form.get('posturaEtica')?.value }}</span></div>
-          <mat-slider min="1" max="5" step="1"><input matSliderThumb formControlName="posturaEtica"></mat-slider>
-        </div>
-        <div class="score-item">
-          <div class="score-head"><label>Responsabilidade</label><span>{{ form.get('posturaResponsabilidade')?.value }}</span></div>
-          <mat-slider min="1" max="5" step="1"><input matSliderThumb formControlName="posturaResponsabilidade"></mat-slider>
-        </div>
+      <p class="lookup-error" *ngIf="lookupError()">
+        <mat-icon>error_outline</mat-icon> {{ lookupError() }}
+      </p>
+      <p class="lookup-ok" *ngIf="autoPreenchidos().length">
+        <mat-icon>auto_awesome</mat-icon>
+        Preenchido automaticamente pelo cadastro: {{ autoPreenchidos().join(', ') }}.
+      </p>
+
+      <div class="row-three">
+        <mat-form-field appearance="outline">
+          <mat-label>Período</mat-label>
+          <input matInput formControlName="periodLabel" placeholder="Preenchido pelo RGM">
+          <mat-hint>Vem do rodízio da turma do aluno</mat-hint>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Semestre</mat-label>
+          <input matInput formControlName="semester" readonly>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Turno</mat-label>
+          <input matInput formControlName="shift" readonly>
+        </mat-form-field>
       </div>
 
-      <h3>Comunicação</h3>
-      <div class="score-grid">
-        <div class="score-item">
-          <div class="score-head"><label>Equipe</label><span>{{ form.get('comunicacaoEquipe')?.value }}</span></div>
-          <mat-slider min="1" max="5" step="1"><input matSliderThumb formControlName="comunicacaoEquipe"></mat-slider>
-        </div>
-        <div class="score-item">
-          <div class="score-head"><label>Paciente</label><span>{{ form.get('comunicacaoPaciente')?.value }}</span></div>
-          <mat-slider min="1" max="5" step="1"><input matSliderThumb formControlName="comunicacaoPaciente"></mat-slider>
-        </div>
-        <div class="score-item">
-          <div class="score-head"><label>Escuta ativa</label><span>{{ form.get('comunicacaoEscuta')?.value }}</span></div>
-          <mat-slider min="1" max="5" step="1"><input matSliderThumb formControlName="comunicacaoEscuta"></mat-slider>
-        </div>
+      <div class="row-two">
+        <mat-form-field appearance="outline">
+          <mat-label>Início do acompanhamento</mat-label>
+          <input matInput type="date" formControlName="followUpStart">
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Término do acompanhamento</mat-label>
+          <input matInput type="date" formControlName="followUpEnd">
+        </mat-form-field>
       </div>
 
+      <mat-divider></mat-divider>
+
+      <!-- Dimensões comportamentais -->
+      <ng-container *ngFor="let bloco of blocos">
+        <h3>{{ bloco.titulo }}</h3>
+        <div class="dimension-grid">
+          <mat-form-field appearance="outline" *ngFor="let item of bloco.itens">
+            <mat-label>{{ item.rotulo }}</mat-label>
+            <mat-select [formControlName]="item.campo">
+              <mat-option *ngFor="let opcao of escala" [value]="opcao">{{ escalaLabel(opcao) }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </ng-container>
+
+      <mat-divider></mat-divider>
+
+      <h3>Registro descritivo</h3>
       <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Comentário geral</mat-label>
-        <textarea matInput rows="3" formControlName="overallComment"></textarea>
+        <mat-label>Potencialidades</mat-label>
+        <textarea matInput rows="2" formControlName="potencialidades"></textarea>
       </mat-form-field>
       <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Pontos fortes</mat-label>
-        <textarea matInput rows="2" formControlName="strengthsObserved"></textarea>
+        <mat-label>Aspectos a aprimorar</mat-label>
+        <textarea matInput rows="2" formControlName="aspectosAprimorar"></textarea>
       </mat-form-field>
       <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Áreas de melhoria</mat-label>
-        <textarea matInput rows="2" formControlName="areasForImprovement"></textarea>
+        <mat-label>Situações relevantes</mat-label>
+        <textarea matInput rows="2" formControlName="situacoesRelevantes"></textarea>
       </mat-form-field>
       <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Metas próximo período</mat-label>
-        <textarea matInput rows="2" formControlName="goalsNextPeriod"></textarea>
+        <mat-label>Evolução semanal</mat-label>
+        <textarea matInput rows="2" formControlName="evolucaoSemanal"></textarea>
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Observações do preceptor</mat-label>
+        <textarea matInput rows="3" formControlName="observacoesDocente"></textarea>
       </mat-form-field>
 
       <div class="form-actions">
         <button mat-button type="button" (click)="showForm.set(false)">Cancelar</button>
-        <button mat-raised-button color="primary" type="submit">Salvar rascunho</button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="saving()">
+          <mat-spinner *ngIf="saving()" diameter="18" class="btn-spinner"></mat-spinner>
+          <span>Salvar rascunho</span>
+        </button>
       </div>
     </form>
   </mat-card-content>
@@ -88,30 +122,78 @@
 
 <mat-card class="followup-card" *ngFor="let f of followups()">
   <mat-card-header>
-    <mat-card-title>Acompanhamento — {{ f.periodLabel }}</mat-card-title>
+    <mat-card-title>{{ f.studentName }}</mat-card-title>
     <mat-card-subtitle>
-      <span class="chip-{{ f.status }}">{{ f.status }}</span>
+      <span class="chip chip-{{ f.status }}">{{ statusLabel(f.status) }}</span>
+      <span class="meta" *ngIf="f.periodLabel">{{ f.periodLabel }}</span>
+      <span class="meta" *ngIf="f.locationName">{{ f.locationName }}</span>
     </mat-card-subtitle>
   </mat-card-header>
+
   <mat-card-content>
-    <p *ngIf="f.observacoesDocente"><strong>Comentário:</strong> {{ f.observacoesDocente }}</p>
-    <p *ngIf="f.potencialidades"><strong>Pontos fortes:</strong> {{ f.potencialidades }}</p>
+    <div class="info-line">
+      <span *ngIf="f.studentRgm"><strong>RGM:</strong> {{ f.studentRgm }}</span>
+      <span><strong>Preceptor:</strong> {{ f.preceptorName }}</span>
+      <span *ngIf="f.followUpStart"><strong>Período avaliado:</strong>
+        {{ f.followUpStart | date:'dd/MM/yyyy' }} – {{ f.followUpEnd | date:'dd/MM/yyyy' }}</span>
+    </div>
+
+    <!-- Dimensões: visíveis para todos os perfis que enxergam o documento -->
+    <div class="dimension-summary" *ngIf="f.status !== 'rascunho' || podeRegistrar()">
+      <ng-container *ngFor="let bloco of blocos">
+        <div class="dimension-block">
+          <h4>{{ bloco.titulo }}</h4>
+          <div class="dimension-row" *ngFor="let item of bloco.itens">
+            <span class="dimension-label">{{ item.rotulo }}</span>
+            <span class="dimension-value">{{ valorDimensao(f, item.campo) }}</span>
+          </div>
+        </div>
+      </ng-container>
+    </div>
+
+    <p *ngIf="f.potencialidades"><strong>Potencialidades:</strong> {{ f.potencialidades }}</p>
+    <p *ngIf="f.aspectosAprimorar"><strong>Aspectos a aprimorar:</strong> {{ f.aspectosAprimorar }}</p>
+    <p *ngIf="f.situacoesRelevantes"><strong>Situações relevantes:</strong> {{ f.situacoesRelevantes }}</p>
+    <p *ngIf="f.evolucaoSemanal"><strong>Evolução semanal:</strong> {{ f.evolucaoSemanal }}</p>
+    <p *ngIf="f.observacoesDocente"><strong>Observações do preceptor:</strong> {{ f.observacoesDocente }}</p>
+
+    <div class="signatures">
+      <div class="signature" *ngIf="f.preceptorSignedAt">
+        <mat-icon>verified</mat-icon>
+        Finalizado por {{ f.preceptorSignedName }} em {{ f.preceptorSignedAt | date:'dd/MM/yyyy HH:mm' }}
+      </div>
+      <div class="signature" *ngIf="f.studentSignedAt">
+        <mat-icon>how_to_reg</mat-icon>
+        Ciência do aluno {{ f.studentSignedName }} em {{ f.studentSignedAt | date:'dd/MM/yyyy HH:mm' }}
+      </div>
+      <div class="signature pending" *ngIf="f.status === 'finalizado_preceptor'">
+        <mat-icon>hourglass_empty</mat-icon> Aguardando ciência do aluno
+      </div>
+    </div>
   </mat-card-content>
-  <mat-card-actions>
-    <button mat-button color="primary"
-            *ngIf="(role() === 'preceptor' || role() === 'supervisor') && f.status === 'rascunho'"
-            (click)="finalizePreceptor(f.id)">
-      <mat-icon>rate_review</mat-icon> Assinar (Preceptor)
+
+  <mat-card-actions *ngIf="!somenteLeitura()">
+    <!-- Preceptor: edita e finaliza enquanto é rascunho -->
+    <button mat-button *ngIf="podeRegistrar() && f.status === 'rascunho'" (click)="editar(f)">
+      <mat-icon>edit</mat-icon> Editar
     </button>
-    <button mat-button color="accent"
-            *ngIf="role() === 'aluno' && f.status === 'finalizado_preceptor'"
-            (click)="finalizeStudent(f.id)">
-      <mat-icon>draw</mat-icon> Assinar (Aluno)
+    <button mat-button color="primary" *ngIf="podeRegistrar() && f.status === 'rascunho'"
+            (click)="finalizePreceptor(f)">
+      <mat-icon>task_alt</mat-icon> Finalizar acompanhamento
+    </button>
+
+    <!-- Aluno: dá ciência do acompanhamento finalizado -->
+    <button mat-raised-button color="accent"
+            *ngIf="podeDarCiencia() && f.status === 'finalizado_preceptor'"
+            (click)="darCiencia(f)">
+      <mat-icon>how_to_reg</mat-icon> Dar ciência
     </button>
   </mat-card-actions>
 </mat-card>
 
 <div class="empty-state" *ngIf="!loading() && !followups().length">
   <mat-icon>description</mat-icon>
-  <p>Nenhum acompanhamento formativo registrado.</p>
+  <p *ngIf="podeRegistrar()">Nenhum acompanhamento registrado. Clique em “Novo acompanhamento” para começar.</p>
+  <p *ngIf="podeDarCiencia()">Nenhum acompanhamento disponível para ciência no momento.</p>
+  <p *ngIf="somenteLeitura()">Nenhum relatório finalizado para consulta.</p>
 </div>

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { StudentGroup, RotationSchedule } from '../models/models';
+import { StudentGroup, RotationSchedule, GroupMember } from '../models/models';
 
 @Injectable({ providedIn: 'root' })
 export class GroupsService {
@@ -19,6 +19,11 @@ export class GroupsService {
 
   delete(id: string): Observable<void> {
     return this.http.delete<void>(`${this.api}/${id}`);
+  }
+
+  /** Alunos vinculados à turma — conferência antes da alocação do rodízio. */
+  getMembers(groupId: string): Observable<GroupMember[]> {
+    return this.http.get<GroupMember[]>(`${this.api}/${groupId}/members`);
   }
 
   getSchedules(groupId?: string): Observable<RotationSchedule[]> {

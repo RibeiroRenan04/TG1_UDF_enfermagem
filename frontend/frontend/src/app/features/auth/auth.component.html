@@ -45,13 +45,14 @@
         <div class="recovery-header">
           <mat-icon class="recovery-icon">lock_reset</mat-icon>
           <h2>Recuperar senha</h2>
-          <p>Informe seu e-mail acadêmico <strong>&#64;cs.udf.edu.br</strong> para receber o código de verificação.</p>
+          <p>Informe o e-mail cadastrado no sistema para receber o código de verificação.</p>
         </div>
         <form [formGroup]="forgotForm" (ngSubmit)="onSendCode()" class="form">
           <mat-form-field appearance="outline">
-            <mat-label>E-mail acadêmico</mat-label>
+            <mat-label>E-mail de acesso</mat-label>
             <input matInput type="email" formControlName="forgotEmail" placeholder="rgm&#64;cs.udf.edu.br">
-            <mat-error *ngIf="forgotForm.get('forgotEmail')?.hasError('pattern')">Use seu e-mail &#64;cs.udf.edu.br</mat-error>
+            <mat-hint>Alunos usam o e-mail acadêmico; preceptores podem usar e-mail externo.</mat-hint>
+            <mat-error *ngIf="forgotForm.get('forgotEmail')?.hasError('email')">E-mail inválido</mat-error>
             <mat-error *ngIf="forgotForm.get('forgotEmail')?.hasError('required')">Campo obrigatório</mat-error>
           </mat-form-field>
           <button mat-raised-button color="primary" type="submit" [disabled]="forgotForm.get('forgotEmail')?.invalid || busy()">

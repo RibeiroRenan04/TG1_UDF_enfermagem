@@ -10,20 +10,27 @@
       <div class="welcome-header">
         <mat-icon class="welcome-icon">waving_hand</mat-icon>
         <h2>Olá, {{ (user()?.fullName || '').split(' ')[0] }}!</h2>
-        <p>
+        <p *ngIf="exigeEmailInstitucional">
           Este é seu <strong>primeiro acesso</strong>. Para continuar, você precisa
           definir uma nova senha e confirmar seu e-mail acadêmico <strong>&#64;cs.udf.edu.br</strong>.
+        </p>
+        <p *ngIf="!exigeEmailInstitucional">
+          Este é seu <strong>primeiro acesso</strong>. Para continuar, defina uma nova senha
+          e confirme o e-mail que você usará para entrar no sistema.
         </p>
       </div>
 
       <form [formGroup]="form" (ngSubmit)="onSubmit()" class="form">
 
         <mat-form-field appearance="outline">
-          <mat-label>E-mail acadêmico (&#64;cs.udf.edu.br)</mat-label>
-          <input matInput type="email" formControlName="email" placeholder="rgm&#64;cs.udf.edu.br">
+          <mat-label *ngIf="exigeEmailInstitucional">E-mail acadêmico (&#64;cs.udf.edu.br)</mat-label>
+          <mat-label *ngIf="!exigeEmailInstitucional">E-mail de acesso</mat-label>
+          <input matInput type="email" formControlName="email" [placeholder]="placeholderEmail">
           <mat-icon matPrefix>school</mat-icon>
+          <mat-hint *ngIf="!exigeEmailInstitucional">Pode ser um e-mail externo à UDF</mat-hint>
           <mat-error *ngIf="form.get('email')?.hasError('required')">Campo obrigatório</mat-error>
           <mat-error *ngIf="form.get('email')?.hasError('pattern')">Use somente e-mail &#64;cs.udf.edu.br</mat-error>
+          <mat-error *ngIf="form.get('email')?.hasError('email')">E-mail inválido</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">

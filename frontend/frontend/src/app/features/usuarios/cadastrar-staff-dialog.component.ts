@@ -44,7 +44,10 @@ import { UsersService } from '../../core/services/users.service';
 
         <mat-form-field appearance="outline">
           <mat-label>E-mail (login)</mat-label>
-          <input matInput type="email" formControlName="email">
+          <input matInput type="email" formControlName="email" placeholder="pode ser e-mail externo">
+          <mat-hint>
+            E-mail institucional não é obrigatório: preceptores externos podem usar o e-mail próprio.
+          </mat-hint>
           <mat-error *ngIf="form.get('email')?.hasError('email')">E-mail inválido</mat-error>
         </mat-form-field>
 
@@ -60,6 +63,7 @@ import { UsersService } from '../../core/services/users.service';
           </mat-form-field>
         </div>
       </form>
+      <p class="erro" *ngIf="erro()">{{ erro() }}</p>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button (click)="dialogRef.close(false)">Cancelar</button>
@@ -71,12 +75,14 @@ import { UsersService } from '../../core/services/users.service';
   `,
   styles: [`
     .hint { font-size: 0.85rem; color: #6B7280; margin-bottom: 8px; }
-    .form { display: flex; flex-direction: column; gap: 8px; min-width: 380px; }
+    .form { display: flex; flex-direction: column; gap: 14px; min-width: 380px; }
     .row-two { display: flex; gap: 12px; mat-form-field { flex: 1; } }
+    .erro { color: #b91c1c; font-size: 0.85rem; margin: 8px 0 0; }
   `]
 })
 export class CadastrarStaffDialogComponent {
   busy = signal(false);
+  erro = signal('');
 
   form = this.fb.group({
     fullName:    ['', [Validators.required, Validators.minLength(2)]],
@@ -96,6 +102,7 @@ export class CadastrarStaffDialogComponent {
   onSubmit(): void {
     if (this.form.invalid) return;
     this.busy.set(true);
+    this.erro.set('');
     const v = this.form.value;
     this.usersService.createStaff({
       fullName:    v.fullName!,
@@ -106,7 +113,7 @@ export class CadastrarStaffDialogComponent {
       phone:       v.phone || undefined
     }).subscribe({
       next: () => { this.busy.set(false); this.dialogRef.close(true); },
-      error: (err) => { this.busy.set(false); console.error(err); }
+      error: (err) => { this.busy.set(false); this.erro.set(err?.error?.message ?? 'Erro ao cadastrar usuário.'); }
     });
   }
 }

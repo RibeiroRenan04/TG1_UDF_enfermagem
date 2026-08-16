@@ -57,6 +57,7 @@ export interface RotationSchedule {
   id: string;
   groupId: string;
   groupCode: string;
+  groupName?: string;
   locationId: string;
   locationName: string;
   preceptorId?: string;
@@ -180,6 +181,19 @@ export interface StudentLookup {
   studentId: string;
   fullName: string;
   rgm?: string;
+  /** Dados já cadastrados, usados no preenchimento automático do relatório. */
+  semester?: number;
+  shift?: string;
+  periodLabel?: string;
+  groupId?: string;
+  groupCode?: string;
+  groupName?: string;
+  scheduleId?: string;
+  locationId?: string;
+  locationName?: string;
+  activityType?: string;
+  followUpStart?: string;
+  followUpEnd?: string;
 }
 
 export interface Certificate {
@@ -215,6 +229,7 @@ export interface FormativeFollowup {
   id: string;
   studentId: string;
   studentName: string;
+  studentRgm?: string;
   preceptorId: string;
   preceptorName: string;
   scheduleId?: string;
@@ -226,7 +241,7 @@ export interface FormativeFollowup {
   semester?: string;
   followUpStart?: string;
   followUpEnd?: string;
-  posturapontualidade?: string;
+  posturaPontualidade?: string;
   posturaEtica?: string;
   posturaResponsabilidade?: string;
   comunicacaoEquipe?: string;
@@ -250,4 +265,14 @@ export interface FormativeFollowup {
   studentSignedName?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Aluno vinculado a uma turma (conferência antes da alocação do rodízio). */
+export interface GroupMember {
+  studentId: string;
+  fullName: string;
+  rgm?: string;
+  semester?: number;
+  shift?: string;
+  isActive: boolean;
 }

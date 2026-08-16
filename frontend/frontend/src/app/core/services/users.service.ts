@@ -14,7 +14,12 @@ export class UsersService {
   }
 
   getStudents(): Observable<UserDto[]> {
-    return this.http.get<UserDto[]>(`${this.api}?role=aluno`);
+    return this.http.get<UserDto[]>(`${this.api}/students`);
+  }
+
+  /** Preceptores e supervisores — usado na alocação de rodízios. */
+  getPreceptors(): Observable<UserDto[]> {
+    return this.http.get<UserDto[]>(`${this.api}/preceptors`);
   }
 
   assignGroup(userId: string, groupId: string | null): Observable<void> {

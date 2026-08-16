@@ -11,8 +11,6 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { AuthService } from '../../core/services/auth.service';
 
-const UDF_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@cs\.udf\.edu\.br$/;
-
 function passwordMatchValidator(): ValidatorFn {
   return (group: AbstractControl): ValidationErrors | null => {
     const pw  = group.get('newPassword')?.value;
@@ -45,7 +43,8 @@ export class AuthComponent {
   });
 
   forgotForm = this.fb.group({
-    forgotEmail: ['', [Validators.required, Validators.pattern(UDF_EMAIL_PATTERN)]]
+    // Preceptores externos podem recuperar a senha com e-mail próprio.
+    forgotEmail: ['', [Validators.required, Validators.email]]
   });
 
   codeForm = this.fb.group({

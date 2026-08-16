@@ -37,8 +37,17 @@ export class PrimeiroAcessoComponent {
   hidePass = true;
   user     = this.auth.user;
 
+  /** Alunos usam obrigatoriamente o e-mail institucional; preceptores externos podem usar e-mail próprio. */
+  exigeEmailInstitucional = this.auth.user()?.role === 'aluno';
+
+  get placeholderEmail(): string {
+    return this.exigeEmailInstitucional ? 'rgm@cs.udf.edu.br' : 'seu.email@exemplo.com';
+  }
+
   form = this.fb.group({
-    email:           ['', [Validators.required, Validators.pattern(UDF_EMAIL_PATTERN)]],
+    email:           ['', this.exigeEmailInstitucional
+      ? [Validators.required, Validators.pattern(UDF_EMAIL_PATTERN)]
+      : [Validators.required, Validators.email]],
     newPassword:     ['', [Validators.required, Validators.minLength(8)]],
     confirmPassword: ['', Validators.required]
   }, { validators: passwordMatchValidator() });
@@ -51,7 +60,7 @@ export class PrimeiroAcessoComponent {
   ) {
     // Pre-fill email if already set
     const current = this.auth.user();
-    if (current?.email && UDF_EMAIL_PATTERN.test(current.email)) {
+    if (current?.email && (!this.exigeEmailInstitucional || UDF_EMAIL_PATTERN.test(current.email))) {
       this.form.get('email')?.setValue(current.email);
     }
   }
