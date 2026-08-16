@@ -17,11 +17,23 @@ public record CreateGroupDto(
     string? Description
 );
 
+/// <summary>Aluno vinculado a uma turma.</summary>
+public class GroupMemberDto
+{
+    public Guid StudentId { get; init; }
+    public string FullName { get; init; } = string.Empty;
+    public string? Rgm { get; init; }
+    public int? Semester { get; init; }
+    public string? Shift { get; init; }
+    public bool IsActive { get; init; }
+}
+
 public class ScheduleDto
 {
     public Guid Id { get; init; }
     public Guid GroupId { get; init; }
     public string GroupCode { get; init; } = string.Empty;
+    public string? GroupName { get; init; }
     public Guid LocationId { get; init; }
     public string LocationName { get; init; } = string.Empty;
     public Guid? PreceptorId { get; init; }
@@ -35,15 +47,20 @@ public class ScheduleDto
     public string? Notes { get; init; }
 }
 
+/// <summary>
+/// Alocação de rodízio de um grupo/turma feita pelo supervisor. Reúne turno,
+/// período, local do estágio, preceptor responsável, datas de início e término,
+/// atividade a ser desenvolvida e carga horária.
+/// </summary>
 public record CreateScheduleDto(
-    [Required] Guid GroupId,
-    [Required] Guid LocationId,
-    Guid? PreceptorId,
-    [Required] string Shift,
-    [Required, MaxLength(100)] string PeriodLabel,
-    [Required] DateOnly StartDate,
-    [Required] DateOnly EndDate,
-    [Required] string ActivityType,
-    int RequiredHours,
+    [Required(ErrorMessage = "Selecione a turma.")] Guid GroupId,
+    [Required(ErrorMessage = "Selecione o local do estágio.")] Guid LocationId,
+    [Required(ErrorMessage = "Informe o preceptor responsável.")] Guid? PreceptorId,
+    [Required(ErrorMessage = "Informe o turno.")] string Shift,
+    [Required(ErrorMessage = "Informe o período."), MaxLength(100)] string PeriodLabel,
+    [Required(ErrorMessage = "Informe a data de início.")] DateOnly StartDate,
+    [Required(ErrorMessage = "Informe a data de término.")] DateOnly EndDate,
+    [Required(ErrorMessage = "Informe a atividade a ser desenvolvida.")] string ActivityType,
+    [Range(1, 2000, ErrorMessage = "Carga horária deve estar entre 1 e 2000 horas.")] int RequiredHours,
     string? Notes
 );

@@ -104,20 +104,27 @@ public class UsersController(AppDbContext db) : ControllerBase
     }
 
     // ── Criar preceptor / supervisor ──────────────────────────────────────────
+    /// <summary>
+    /// Cadastra preceptor ou supervisor. O e-mail institucional (@cs.udf.edu.br)
+    /// não é obrigatório: muitos preceptores são profissionais externos à UDF e
+    /// utilizam e-mail próprio, que também serve como login.
+    /// </summary>
     [HttpPost("staff")]
     public async Task<ActionResult<UserDto>> CreateStaff([FromBody] CreateStaffDto dto)
     {
         if (dto.Role != "preceptor" && dto.Role != "supervisor")
             return BadRequest(new { message = "Papel deve ser 'preceptor' ou 'supervisor'." });
 
-        var exists = await db.Users.AnyAsync(u => u.Email == dto.Email.ToLower());
+        var email = dto.Email.Trim().ToLower();
+
+        var exists = await db.Users.AnyAsync(u => u.Email == email);
         if (exists)
             return Conflict(new { message = "E-mail já cadastrado." });
 
         var user = new ApplicationUser
         {
             FullName = dto.FullName.Trim(),
-            Email = dto.Email.Trim().ToLower(),
+            Email = email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
             Role = dto.Role,
             Institution = dto.Institution?.Trim(),

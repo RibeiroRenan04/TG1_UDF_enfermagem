@@ -8,17 +8,26 @@ using System.Security.Claims;
 
 namespace EstagioCheck.API.Controllers;
 
+/// <summary>
+/// Acompanhamento formativo. Fluxo de responsabilidades:
+///   • Preceptor  → cria, preenche e finaliza o acompanhamento do aluno;
+///   • Aluno      → dá ciência do acompanhamento finalizado pelo preceptor;
+///   • Supervisor → consulta somente relatórios já finalizados (acesso de leitura).
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
 public class FollowupsController(AppDbContext db, IHttpContextAccessor httpContext) : ControllerBase
 {
+    private const string StatusRascunho = "rascunho";
+    private const string StatusFinalizadoPreceptor = "finalizado_preceptor";
+    private const string StatusCienciaAluno = "finalizado_aluno";
+
     [HttpGet]
     public async Task<ActionResult<List<FollowupDto>>> GetAll()
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")!);
-        var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
+        var userId = CurrentUserId();
+        var role = CurrentRole();
 
         var query = db.FormativeFollowups
             .Include(f => f.Student)
@@ -26,13 +35,20 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
             .Include(f => f.Location)
             .AsQueryable();
 
-        if (role == "aluno")
-            // Aluno vê apenas documentos finalizados pelo preceptor ou concluídos
-            query = query.Where(f => f.StudentId == userId
-                && (f.Status == "finalizado_preceptor" || f.Status == "finalizado_aluno"));
-        else if (role == "preceptor")
-            query = query.Where(f => f.PreceptorId == userId);
-        // supervisor vê todos
+        query = role switch
+        {
+            // Aluno vê apenas os próprios documentos já finalizados pelo preceptor.
+            "aluno" => query.Where(f => f.StudentId == userId
+                && (f.Status == StatusFinalizadoPreceptor || f.Status == StatusCienciaAluno)),
+
+            // Preceptor vê apenas os acompanhamentos que ele mesmo realiza.
+            "preceptor" => query.Where(f => f.PreceptorId == userId),
+
+            // Supervisor recebe somente o relatório finalizado, para consulta.
+            "supervisor" => query.Where(f => f.Status != StatusRascunho),
+
+            _ => query.Where(_ => false)
+        };
 
         var items = await query.OrderByDescending(f => f.CreatedAt).ToListAsync();
         return Ok(items.Select(Map));
@@ -41,91 +57,215 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
     [HttpGet("{id}")]
     public async Task<ActionResult<FollowupDto>> Get(Guid id)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")!);
-        var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
+        var userId = CurrentUserId();
+        var role = CurrentRole();
 
         var f = await db.FormativeFollowups
             .Include(x => x.Student).Include(x => x.Preceptor).Include(x => x.Location)
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (f == null) return NotFound();
-
-        // Verifica acesso
-        if (role == "aluno" && f.StudentId != userId)
-            return Forbid();
-        if (role == "aluno" && f.Status == "rascunho")
-            return Forbid();
-        if (role == "preceptor" && f.PreceptorId != userId)
-            return Forbid();
+        if (!PodeVisualizar(f, role, userId)) return Forbid();
 
         return Ok(Map(f));
     }
 
-    /// <summary>Busca um aluno pelo RGM para preencher o acompanhamento (nome + id).</summary>
+    /// <summary>
+    /// Busca um aluno pelo RGM para preencher o acompanhamento automaticamente.
+    /// Além do nome, devolve período/turno/semestre e a escala vigente, evitando
+    /// digitação manual e divergência com o que já está cadastrado no sistema.
+    /// </summary>
     [HttpGet("student-by-rgm/{rgm}")]
-    [Authorize(Roles = "preceptor,supervisor")]
+    [Authorize(Roles = "preceptor")]
     public async Task<ActionResult<StudentLookupDto>> GetStudentByRgm(string rgm)
     {
         var termo = rgm.Trim();
-        var student = await db.Users
-            .Where(u => u.Role == "aluno" && u.Rgm == termo)
-            .Select(u => new StudentLookupDto(u.Id, u.FullName, u.Rgm))
-            .FirstOrDefaultAsync();
 
-        return student == null
-            ? NotFound(new { message = "Aluno não encontrado para esse RGM." })
-            : Ok(student);
+        var student = await db.Users
+            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .FirstOrDefaultAsync(u => u.Role == "aluno" && u.Rgm == termo);
+
+        if (student == null)
+            return NotFound(new { message = "Aluno não encontrado para esse RGM." });
+
+        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
+        var groupId = student.GroupMembership?.GroupId;
+
+        // Escala do grupo do aluno: prioriza a vigente hoje; senão, a mais recente.
+        RotationSchedule? escala = null;
+        if (groupId.HasValue)
+        {
+            var escalas = await db.RotationSchedules
+                .Include(s => s.Location)
+                .Where(s => s.GroupId == groupId.Value)
+                .OrderByDescending(s => s.StartDate)
+                .ToListAsync();
+
+            escala = escalas.FirstOrDefault(s => s.StartDate <= hoje && s.EndDate >= hoje)
+                  ?? escalas.FirstOrDefault();
+        }
+
+        return Ok(new StudentLookupDto
+        {
+            StudentId = student.Id,
+            FullName = student.FullName,
+            Rgm = student.Rgm,
+            Semester = student.Semester,
+            Shift = escala?.Shift ?? student.Shift,
+            // Período do rodízio quando houver escala; senão, o semestre do aluno.
+            PeriodLabel = escala?.PeriodLabel
+                ?? (student.Semester.HasValue ? $"{student.Semester}° semestre" : null),
+            GroupId = groupId,
+            GroupCode = student.GroupMembership?.Group?.Code,
+            GroupName = student.GroupMembership?.Group?.Name,
+            ScheduleId = escala?.Id,
+            LocationId = escala?.LocationId,
+            LocationName = escala?.Location?.Name,
+            ActivityType = escala?.ActivityType,
+            FollowUpStart = escala?.StartDate,
+            FollowUpEnd = escala?.EndDate
+        });
     }
 
+    /// <summary>O acompanhamento do aluno é realizado pelo preceptor.</summary>
     [HttpPost]
-    [Authorize(Roles = "preceptor,supervisor")]
+    [Authorize(Roles = "preceptor")]
     public async Task<ActionResult<FollowupDto>> Create([FromBody] CreateFollowupDto dto)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")!);
+        var userId = CurrentUserId();
+
+        var aluno = await db.Users
+            .Include(u => u.GroupMembership)
+            .FirstOrDefaultAsync(u => u.Id == dto.StudentId);
+
+        if (aluno == null || aluno.Role != "aluno")
+            return BadRequest(new { message = "Aluno inválido." });
 
         var f = new FormativeFollowup
         {
             StudentId = dto.StudentId,
             PreceptorId = userId,
             ScheduleId = dto.ScheduleId,
-            GroupId = dto.GroupId,
+            GroupId = dto.GroupId ?? aluno.GroupMembership?.GroupId,
             LocationId = dto.LocationId,
-            Shift = dto.Shift,
+            Shift = dto.Shift ?? aluno.Shift,
             PeriodLabel = dto.PeriodLabel,
-            Semester = dto.Semester,
+            Semester = dto.Semester ?? (aluno.Semester.HasValue ? aluno.Semester.ToString() : null),
             FollowUpStart = dto.FollowUpStart,
             FollowUpEnd = dto.FollowUpEnd
         };
+
+        AplicarConteudo(f, dto);
 
         db.FormativeFollowups.Add(f);
         await db.SaveChangesAsync();
 
         await db.Entry(f).Reference(x => x.Student).LoadAsync();
         await db.Entry(f).Reference(x => x.Preceptor).LoadAsync();
+        if (f.LocationId.HasValue) await db.Entry(f).Reference(x => x.Location).LoadAsync();
+
         return Ok(Map(f));
     }
 
+    /// <summary>Somente o preceptor responsável edita o conteúdo do acompanhamento.</summary>
     [HttpPut("{id}")]
+    [Authorize(Roles = "preceptor")]
     public async Task<ActionResult<FollowupDto>> Update(Guid id, [FromBody] UpdateFollowupDto dto)
     {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")!);
-        var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
+        var userId = CurrentUserId();
 
         var f = await db.FormativeFollowups
             .Include(x => x.Student).Include(x => x.Preceptor).Include(x => x.Location)
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (f == null) return NotFound();
-        if (f.Status == "finalizado_aluno")
-            return Conflict(new { message = "Documento finalizado e assinado por ambas as partes." });
-        if (f.Status == "finalizado_preceptor")
-            return Conflict(new { message = "Conteúdo bloqueado após finalização do preceptor." });
-        if (role == "preceptor" && f.PreceptorId != userId)
+        if (f.PreceptorId != userId)
             return Forbid();
+        if (f.Status == StatusCienciaAluno)
+            return Conflict(new { message = "Documento finalizado e com ciência do aluno." });
+        if (f.Status == StatusFinalizadoPreceptor)
+            return Conflict(new { message = "Conteúdo bloqueado após finalização do preceptor." });
 
+        AplicarConteudo(f, dto);
+        f.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok(Map(f));
+    }
+
+    /// <summary>Preceptor finaliza o acompanhamento e o libera para ciência do aluno.</summary>
+    [HttpPost("{id}/finalize-preceptor")]
+    [Authorize(Roles = "preceptor")]
+    public async Task<ActionResult<FollowupDto>> FinalizePreceptor(Guid id, [FromBody] FinalizeFollowupDto dto)
+    {
+        var userId = CurrentUserId();
+
+        var f = await db.FormativeFollowups
+            .Include(x => x.Student).Include(x => x.Preceptor).Include(x => x.Location)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (f == null) return NotFound();
+        if (f.PreceptorId != userId) return Forbid();
+        if (f.Status != StatusRascunho)
+            return Conflict(new { message = "Já finalizado." });
+
+        f.Status = StatusFinalizadoPreceptor;
+        f.PreceptorSignedAt = DateTime.UtcNow;
+        f.PreceptorSignedName = dto.SignerName;
+        f.PreceptorSignedIp = IpDaRequisicao();
+        f.PreceptorSignedUserId = userId;
+        f.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok(Map(f));
+    }
+
+    /// <summary>Aluno dá ciência do acompanhamento realizado pelo preceptor.</summary>
+    [HttpPost("{id}/finalize-student")]
+    [Authorize(Roles = "aluno")]
+    public async Task<ActionResult<FollowupDto>> FinalizeStudent(Guid id, [FromBody] FinalizeFollowupDto dto)
+    {
+        var userId = CurrentUserId();
+
+        var f = await db.FormativeFollowups
+            .Include(x => x.Student).Include(x => x.Preceptor).Include(x => x.Location)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (f == null) return NotFound();
+        if (f.StudentId != userId) return Forbid();
+        if (f.Status != StatusFinalizadoPreceptor)
+            return Conflict(new { message = "Aguardando finalização do preceptor." });
+
+        f.Status = StatusCienciaAluno;
+        f.StudentSignedAt = DateTime.UtcNow;
+        f.StudentSignedName = dto.SignerName;
+        f.StudentSignedIp = IpDaRequisicao();
+        f.StudentSignedUserId = userId;
+        f.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok(Map(f));
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private Guid CurrentUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? User.FindFirstValue("sub")!);
+
+    private string CurrentRole() => User.FindFirstValue(ClaimTypes.Role) ?? "";
+
+    private string? IpDaRequisicao() =>
+        httpContext.HttpContext?.Connection.RemoteIpAddress?.ToString();
+
+    private static bool PodeVisualizar(FormativeFollowup f, string role, Guid userId) => role switch
+    {
+        "aluno" => f.StudentId == userId && f.Status != StatusRascunho,
+        "preceptor" => f.PreceptorId == userId,
+        "supervisor" => f.Status != StatusRascunho,
+        _ => false
+    };
+
+    private static void AplicarConteudo(FormativeFollowup f, UpdateFollowupDto dto)
+    {
         f.PosturaPontualidade = dto.PosturaPontualidade;
         f.PosturaEtica = dto.PosturaEtica;
         f.PosturaResponsabilidade = dto.PosturaResponsabilidade;
@@ -143,72 +283,12 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         f.SituacoesRelevantes = dto.SituacoesRelevantes;
         f.ObservacoesDocente = dto.ObservacoesDocente;
         f.EvolucaoSemanal = dto.EvolucaoSemanal;
-        f.UpdatedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync();
-        return Ok(Map(f));
-    }
-
-    [HttpPost("{id}/finalize-preceptor")]
-    [Authorize(Roles = "preceptor,supervisor")]
-    public async Task<ActionResult<FollowupDto>> FinalizePreceptor(Guid id, [FromBody] FinalizeFollowupDto dto)
-    {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")!);
-        var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
-
-        var f = await db.FormativeFollowups
-            .Include(x => x.Student).Include(x => x.Preceptor)
-            .FirstOrDefaultAsync(x => x.Id == id);
-
-        if (f == null) return NotFound();
-        if (role == "preceptor" && f.PreceptorId != userId) return Forbid();
-        if (f.Status != "rascunho")
-            return Conflict(new { message = "Já finalizado." });
-
-        var ip = httpContext.HttpContext?.Connection.RemoteIpAddress?.ToString();
-        f.Status = "finalizado_preceptor";
-        f.PreceptorSignedAt = DateTime.UtcNow;
-        f.PreceptorSignedName = dto.SignerName;
-        f.PreceptorSignedIp = ip;
-        f.PreceptorSignedUserId = userId;
-        f.UpdatedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync();
-        return Ok(Map(f));
-    }
-
-    [HttpPost("{id}/finalize-student")]
-    [Authorize(Roles = "aluno")]
-    public async Task<ActionResult<FollowupDto>> FinalizeStudent(Guid id, [FromBody] FinalizeFollowupDto dto)
-    {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")!);
-
-        var f = await db.FormativeFollowups
-            .Include(x => x.Student).Include(x => x.Preceptor)
-            .FirstOrDefaultAsync(x => x.Id == id);
-
-        if (f == null) return NotFound();
-        if (f.StudentId != userId) return Forbid();
-        if (f.Status != "finalizado_preceptor")
-            return Conflict(new { message = "Aguardando finalização do preceptor." });
-
-        var ip = httpContext.HttpContext?.Connection.RemoteIpAddress?.ToString();
-        f.Status = "finalizado_aluno";
-        f.StudentSignedAt = DateTime.UtcNow;
-        f.StudentSignedName = dto.SignerName;
-        f.StudentSignedIp = ip;
-        f.StudentSignedUserId = userId;
-        f.UpdatedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync();
-        return Ok(Map(f));
     }
 
     private static FollowupDto Map(FormativeFollowup f) => new()
     {
         Id = f.Id, StudentId = f.StudentId, StudentName = f.Student?.FullName ?? string.Empty,
+        StudentRgm = f.Student?.Rgm,
         PreceptorId = f.PreceptorId, PreceptorName = f.Preceptor?.FullName ?? string.Empty,
         ScheduleId = f.ScheduleId, GroupId = f.GroupId, LocationId = f.LocationId,
         LocationName = f.Location?.Name, Shift = f.Shift, PeriodLabel = f.PeriodLabel,

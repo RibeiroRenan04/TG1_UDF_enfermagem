@@ -45,7 +45,9 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         if (!user.MustChangePassword && !user.MustSetEmail)
             return BadRequest(new { message = "Primeiro acesso não necessário para este usuário." });
 
-        if (!dto.Email.EndsWith("@cs.udf.edu.br", StringComparison.OrdinalIgnoreCase))
+        // O e-mail institucional é exigido apenas do aluno. Preceptores costumam ser
+        // profissionais externos à UDF e podem usar e-mail próprio.
+        if (user.Role == "aluno" && !EhEmailInstitucional(dto.Email))
             return BadRequest(new { message = "O e-mail deve ser institucional (@cs.udf.edu.br)." });
 
         var emailTaken = await db.Users.AnyAsync(u => u.Email == dto.Email.ToLower() && u.Id != user.Id);
@@ -68,9 +70,8 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
     {
-        if (!dto.Email.EndsWith("@cs.udf.edu.br", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(new { message = "Apenas e-mails @cs.udf.edu.br são aceitos." });
-
+        // Não há restrição de domínio aqui: preceptores externos precisam conseguir
+        // recuperar a senha com o e-mail que usam para entrar.
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
 
         // Retorna 200 mesmo se o e-mail não existir para não revelar cadastros
@@ -134,4 +135,9 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
 
         return Ok(new { message = "Senha redefinida com sucesso." });
     }
+
+    private const string DominioInstitucional = "@cs.udf.edu.br";
+
+    private static bool EhEmailInstitucional(string email) =>
+        email.Trim().EndsWith(DominioInstitucional, StringComparison.OrdinalIgnoreCase);
 }

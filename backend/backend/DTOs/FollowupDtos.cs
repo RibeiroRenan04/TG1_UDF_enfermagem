@@ -7,6 +7,7 @@ public class FollowupDto
     public Guid Id { get; init; }
     public Guid StudentId { get; init; }
     public string StudentName { get; init; } = string.Empty;
+    public string? StudentRgm { get; init; }
     public Guid PreceptorId { get; init; }
     public string PreceptorName { get; init; } = string.Empty;
     public Guid? ScheduleId { get; init; }
@@ -50,20 +51,46 @@ public class FollowupDto
     public DateTime UpdatedAt { get; init; }
 }
 
-/// <summary>Retorno da busca de aluno por RGM (para preencher o acompanhamento).</summary>
-public record StudentLookupDto(Guid StudentId, string FullName, string? Rgm);
+/// <summary>
+/// Retorno da busca de aluno por RGM. Traz os dados já cadastrados no sistema
+/// (período, turno, semestre, turma e escala vigente) para preenchimento
+/// automático do relatório, reduzindo digitação e divergência de dados.
+/// </summary>
+public class StudentLookupDto
+{
+    public Guid StudentId { get; init; }
+    public string FullName { get; init; } = string.Empty;
+    public string? Rgm { get; init; }
+    public int? Semester { get; init; }
+    public string? Shift { get; init; }
+    public string? PeriodLabel { get; init; }
+    public Guid? GroupId { get; init; }
+    public string? GroupCode { get; init; }
+    public string? GroupName { get; init; }
+    public Guid? ScheduleId { get; init; }
+    public Guid? LocationId { get; init; }
+    public string? LocationName { get; init; }
+    public string? ActivityType { get; init; }
+    public DateOnly? FollowUpStart { get; init; }
+    public DateOnly? FollowUpEnd { get; init; }
+}
 
-public record CreateFollowupDto(
-    [Required] Guid StudentId,
-    Guid? ScheduleId,
-    Guid? GroupId,
-    Guid? LocationId,
-    string? Shift,
-    string? PeriodLabel,
-    string? Semester,
-    DateOnly? FollowUpStart,
-    DateOnly? FollowUpEnd
-);
+/// <summary>
+/// Criação do acompanhamento. Herda os campos avaliativos de <see cref="UpdateFollowupDto"/>
+/// para que o preceptor consiga salvar cabeçalho e conteúdo em uma única requisição.
+/// </summary>
+public class CreateFollowupDto : UpdateFollowupDto
+{
+    [Required] public Guid StudentId { get; init; }
+    public Guid? ScheduleId { get; init; }
+    public Guid? GroupId { get; init; }
+    public Guid? LocationId { get; init; }
+    public string? Shift { get; init; }
+    public string? PeriodLabel { get; init; }
+    public string? Semester { get; init; }
+    public DateOnly? FollowUpStart { get; init; }
+    public DateOnly? FollowUpEnd { get; init; }
+}
 
 public class UpdateFollowupDto
 {
