@@ -139,12 +139,19 @@ public class UsersController(AppDbContext db) : ControllerBase
     }
 
     // ── Importação em lote de alunos ──────────────────────────────────────────
+    /// <summary>
+    /// Importa alunos a partir da planilha acadêmica. O login de cada aluno é o
+    /// e-mail institucional gerado aqui e a senha inicial é o próprio RGM, trocada
+    /// no primeiro acesso. Os logins gerados voltam na resposta: sem eles o
+    /// supervisor não tem como informar ao aluno com que e-mail entrar.
+    /// </summary>
     [HttpPost("bulk-import")]
     public async Task<ActionResult<BulkImportResponseDto>> BulkImport([FromBody] BulkImportRequestDto dto)
     {
         int imported = 0, updated = 0;
         var errors = new List<string>();
         var emailsUsados = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var logins = new List<ImportedStudentLoginDto>();
 
         foreach (var s in dto.Students)
         {
@@ -159,19 +166,25 @@ public class UsersController(AppDbContext db) : ControllerBase
                     // Preenche o e-mail institucional se ainda não houver.
                     if (string.IsNullOrEmpty(existing.Email))
                     {
-                        existing.Email = await GerarEmailInstitucionalAsync(s.FullName, emailsUsados);
+                        var emailGerado = await GerarEmailInstitucionalAsync(s.FullName, emailsUsados);
+                        existing.Email = emailGerado;
                         existing.MustSetEmail = false;
+                        logins.Add(new ImportedStudentLoginDto(existing.FullName, rgm, emailGerado));
                     }
                     existing.UpdatedAt = DateTime.UtcNow;
                     updated++;
                 }
                 else
                 {
+                    // E-mail institucional gerado automaticamente: nome.ultimonome@cs.udf.edu.br
+                    var email = await GerarEmailInstitucionalAsync(s.FullName, emailsUsados);
+                    var fullName = s.FullName.Trim();
+
                     db.Users.Add(new ApplicationUser
                     {
-                        FullName = s.FullName.Trim(),
-                        // E-mail institucional gerado automaticamente: nome.ultimonome@cs.udf.edu.br
-                        Email = await GerarEmailInstitucionalAsync(s.FullName, emailsUsados),
+                        FullName = fullName,
+                        Email = email,
+                        // Senha inicial igual ao RGM; MustChangePassword força a troca.
                         PasswordHash = BCrypt.Net.BCrypt.HashPassword(rgm),
                         Role = "aluno",
                         Rgm = rgm, // o RGM é a matrícula do aluno
@@ -180,6 +193,8 @@ public class UsersController(AppDbContext db) : ControllerBase
                         MustChangePassword = true,
                         MustSetEmail = false
                     });
+
+                    logins.Add(new ImportedStudentLoginDto(fullName, rgm, email));
                     imported++;
                 }
             }
@@ -190,7 +205,7 @@ public class UsersController(AppDbContext db) : ControllerBase
         }
 
         await db.SaveChangesAsync();
-        return Ok(new BulkImportResponseDto(imported, updated, errors));
+        return Ok(new BulkImportResponseDto(imported, updated, errors, logins));
     }
 
     // ── Geração de e-mail institucional ───────────────────────────────────────

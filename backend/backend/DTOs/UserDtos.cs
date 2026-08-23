@@ -41,7 +41,18 @@ public record BulkImportRequestDto(
     [Required] List<BulkImportStudentDto> Students
 );
 
-public record BulkImportResponseDto(int Imported, int Updated, List<string> Errors);
+/// <summary>
+/// Login gerado para um aluno na importação. A senha inicial é o próprio RGM e
+/// por isso não trafega aqui: quem importou já enviou os RGMs na planilha.
+/// </summary>
+public record ImportedStudentLoginDto(string FullName, string Rgm, string Email);
+
+public record BulkImportResponseDto(
+    int Imported,
+    int Updated,
+    List<string> Errors,
+    List<ImportedStudentLoginDto> Logins
+);
 
 // ── Avançar semestre ──────────────────────────────────────────────────────────
 public record AdvanceSemesterResponseDto(int Advanced, int Graduated);
