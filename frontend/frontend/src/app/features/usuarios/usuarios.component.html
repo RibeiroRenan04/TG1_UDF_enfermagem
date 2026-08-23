@@ -7,9 +7,23 @@
   <button mat-stroked-button (click)="openCadastrarStaffDialog()">
     <mat-icon>person_add</mat-icon> Novo preceptor/supervisor
   </button>
+  <button mat-stroked-button (click)="exportarCredenciais()"
+          matTooltip="Planilha com login (e-mail gerado) e senha inicial (RGM) de cada aluno">
+    <mat-icon>vpn_key</mat-icon> Exportar credenciais
+  </button>
   <button mat-raised-button color="primary" (click)="openImportDialog()">
     <mat-icon>upload</mat-icon> Importar lista
   </button>
+</div>
+
+<div class="access-note">
+  <mat-icon>info</mat-icon>
+  <span>
+    Alunos importados por planilha entram com o <strong>e-mail institucional gerado</strong>
+    (<code>nome.sobrenome&#64;cs.udf.edu.br</code>) e senha inicial igual ao <strong>RGM</strong>;
+    no primeiro acesso confirmam o e-mail e trocam a senha. Use
+    <strong>Exportar credenciais</strong> para entregar esses dados à turma.
+  </span>
 </div>
 
 <div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
@@ -45,6 +59,7 @@
                 Pendente 1° acesso
               </mat-chip>
               <div class="student-email">{{ s.email || '—' }}</div>
+              <ng-container *ngTemplateOutlet="turmaSelect; context: { $implicit: s }"></ng-container>
             </div>
           </div>
           <ng-template #emptyTab>
@@ -62,6 +77,7 @@
                 <div class="student-meta">RGM: {{ s.rgm || '—' }}</div>
               </div>
               <div class="student-email">{{ s.email || '—' }}</div>
+              <ng-container *ngTemplateOutlet="turmaSelect; context: { $implicit: s }"></ng-container>
             </div>
           </div>
           <ng-template #emptyUncategorized>
@@ -129,3 +145,16 @@
 
 </ng-container>
 
+<!-- Seletor de turma do aluno: o vínculo libera o rodízio, o check-in e os relatórios. -->
+<ng-template #turmaSelect let-s>
+  <mat-form-field appearance="outline" class="turma-select" subscriptSizing="dynamic">
+    <mat-label>Turma</mat-label>
+    <mat-select [value]="s.groupId ?? null"
+                [disabled]="assigningId() === s.id"
+                (selectionChange)="atribuirTurma(s, $event.value)">
+      <mat-option [value]="null">Sem turma</mat-option>
+      <mat-option *ngFor="let g of groups()" [value]="g.id">{{ g.code }} — {{ g.name }}</mat-option>
+    </mat-select>
+  </mat-form-field>
+  <mat-spinner *ngIf="assigningId() === s.id" diameter="18" class="turma-spinner"></mat-spinner>
+</ng-template>

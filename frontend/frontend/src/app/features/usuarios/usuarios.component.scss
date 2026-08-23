@@ -84,3 +84,38 @@
   transition: background-color 0.15s ease;
   &:hover { background: rgb(0 173 238 / 0.04) !important; }
 }
+
+// ── Aviso sobre credenciais de acesso dos alunos ──────────────────────────────
+.access-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  border-radius: 0.5rem;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin-bottom: 16px;
+
+  mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
+  code { background: #dbeafe; padding: 1px 5px; border-radius: 4px; font-size: 0.76rem; }
+}
+
+// ── Seletor de turma do aluno ─────────────────────────────────────────────────
+.turma-select {
+  width: 190px;
+  flex-shrink: 0;
+
+  ::ng-deep .mat-mdc-text-field-wrapper { background: #ffffff; }
+  ::ng-deep .mat-mdc-form-field-infix { min-height: 40px; padding: 6px 0; }
+}
+
+.turma-spinner { flex-shrink: 0; }
+
+// Em telas estreitas a linha do aluno quebra e o seletor ocupa a largura toda.
+@media (max-width: 768px) {
+  .student-row { flex-wrap: wrap; }
+  .turma-select { width: 100%; }
+}

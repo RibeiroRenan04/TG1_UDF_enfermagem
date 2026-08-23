@@ -72,6 +72,14 @@
   margin: 8px 0;
 
   mat-icon { font-size: 20px; width: 20px; height: 20px; }
+
+  // O texto ocupa o espaco livre para o botao de acao ficar a direita.
+  span { flex: 1; }
+
+  button {
+    flex-shrink: 0;
+    background: #ffffff;
+  }
 }
 
 h4 {
@@ -81,7 +89,21 @@ h4 {
   margin: 12px 0 6px;
 }
 
-.members-block { padding-bottom: 4px; }
+.members-block {
+  padding-bottom: 4px;
+
+  h4 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+}
+
+.edit-members-btn {
+  font-size: 0.78rem;
+  font-weight: 500;
+}
 
 .members-list {
   display: flex;
@@ -161,4 +183,12 @@ h4 {
   color: #9ca3af;
   font-size: 0.85rem;
   padding: 8px 0;
+}
+
+// Aviso de preceptor escalado em dois locais ao mesmo tempo (nao bloqueia).
+.conflict-box {
+  align-items: flex-start;
+  margin-bottom: 12px;
+
+  mat-icon { margin-top: 1px; }
 }

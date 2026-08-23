@@ -1,7 +1,7 @@
 <div class="page-header">
   <div>
     <h1>Rodízios / Turmas</h1>
-    <p class="page-subtitle">Vincule os alunos à turma e aloque o rodízio informando turno, período, local, preceptor, datas, atividade e carga horária.</p>
+    <p class="page-subtitle">Crie a turma, vincule os alunos e aloque o rodízio informando turno, período, local, preceptor, datas, atividade e carga horária.</p>
   </div>
   <button mat-raised-button color="primary" (click)="showGroupForm.set(!showGroupForm())">
     <mat-icon>add</mat-icon> Nova turma
@@ -101,6 +101,17 @@
         </mat-form-field>
       </div>
 
+      <!-- Preceptor ja escalado em outro local no mesmo turno/periodo. -->
+      <div class="warning-box conflict-box" *ngIf="conflitoPreceptor() as c">
+        <mat-icon>warning_amber</mat-icon>
+        <span>
+          Este preceptor já está escalado em <strong>{{ c.locationName }}</strong>
+          ({{ c.groupCode }} — {{ c.periodLabel }}) de
+          {{ c.startDate | date:'dd/MM/yy' }} a {{ c.endDate | date:'dd/MM/yy' }},
+          no mesmo turno. Confirme se ele cobre os dois locais antes de salvar.
+        </span>
+      </div>
+
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Detalhamento da atividade (opcional)</mat-label>
         <textarea matInput rows="2" formControlName="notes"
@@ -136,11 +147,19 @@
     <!-- Conferência do vínculo dos alunos -->
     <div class="warning-box" *ngIf="!temAlunosVinculados(g)">
       <mat-icon>warning_amber</mat-icon>
-      <span>Nenhum aluno vinculado a esta turma. Vincule os alunos em <strong>Usuários</strong> antes de alocar o rodízio.</span>
+      <span>Nenhum aluno vinculado a esta turma. Vincule os alunos antes de alocar o rodízio.</span>
+      <button mat-stroked-button color="primary" (click)="vincularAlunos(g)">
+        <mat-icon>group_add</mat-icon> Vincular alunos
+      </button>
     </div>
 
     <div class="members-block" *ngIf="membros(g.id).length">
-      <h4>Alunos vinculados</h4>
+      <h4>
+        Alunos vinculados
+        <button mat-button color="primary" class="edit-members-btn" (click)="vincularAlunos(g)">
+          <mat-icon>edit</mat-icon> Editar vínculos
+        </button>
+      </h4>
       <div class="members-list">
         <span class="member-item" *ngFor="let m of membros(g.id)"
               [matTooltip]="'RGM ' + (m.rgm || '—') + ' · ' + (m.semester ? m.semester + '° sem.' : 'sem semestre')">
@@ -181,6 +200,9 @@
     </div>
 
     <mat-action-row>
+      <button mat-button (click)="vincularAlunos(g)">
+        <mat-icon>group_add</mat-icon> Vincular alunos
+      </button>
       <button mat-button color="primary" (click)="abrirAlocacao(g)" [disabled]="!temAlunosVinculados(g)">
         <mat-icon>event_available</mat-icon> Alocar rodízio
       </button>

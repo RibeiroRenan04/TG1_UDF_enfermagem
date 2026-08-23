@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -13,10 +13,15 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { GroupsService } from '../../core/services/groups.service';
 import { LocationsService } from '../../core/services/locations.service';
 import { UsersService } from '../../core/services/users.service';
 import { StudentGroup, RotationSchedule, Location, GroupMember, UserDto } from '../../core/models/models';
+import {
+  VincularAlunosDialogComponent,
+  VincularAlunosResult
+} from '../usuarios/vincular-alunos-dialog.component';
 
 @Component({
   selector: 'app-rodizios',
@@ -25,7 +30,7 @@ import { StudentGroup, RotationSchedule, Location, GroupMember, UserDto } from '
     CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatTableModule, MatExpansionModule, MatProgressSpinnerModule,
-    MatSnackBarModule, MatTooltipModule, MatDividerModule
+    MatSnackBarModule, MatTooltipModule, MatDividerModule, MatDialogModule
   ],
   templateUrl: './rodizios.component.html',
   styleUrls: ['./rodizios.component.scss']
@@ -35,6 +40,10 @@ export class RodiziosComponent implements OnInit {
   locations = signal<Location[]>([]);
   preceptors = signal<UserDto[]>([]);
   schedulesByGroup = signal<Record<string, RotationSchedule[]>>({});
+  /** Todas as escalas, para detectar preceptor escalado em dois locais ao mesmo tempo. */
+  allSchedules = signal<RotationSchedule[]>([]);
+  /** Espelha o formulário de alocação para o aviso de conflito reagir a mudanças. */
+  private formValue = signal<Partial<Record<string, unknown>>>({});
   membersByGroup = signal<Record<string, GroupMember[]>>({});
   loading = signal(true);
   showGroupForm = signal(false);
@@ -82,11 +91,37 @@ export class RodiziosComponent implements OnInit {
     private locationsService: LocationsService,
     private usersService: UsersService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
     private fb: FormBuilder
   ) {}
 
+  /**
+   * Preceptor já escalado em outro rodízio no mesmo turno com datas sobrepostas.
+   * O backend permite essa situação — aqui é só um alerta para o supervisor
+   * confirmar se o preceptor realmente cobre os dois locais.
+   */
+  conflitoPreceptor = computed<RotationSchedule | null>(() => {
+    const v = this.formValue();
+    const preceptorId = v['preceptorId'] as string | undefined;
+    const shift       = v['shift'] as string | undefined;
+    const startDate   = v['startDate'] as string | undefined;
+    const endDate     = v['endDate'] as string | undefined;
+    if (!preceptorId || !shift || !startDate || !endDate) return null;
+
+    const emEdicao = this.editingSchedule()?.id;
+    return this.allSchedules().find(s =>
+      s.preceptorId === preceptorId &&
+      s.id !== emEdicao &&
+      s.shift === shift &&
+      (s.startDate ?? '').substring(0, 10) <= endDate &&
+      (s.endDate ?? '').substring(0, 10) >= startDate
+    ) ?? null;
+  });
+
   ngOnInit(): void {
     this.locationsService.getAll().subscribe(l => this.locations.set(l));
+    this.loadAllSchedules();
+    this.scheduleForm.valueChanges.subscribe(v => this.formValue.set(v as Record<string, unknown>));
     // Apenas preceptores: são eles que realizam o acompanhamento dos alunos alocados.
     this.usersService.getPreceptors().subscribe(p =>
       this.preceptors.set(p.filter(u => u.role === 'preceptor' && u.isActive !== false))
@@ -103,6 +138,11 @@ export class RodiziosComponent implements OnInit {
       },
       error: () => this.loading.set(false)
     });
+  }
+
+  /** Escalas de todas as turmas — base do aviso de conflito de preceptor. */
+  loadAllSchedules(): void {
+    this.groupsService.getSchedules().subscribe(s => this.allSchedules.set(s));
   }
 
   loadSchedules(groupId: string): void {
@@ -150,11 +190,33 @@ export class RodiziosComponent implements OnInit {
     });
   }
 
+  // ── Vínculo dos alunos ────────────────────────────────────────────────────
+  /**
+   * Monta a turma. É o passo que faltava para liberar a alocação: sem vínculo,
+   * o backend recusa o rodízio e o aluno não consegue fazer check-in.
+   */
+  vincularAlunos(group: StudentGroup): void {
+    const ref = this.dialog.open(VincularAlunosDialogComponent, {
+      width: '560px',
+      data: { group }
+    });
+
+    ref.afterClosed().subscribe((res: VincularAlunosResult | null) => {
+      if (!res) return;
+      this.snackBar.open(
+        `${res.vinculados} aluno(s) vinculado(s), ${res.desvinculados} desvinculado(s).`,
+        '', { duration: 3000, panelClass: 'snack-success' });
+      // Recarrega a turma para atualizar memberCount e liberar a alocação.
+      this.loadMembers(group.id);
+      this.load();
+    });
+  }
+
   // ── Alocação de rodízio ───────────────────────────────────────────────────
   abrirAlocacao(group: StudentGroup): void {
     if (!this.temAlunosVinculados(group)) {
       this.snackBar.open(
-        `A turma ${group.code} não possui alunos vinculados. Vincule os alunos em Usuários antes de alocar o rodízio.`,
+        `A turma ${group.code} não possui alunos vinculados. Use "Vincular alunos" antes de alocar o rodízio.`,
         'OK', { duration: 6000, panelClass: 'snack-error' });
       return;
     }
@@ -231,6 +293,7 @@ export class RodiziosComponent implements OnInit {
         this.snackBar.open(atual ? 'Alocação atualizada!' : 'Rodízio alocado!', '', { duration: 2500, panelClass: 'snack-success' });
         this.showScheduleForm.set(false);
         this.loadSchedules(v.groupId!);
+        this.loadAllSchedules();
       },
       error: (err) => {
         this.savingSchedule.set(false);
@@ -242,7 +305,11 @@ export class RodiziosComponent implements OnInit {
   excluirAlocacao(groupId: string, s: RotationSchedule): void {
     if (!confirm(`Excluir o rodízio de ${s.periodLabel} em ${s.locationName}?`)) return;
     this.groupsService.deleteSchedule(s.id).subscribe({
-      next: () => { this.snackBar.open('Alocação removida.', '', { duration: 2000 }); this.loadSchedules(groupId); },
+      next: () => {
+        this.snackBar.open('Alocação removida.', '', { duration: 2000 });
+        this.loadSchedules(groupId);
+        this.loadAllSchedules();
+      },
       error: () => this.snackBar.open('Erro ao excluir alocação', '', { duration: 3000, panelClass: 'snack-error' })
     });
   }

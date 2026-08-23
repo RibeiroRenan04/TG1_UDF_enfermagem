@@ -49,6 +49,19 @@
   mat-nav-list {
     padding: 12px 8px !important;
 
+    // O tema claro do Material pinta o rótulo do item (.mdc-list-item__primary-text)
+    // de preto por meio destes tokens. Como a cor é declarada no próprio <span>, ela
+    // não herda o `color` do <a> — os tokens precisam ser sobrescritos aqui para o
+    // texto do menu aparecer em branco sobre o azul da sidebar.
+    --mdc-list-list-item-label-text-color: #{rgba(#f0f8ff, 0.85)};
+    --mdc-list-list-item-hover-label-text-color: #ffffff;
+    --mdc-list-list-item-focus-label-text-color: #ffffff;
+    --mdc-list-list-item-leading-icon-color: #{rgba(#f0f8ff, 0.6)};
+    --mdc-list-list-item-hover-leading-icon-color: #8ED1FC;
+    // Camadas de estado padrão são pretas e escurecem a sidebar no hover/foco.
+    --mdc-list-list-item-hover-state-layer-color: #ffffff;
+    --mdc-list-list-item-focus-state-layer-color: #ffffff;
+
     a {
       color: rgba(240, 248, 255, 0.85);
       border-radius: 8px;
@@ -70,6 +83,12 @@
         font-weight: 600;
         box-shadow: 0 2px 8px -2px rgb(0 173 238 / 0.5);
         mat-icon { color: #ffffff; }
+
+        // Vence o token global do tema, que voltaria a pintar o rótulo de preto.
+        --mdc-list-list-item-label-text-color: #ffffff;
+        --mdc-list-list-item-hover-label-text-color: #ffffff;
+        --mdc-list-list-item-leading-icon-color: #ffffff;
+        --mdc-list-list-item-hover-leading-icon-color: #ffffff;
       }
     }
   }

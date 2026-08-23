@@ -45,6 +45,8 @@ export class UsuariosComponent implements OnInit {
   groups   = signal<StudentGroup[]>([]);
   loading  = signal(true);
   advancingBusy = signal(false);
+  /** Aluno cujo vínculo de turma está sendo gravado. */
+  assigningId = signal<string | null>(null);
 
   readonly tabs: TabKey[] = [
     { sem: 7, shift: 'manha',  label: '7° Manhã'   },
@@ -139,6 +141,68 @@ export class UsuariosComponent implements OnInit {
   groupName(groupId: string | null | undefined): string {
     if (!groupId) return '—';
     return this.groups().find(g => g.id === groupId)?.name ?? '—';
+  }
+
+  // ── Vínculo com a turma ───────────────────────────────────────────────────
+  /**
+   * Vincula o aluno a uma turma (ou remove o vínculo, com groupId nulo).
+   * O vínculo é obrigatório para o rodízio ser alocado e para o aluno
+   * conseguir fazer check-in: sem ele o aluno fica fora de toda a operação.
+   */
+  atribuirTurma(student: UserDto, groupId: string | null): void {
+    if ((student.groupId ?? null) === groupId) return;
+
+    this.assigningId.set(student.id);
+    this.usersService.assignGroup(student.id, groupId).subscribe({
+      next: () => {
+        this.assigningId.set(null);
+        this.snackBar.open(
+          groupId ? `${student.fullName} vinculado(a) à turma ${this.groupName(groupId)}.`
+                  : `Vínculo de ${student.fullName} removido.`,
+          '', { duration: 3000, panelClass: 'snack-success' });
+        this.loadUsers();
+      },
+      error: (err) => {
+        this.assigningId.set(null);
+        this.snackBar.open(err?.error?.message ?? 'Erro ao vincular o aluno à turma', '',
+          { duration: 4000, panelClass: 'snack-error' });
+      }
+    });
+  }
+
+  // ── Credenciais de acesso ─────────────────────────────────────────────────
+  /**
+   * Exporta a planilha de credenciais dos alunos. O login é o e-mail
+   * institucional gerado na importação e a senha inicial é o próprio RGM —
+   * sem esta lista não há como comunicar o acesso a quem foi importado.
+   */
+  exportarCredenciais(): void {
+    const alunos = [...this.activeStudents(), ...this.uncategorizedStudents()];
+    if (!alunos.length) {
+      this.snackBar.open('Nenhum aluno ativo para exportar.', '', { duration: 3000 });
+      return;
+    }
+
+    const turnos: Record<string, string> = { manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
+    const linhas = alunos.map(a => ({
+      'Nome': a.fullName,
+      'RGM': a.rgm ?? '',
+      'Login (e-mail)': a.email ?? '',
+      'Senha inicial': a.mustChangePassword ? (a.rgm ?? '') : 'já alterada pelo aluno',
+      'Semestre': a.semester ? `${a.semester}°` : '',
+      'Turno': a.shift ? (turnos[a.shift] ?? a.shift) : '',
+      'Turma': a.groupCode ?? a.groupName ?? '',
+      '1° acesso': (a.mustChangePassword || a.mustSetEmail) ? 'Pendente' : 'Concluído'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(linhas);
+    ws['!cols'] = [{ wch: 32 }, { wch: 12 }, { wch: 34 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Credenciais');
+    XLSX.writeFile(wb, `credenciais-alunos-${new Date().toISOString().substring(0, 10)}.xlsx`);
+
+    this.snackBar.open(`${linhas.length} credencial(is) exportada(s).`, '',
+      { duration: 3000, panelClass: 'snack-success' });
   }
 }
 

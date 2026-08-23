@@ -153,10 +153,19 @@ export interface BulkImportStudent {
   shift: 'manha' | 'tarde' | 'noite';
 }
 
+/** Login gerado para um aluno na importação. A senha inicial é o RGM. */
+export interface ImportedStudentLogin {
+  fullName: string;
+  rgm: string;
+  email: string;
+}
+
 export interface BulkImportResult {
   imported: number;
   updated: number;
-  errors: { rgm: string; reason: string }[];
+  /** O backend devolve mensagens já formatadas ("RGM 123: motivo"). */
+  errors: string[];
+  logins: ImportedStudentLogin[];
 }
 
 export interface AdvanceSemesterResult {
