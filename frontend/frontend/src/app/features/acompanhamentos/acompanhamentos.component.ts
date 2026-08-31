@@ -11,9 +11,11 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { FollowupsService } from '../../core/services/followups.service';
 import { AuthService } from '../../core/services/auth.service';
-import { FormativeFollowup } from '../../core/models/models';
+import { FormativeFollowup, StudentLookup } from '../../core/models/models';
+import { SelecionarAlunoDialogComponent } from './selecionar-aluno-dialog.component';
 
 /** Escala de frequência usada nas dimensões comportamentais. */
 const ESCALA = ['nao_observado', 'raramente', 'as_vezes', 'frequentemente', 'sempre'];
@@ -28,7 +30,7 @@ interface Bloco { titulo: string; itens: Dimensao[]; }
     CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule,
-    MatTooltipModule, MatDividerModule
+    MatTooltipModule, MatDividerModule, MatDialogModule
   ],
   templateUrl: './acompanhamentos.component.html',
   styleUrls: ['./acompanhamentos.component.scss']
@@ -138,7 +140,8 @@ export class AcompanhamentosComponent implements OnInit {
     private followupsService: FollowupsService,
     private auth: AuthService,
     private snackBar: MatSnackBar,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit(): void { this.load(); }
@@ -168,31 +171,56 @@ export class AcompanhamentosComponent implements OnInit {
     this.followupsService.getStudentByRgm(rgm).subscribe({
       next: (s) => {
         this.lookingUp.set(false);
-        this.studentName.set(s.fullName);
-
-        const preenchidos: string[] = ['Nome'];
-        if (s.periodLabel) preenchidos.push('Período');
-        if (s.semester) preenchidos.push('Semestre');
-        if (s.shift) preenchidos.push('Turno');
-        if (s.locationName) preenchidos.push('Local');
-        this.autoPreenchidos.set(preenchidos);
-
-        this.form.patchValue({
-          studentId: s.studentId,
-          scheduleId: s.scheduleId ?? '',
-          groupId: s.groupId ?? '',
-          locationId: s.locationId ?? '',
-          shift: s.shift ?? '',
-          semester: s.semester != null ? String(s.semester) : '',
-          periodLabel: s.periodLabel ?? '',
-          followUpStart: s.followUpStart ?? '',
-          followUpEnd: s.followUpEnd ?? ''
-        });
+        this.aplicarAluno(s);
       },
       error: (err) => {
         this.lookingUp.set(false);
         this.lookupError.set(err?.error?.message ?? 'Aluno não encontrado para esse RGM.');
       }
+    });
+  }
+
+  /**
+   * Abre a lista de alunos alocados nos rodízios do preceptor. Escolher um aluno
+   * preenche RGM, nome e todo o contexto do rodízio de uma vez — é o caminho
+   * natural quando o preceptor não sabe o RGM de cabeça.
+   */
+  abrirListaAlunos(): void {
+    if (this.selectedFollowup()) return; // aluno não muda em acompanhamento já criado
+
+    const ref = this.dialog.open(SelecionarAlunoDialogComponent, {
+      width: '560px',
+      maxHeight: '80vh'
+    });
+
+    ref.afterClosed().subscribe((aluno: StudentLookup | null) => {
+      if (aluno) this.aplicarAluno(aluno);
+    });
+  }
+
+  /** Preenche o formulário com o aluno escolhido (pela lista ou pela busca de RGM). */
+  private aplicarAluno(s: StudentLookup): void {
+    this.lookupError.set('');
+    this.studentName.set(s.fullName);
+
+    const preenchidos: string[] = ['Nome', 'RGM'];
+    if (s.periodLabel) preenchidos.push('Período');
+    if (s.semester) preenchidos.push('Semestre');
+    if (s.shift) preenchidos.push('Turno');
+    if (s.locationName) preenchidos.push('Local');
+    this.autoPreenchidos.set(preenchidos);
+
+    this.form.patchValue({
+      rgm: s.rgm ?? '',
+      studentId: s.studentId,
+      scheduleId: s.scheduleId ?? '',
+      groupId: s.groupId ?? '',
+      locationId: s.locationId ?? '',
+      shift: s.shift ?? '',
+      semester: s.semester != null ? String(s.semester) : '',
+      periodLabel: s.periodLabel ?? '',
+      followUpStart: s.followUpStart ?? '',
+      followUpEnd: s.followUpEnd ?? ''
     });
   }
 

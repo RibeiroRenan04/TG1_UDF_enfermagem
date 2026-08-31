@@ -1,11 +1,23 @@
+/** Perfis de acesso. "supervisor" é o professor responsável. */
+export type UserRole = 'aluno' | 'preceptor' | 'supervisor' | 'coordenadora';
+
 export interface AuthResponse {
   token: string;
   userId: string;
   email: string;
   fullName: string;
-  role: 'aluno' | 'preceptor' | 'supervisor';
+  role: UserRole;
   mustChangePassword?: boolean;
   mustSetEmail?: boolean;
+  /** Perfis não-aluno precisam aceitar o termo de responsabilidade de acesso. */
+  mustAcceptTerms?: boolean;
+}
+
+/** Termo de responsabilidade exibido a preceptores, professores e coordenadoras. */
+export interface ResponsibilityTerms {
+  titulo: string;
+  versao: string;
+  itens: string[];
 }
 
 export interface RegisterDto {
@@ -134,6 +146,12 @@ export interface UserDto {
   mustChangePassword?: boolean;
   mustSetEmail?: boolean;
   isActive?: boolean;
+  /** Aluno autorizado a chegar após o horário previsto de início do estágio. */
+  allowLateArrival?: boolean;
+  /** Motivo da autorização de atraso, registrado pelo professor. */
+  lateArrivalNote?: string;
+  /** Quando o usuário aceitou o termo de responsabilidade de acesso. */
+  termsAcceptedAt?: string;
 }
 
 export interface SemesterHistory {
@@ -284,4 +302,246 @@ export interface GroupMember {
   semester?: number;
   shift?: string;
   isActive: boolean;
+}
+
+// ── Irregularidades de ponto ─────────────────────────────────────────────────
+/**
+ * Fluxo: o aluno registra (ou o sistema gera) → o preceptor toma ciência e pode
+ * observar → a ocorrência vai ao professor → o professor aprova ou nega.
+ * O preceptor nunca decide a situação.
+ */
+export type IrregularityStatus =
+  | 'aguardando_preceptor'
+  | 'aguardando_professor'
+  | 'aprovada'
+  | 'negada';
+
+export type IrregularityType =
+  | 'atraso'
+  | 'esquecimento_checkin'
+  | 'esquecimento_checkout'
+  | 'fora_do_local'
+  | 'falta_justificada'
+  | 'problema_tecnico'
+  | 'outro';
+
+export interface Irregularity {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentRgm?: string;
+  attendanceRecordId?: string;
+  scheduleId?: string;
+  type: IrregularityType;
+  occurredOn: string;
+  description: string;
+  status: IrregularityStatus;
+
+  preceptorId?: string;
+  preceptorName?: string;
+  preceptorNote?: string;
+  preceptorAcknowledgedAt?: string;
+
+  professorId?: string;
+  professorName?: string;
+  professorNote?: string;
+  professorDecidedAt?: string;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IrregularitySummary {
+  aguardandoPreceptor: number;
+  aguardandoProfessor: number;
+  aprovadas: number;
+  negadas: number;
+  total: number;
+}
+
+export interface CreateIrregularity {
+  type: IrregularityType;
+  occurredOn: string;
+  description: string;
+  attendanceRecordId?: string;
+  scheduleId?: string;
+}
+
+// ── Rodízios do preceptor com os alunos alocados ─────────────────────────────
+/**
+ * Um rodízio e os alunos alocados nele. Cada aluno já vem com o contexto do
+ * rodízio (período, turno, local e datas), então escolher um da lista preenche
+ * o acompanhamento inteiro.
+ */
+export interface ScheduleStudents {
+  scheduleId: string;
+  periodLabel: string;
+  shift: string;
+  activityType: string;
+  groupId?: string;
+  groupCode?: string;
+  groupName?: string;
+  locationId?: string;
+  locationName?: string;
+  startDate: string;
+  endDate: string;
+  /** Rodízio vigente hoje. */
+  current: boolean;
+  students: StudentLookup[];
+}
+
+// ── Unidades de saúde ────────────────────────────────────────────────────────
+/** Situação da geocodificação de uma unidade. */
+export type StatusGeocodificacao =
+  | 'pendente' | 'processando' | 'sucesso'
+  | 'nao_encontrado' | 'erro' | 'revisao_manual';
+
+/** De onde vieram as coordenadas da unidade. */
+export type OrigemCoordenadas = 'NOMINATIM' | 'MANUAL' | 'OUTRO';
+
+export interface UnidadeSaude {
+  id: string;
+  nome: string;
+  tipo?: string;
+  endereco?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+  telefone?: string;
+  enderecoCompleto: string;
+
+  latitude: number;
+  longitude: number;
+  temCoordenadas: boolean;
+  raioMetros: number;
+  origemCoordenadas?: OrigemCoordenadas;
+  statusGeocodificacao?: StatusGeocodificacao;
+  enderecoGeocodificado?: string;
+  precisaoLocalizacao?: string;
+  geocodificadoEm?: string;
+
+  ehInstituicao: boolean;
+  inicioTurno?: string;
+  fimTurno?: string;
+  codigoCnes?: string;
+  ativo: boolean;
+
+  /** Estagiários com alocação ativa nesta unidade. */
+  estagiariosAtivos: number;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+export interface CriarUnidadeSaude {
+  nome: string;
+  tipo?: string;
+  endereco?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+  telefone?: string;
+  latitude?: number;
+  longitude?: number;
+  raioMetros?: number;
+  ehInstituicao?: boolean;
+  inicioTurno?: string;
+  fimTurno?: string;
+  geocodificarAgora?: boolean;
+}
+
+export interface GeocodificacaoResposta {
+  sucesso: boolean;
+  status: StatusGeocodificacao;
+  latitude?: number;
+  longitude?: number;
+  enderecoEncontrado?: string;
+  precisao?: string;
+  mensagem?: string;
+  veioDoCache: boolean;
+}
+
+// ── Importação de unidades ───────────────────────────────────────────────────
+export interface ImportPreviewLinha {
+  linha: number;
+  nome: string;
+  tipo?: string;
+  enderecoResumo: string;
+  cidade?: string;
+  cep?: string;
+  /** "valida" | "invalida" | "duplicada" | "duplicada_endereco_alterado" */
+  status: string;
+  erros: string[];
+  unidadeExistenteId?: string;
+}
+
+export interface ImportPreview {
+  previewId: string;
+  totalLinhas: number;
+  validas: number;
+  invalidas: number;
+  duplicadas: number;
+  erros: string[];
+  linhas: ImportPreviewLinha[];
+  podeConfirmar: boolean;
+}
+
+export interface ImportacaoResultado {
+  loteId: string;
+  criadas: number;
+  atualizadas: number;
+  ignoradas: number;
+  enfileiradasParaGeocodificar: number;
+  mensagem: string;
+}
+
+export interface ImportacaoProgresso {
+  loteId: string;
+  total: number;
+  processados: number;
+  pendentes: number;
+  sucesso: number;
+  revisaoManual: number;
+  naoEncontrado: number;
+  erro: number;
+  percentualConcluido: number;
+  concluido: boolean;
+}
+
+// ── Alocação de estagiários ──────────────────────────────────────────────────
+export interface Alocacao {
+  id: string;
+  unidadeId: string;
+  unidadeNome: string;
+  unidadeCidade?: string;
+  estagiarioId: string;
+  estagiarioNome: string;
+  estagiarioRgm?: string;
+  estagiarioEmail?: string;
+  estagiarioSemestre?: number;
+  estagiarioTurno?: string;
+  dataInicio: string;
+  dataFim?: string;
+  ativo: boolean;
+  observacao?: string;
+  criadoPorNome?: string;
+  criadoEm: string;
+}
+
+export interface EstagiarioDisponivel {
+  id: string;
+  nome: string;
+  rgm?: string;
+  email?: string;
+  semestre?: number;
+  turno?: string;
+  turma?: string;
+  /** Unidade em que já está alocado, se houver. */
+  unidadeAtualId?: string;
+  unidadeAtualNome?: string;
 }

@@ -1,0 +1,202 @@
+// ── Resumo clicável (também serve de filtro) ─────────────────────────────────
+.resumo-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+
+  .spacer { flex: 1 1 auto; }
+}
+
+.resumo-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 116px;
+  padding: 10px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color .15s ease, box-shadow .15s ease;
+
+  &:hover { border-color: #0056A6; }
+  &.ativo { border-color: #0056A6; box-shadow: 0 0 0 2px rgb(0 86 166 / 0.12); }
+
+  .valor  { font-size: 1.35rem; font-weight: 700; color: #111827; line-height: 1.1; }
+  .rotulo { font-size: 0.72rem; color: #6B7280; text-transform: uppercase; letter-spacing: 0.03em; }
+
+  &.aguardando .valor { color: #b45309; }
+  &.professor  .valor { color: #0056A6; }
+  &.aprovada   .valor { color: #166534; }
+  &.negada     .valor { color: #991b1b; }
+}
+
+// ── Aviso do fluxo ───────────────────────────────────────────────────────────
+.fluxo-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+
+  mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
+}
+
+// ── Cartão de ocorrência ─────────────────────────────────────────────────────
+.lista { display: flex; flex-direction: column; gap: 14px; }
+
+.ocorrencia { padding: 16px 18px; }
+
+.ocorrencia-topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ocorrencia-titulo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+
+  .tipo { font-size: 1rem; font-weight: 600; color: #111827; }
+  .data { font-size: 0.82rem; color: #6B7280; }
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 9999px;
+
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+
+  &.status-aguardando_preceptor { background: #fef3c7; color: #92400e; }
+  &.status-aguardando_professor { background: #dbeafe; color: #1e40af; }
+  &.status-aprovada             { background: #dcfce7; color: #166534; }
+  &.status-negada               { background: #fee2e2; color: #991b1b; }
+}
+
+.aluno {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #374151;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: #6B7280; }
+  .rgm { font-size: 0.76rem; color: #6B7280; }
+}
+
+// ── Trilha do fluxo ──────────────────────────────────────────────────────────
+.trilha {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0;
+  flex-wrap: wrap;
+
+  .passo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.74rem;
+    color: #9ca3af;
+
+    .bolinha {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #e5e7eb;
+      color: #6B7280;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    &.concluido {
+      color: #111827;
+      .bolinha { background: #0056A6; color: #fff; }
+    }
+  }
+
+  .linha {
+    flex: 1 1 20px;
+    min-width: 20px;
+    height: 2px;
+    background: #e5e7eb;
+    &.ativa { background: #0056A6; }
+  }
+}
+
+// ── Blocos de texto ──────────────────────────────────────────────────────────
+.bloco {
+  border-left: 3px solid #e5e7eb;
+  padding: 2px 0 2px 12px;
+  margin-bottom: 10px;
+
+  &.preceptor { border-left-color: #f59e0b; }
+  &.professor { border-left-color: #0056A6; }
+}
+
+.bloco-rotulo {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6B7280;
+
+  em { font-weight: 400; text-transform: none; letter-spacing: 0; }
+}
+
+.bloco-texto {
+  margin: 3px 0 0;
+  font-size: 0.86rem;
+  color: #374151;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+// ── Ações ────────────────────────────────────────────────────────────────────
+.acoes {
+  border-top: 1px solid #f3f4f6;
+  margin-top: 12px;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.campo-nota { width: 100%; }
+
+.acoes-botoes { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.aguardo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: #6B7280;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}

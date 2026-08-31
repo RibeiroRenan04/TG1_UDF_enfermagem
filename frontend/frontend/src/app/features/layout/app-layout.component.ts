@@ -1,5 +1,5 @@
 import { Component, computed } from '@angular/core';
-import { CommonModule, TitleCasePipe } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -21,7 +21,7 @@ interface NavItem {
   selector: 'app-layout',
   standalone: true,
   imports: [
-    CommonModule, TitleCasePipe, RouterOutlet, RouterLink, RouterLinkActive,
+    CommonModule, RouterOutlet, RouterLink, RouterLinkActive,
     MatToolbarModule, MatSidenavModule, MatListModule,
     MatIconModule, MatButtonModule, MatDividerModule, MatTooltipModule
   ],
@@ -32,17 +32,36 @@ export class AppLayoutComponent {
   sidenavOpen = true;
 
   private readonly allNav: NavItem[] = [
-    { path: '/app',             label: 'Painel',            icon: 'dashboard',        roles: ['aluno','preceptor','supervisor'] },
+    { path: '/app',             label: 'Painel',            icon: 'dashboard',        roles: ['aluno','preceptor','supervisor','coordenadora'] },
     { path: '/app/check-in',    label: 'Registrar presença', icon: 'location_on',      roles: ['aluno'] },
     { path: '/app/historico',   label: 'Meu histórico',      icon: 'assignment',       roles: ['aluno'] },
-    { path: '/app/certificados', label: 'Certificados',      icon: 'workspace_premium', roles: ['aluno','supervisor'] },
-    { path: '/app/acompanhamentos', label: 'Acompanhamentos', icon: 'description',    roles: ['aluno','preceptor','supervisor'] },
+    { path: '/app/irregularidades', label: 'Irregularidades', icon: 'fact_check',      roles: ['aluno','preceptor','supervisor','coordenadora'] },
+    { path: '/app/certificados', label: 'Certificados',      icon: 'workspace_premium', roles: ['aluno','supervisor','coordenadora'] },
+    { path: '/app/acompanhamentos', label: 'Acompanhamentos', icon: 'description',    roles: ['aluno','preceptor','supervisor','coordenadora'] },
     { path: '/app/preceptor',   label: 'Meus alunos',        icon: 'star',             roles: ['preceptor'] },
-    { path: '/app/locais',      label: 'Locais',             icon: 'business',         roles: ['supervisor'] },
-    { path: '/app/rodizios',    label: 'Rodízios',           icon: 'calendar_today',   roles: ['supervisor'] },
-    { path: '/app/usuarios',    label: 'Usuários',           icon: 'people',           roles: ['supervisor'] },
-    { path: '/app/relatorios',  label: 'Relatórios',         icon: 'bar_chart',        roles: ['supervisor'] }
+    { path: '/app/unidades',    label: 'Unidades de saúde',  icon: 'domain',           roles: ['aluno','preceptor','supervisor','coordenadora'] },
+    { path: '/app/alocacoes',   label: 'Alocações',          icon: 'assignment_ind',   roles: ['supervisor','coordenadora'] },
+    { path: '/app/locais',      label: 'Locais',             icon: 'business',         roles: ['supervisor','coordenadora'] },
+    { path: '/app/rodizios',    label: 'Rodízios',           icon: 'calendar_today',   roles: ['supervisor','coordenadora'] },
+    { path: '/app/usuarios',    label: 'Usuários',           icon: 'people',           roles: ['supervisor','coordenadora'] },
+    { path: '/app/relatorios',  label: 'Relatórios',         icon: 'bar_chart',        roles: ['supervisor','coordenadora'] }
   ];
+
+  /** Rótulos de perfil: o identificador técnico não é o nome usado na faculdade. */
+  private readonly rotulosPerfil: Record<string, string> = {
+    aluno: 'Aluno(a)',
+    preceptor: 'Preceptor(a)',
+    supervisor: 'Professor(a) responsável',
+    coordenadora: 'Coordenadora (consulta)'
+  };
+
+  rotuloPerfil = computed(() => {
+    const role = this.auth.role();
+    return role ? (this.rotulosPerfil[role] ?? role) : '';
+  });
+
+  /** A coordenadora navega igual ao professor, mas sem alterar nada. */
+  somenteLeitura = this.auth.somenteLeitura;
 
   navItems = computed(() => {
     const role = this.auth.role();

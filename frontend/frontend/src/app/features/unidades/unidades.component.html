@@ -1,0 +1,161 @@
+<div class="page-header">
+  <div>
+    <h1>Unidades de Saúde</h1>
+    <p class="page-subtitle">
+      Locais de estágio e suas coordenadas — são elas que validam a presença do aluno no check-in.
+    </p>
+  </div>
+  <div class="header-actions" *ngIf="podeEditar()">
+    <a mat-stroked-button routerLink="/app/unidades/importar">
+      <mat-icon>upload_file</mat-icon> Importar planilha
+    </a>
+    <button mat-raised-button color="primary" (click)="novaUnidade()">
+      <mat-icon>add_location_alt</mat-icon> Nova unidade
+    </button>
+  </div>
+</div>
+
+<div class="readonly-note" *ngIf="somenteLeitura()">
+  <mat-icon>visibility</mat-icon>
+  <span>Perfil de <strong>consulta</strong>: as alterações são feitas pelo professor responsável.</span>
+</div>
+
+<!-- Atalho para a revisão quando há localização pendente de conferência. -->
+<div class="revisao-note" *ngIf="precisamRevisao() > 0">
+  <mat-icon>wrong_location</mat-icon>
+  <span>
+    <strong>{{ precisamRevisao() }} unidade(s)</strong> estão sem localização confirmada.
+    Sem coordenadas confiáveis o check-in do aluno não pode ser validado nessa unidade.
+  </span>
+  <a mat-stroked-button routerLink="/app/unidades/revisao">Revisar</a>
+</div>
+
+<!-- ══ Filtros ══════════════════════════════════════════════════════════════ -->
+<mat-card class="filtros-card">
+  <div class="filtros">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Nome</mat-label>
+      <input matInput [(ngModel)]="filtroNome" (keyup.enter)="carregar()" placeholder="UBS 1…">
+      <mat-icon matPrefix>search</mat-icon>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Tipo</mat-label>
+      <mat-select [(ngModel)]="filtroTipo" (selectionChange)="carregar()">
+        <mat-option value="">Todos</mat-option>
+        <mat-option *ngFor="let t of tipos" [value]="t">{{ t }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Cidade</mat-label>
+      <input matInput [(ngModel)]="filtroCidade" (keyup.enter)="carregar()">
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Situação</mat-label>
+      <mat-select [(ngModel)]="filtroAtivo" (selectionChange)="carregar()">
+        <mat-option [value]="true">Ativas</mat-option>
+        <mat-option [value]="false">Inativas</mat-option>
+        <mat-option [value]="null">Todas</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Localização</mat-label>
+      <mat-select [(ngModel)]="filtroStatus" (selectionChange)="carregar()">
+        <mat-option value="">Qualquer</mat-option>
+        <mat-option *ngFor="let s of opcoesStatus" [value]="s">{{ rotuloStatus(s) }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <button mat-icon-button matTooltip="Buscar" (click)="carregar()"><mat-icon>search</mat-icon></button>
+    <button mat-icon-button matTooltip="Limpar filtros" (click)="limparFiltros()"><mat-icon>filter_alt_off</mat-icon></button>
+  </div>
+</mat-card>
+
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+
+<!-- ══ Tabela ═══════════════════════════════════════════════════════════════ -->
+<mat-card *ngIf="!loading()">
+  <mat-card-content>
+    <table mat-table [dataSource]="unidades()" class="full-width" *ngIf="unidades().length; else vazio">
+
+      <ng-container matColumnDef="nome">
+        <th mat-header-cell *matHeaderCellDef>Unidade</th>
+        <td mat-cell *matCellDef="let u">
+          <a class="unidade-link" [routerLink]="['/app/unidades', u.id]">{{ u.nome }}</a>
+          <div class="unidade-endereco">{{ u.enderecoCompleto || '—' }}</div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="tipo">
+        <th mat-header-cell *matHeaderCellDef>Tipo</th>
+        <td mat-cell *matCellDef="let u">{{ u.tipo || '—' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="cidade">
+        <th mat-header-cell *matHeaderCellDef>Cidade</th>
+        <td mat-cell *matCellDef="let u">{{ u.cidade || '—' }}<span *ngIf="u.uf">/{{ u.uf }}</span></td>
+      </ng-container>
+
+      <ng-container matColumnDef="coordenadas">
+        <th mat-header-cell *matHeaderCellDef>Coordenadas</th>
+        <td mat-cell *matCellDef="let u">
+          <mat-icon *ngIf="u.temCoordenadas" class="icone-ok"
+                    [matTooltip]="u.latitude + ', ' + u.longitude">check_circle</mat-icon>
+          <mat-icon *ngIf="!u.temCoordenadas" class="icone-alerta"
+                    matTooltip="Sem coordenadas: o check-in não pode ser validado aqui">warning</mat-icon>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="estagiarios">
+        <th mat-header-cell *matHeaderCellDef class="col-num">Estagiários</th>
+        <td mat-cell *matCellDef="let u" class="col-num">{{ u.estagiariosAtivos }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>Status</th>
+        <td mat-cell *matCellDef="let u">
+          <span class="geo-chip {{ classeStatus(u.statusGeocodificacao) }}">
+            <mat-icon>{{ iconeStatus(u.statusGeocodificacao) }}</mat-icon>
+            {{ rotuloStatus(u.statusGeocodificacao) }}
+          </span>
+          <span class="chip-inativa" *ngIf="!u.ativo">Inativa</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="acoes">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let u" class="col-acoes">
+          <a mat-icon-button [routerLink]="['/app/unidades', u.id]" matTooltip="Abrir detalhes">
+            <mat-icon>chevron_right</mat-icon>
+          </a>
+          <ng-container *ngIf="podeEditar()">
+            <button mat-icon-button matTooltip="Editar" (click)="editar(u)">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button mat-icon-button matTooltip="Geocodificar novamente" (click)="geocodificar(u)">
+              <mat-icon>my_location</mat-icon>
+            </button>
+            <button mat-icon-button color="warn" matTooltip="Desativar" *ngIf="u.ativo"
+                    (click)="desativar(u)">
+              <mat-icon>block</mat-icon>
+            </button>
+          </ng-container>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="colunas"></tr>
+      <tr mat-row *matRowDef="let row; columns: colunas;"></tr>
+    </table>
+
+    <ng-template #vazio>
+      <div class="empty-state">
+        <mat-icon>domain_disabled</mat-icon>
+        <p>Nenhuma unidade encontrada com esses filtros.</p>
+        <button mat-stroked-button *ngIf="podeEditar()" (click)="novaUnidade()">Cadastrar unidade</button>
+      </div>
+    </ng-template>
+  </mat-card-content>
+</mat-card>

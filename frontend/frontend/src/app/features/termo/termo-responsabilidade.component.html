@@ -1,0 +1,45 @@
+<div class="termo-page">
+  <mat-card class="termo-card">
+
+    <div class="termo-header">
+      <mat-icon>gpp_maybe</mat-icon>
+      <div>
+        <h1>{{ termo()?.titulo || 'Termo de Responsabilidade de Acesso' }}</h1>
+        <p>Leia e confirme antes de continuar. Versão {{ termo()?.versao || '1.0' }}.</p>
+      </div>
+    </div>
+
+    <div *ngIf="loading()" class="termo-loading"><mat-spinner diameter="36"></mat-spinner></div>
+
+    <mat-card-content *ngIf="!loading()">
+      <p class="saudacao">
+        <strong>{{ user()?.fullName }}</strong> — seu acesso é individual e identificado.
+      </p>
+
+      <ol class="itens">
+        <li *ngFor="let item of termo()?.itens">{{ item }}</li>
+      </ol>
+
+      <div class="alerta">
+        <mat-icon>warning_amber</mat-icon>
+        <span>
+          O compartilhamento de senha compromete a segurança do sistema e a integridade
+          dos registros de estágio. Todas as ações ficam vinculadas à sua conta.
+        </span>
+      </div>
+
+      <mat-checkbox [(ngModel)]="aceito" class="aceite">
+        Li e concordo com o termo de responsabilidade acima.
+      </mat-checkbox>
+    </mat-card-content>
+
+    <mat-card-actions align="end" *ngIf="!loading()">
+      <button mat-button (click)="sair()">Sair</button>
+      <button mat-raised-button color="primary" [disabled]="!aceito || busy()" (click)="confirmar()">
+        <mat-spinner *ngIf="busy()" diameter="18" style="display:inline-block;margin-right:8px"></mat-spinner>
+        <span *ngIf="!busy()">Aceitar e continuar</span>
+      </button>
+    </mat-card-actions>
+
+  </mat-card>
+</div>

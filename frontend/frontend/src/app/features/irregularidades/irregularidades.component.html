@@ -1,0 +1,179 @@
+<div class="page-header">
+  <h1>Irregularidades de ponto</h1>
+  <p *ngIf="ehAluno()">Registre uma ocorrência no seu ponto e acompanhe a análise.</p>
+  <p *ngIf="ehPreceptor()">
+    Tome ciência das ocorrências dos seus alunos e registre sua observação.
+    A decisão final é do professor responsável.
+  </p>
+  <p *ngIf="ehProfessor()">Analise as ocorrências encaminhadas e registre sua decisão.</p>
+  <p *ngIf="somenteLeitura()">Acompanhamento das ocorrências (perfil de consulta).</p>
+</div>
+
+<!-- ══ Resumo + ações ═══════════════════════════════════════════════════════ -->
+<div class="resumo-bar" *ngIf="resumo() as r">
+  <button class="resumo-card" [class.ativo]="filtroStatus === 'todas'" (click)="aplicarFiltro('todas')">
+    <span class="valor">{{ r.total }}</span><span class="rotulo">Todas</span>
+  </button>
+  <button class="resumo-card aguardando" [class.ativo]="filtroStatus === 'aguardando_preceptor'"
+          (click)="aplicarFiltro('aguardando_preceptor')">
+    <span class="valor">{{ r.aguardandoPreceptor }}</span><span class="rotulo">Com o preceptor</span>
+  </button>
+  <button class="resumo-card professor" [class.ativo]="filtroStatus === 'aguardando_professor'"
+          (click)="aplicarFiltro('aguardando_professor')">
+    <span class="valor">{{ r.aguardandoProfessor }}</span><span class="rotulo">Com o professor</span>
+  </button>
+  <button class="resumo-card aprovada" [class.ativo]="filtroStatus === 'aprovada'"
+          (click)="aplicarFiltro('aprovada')">
+    <span class="valor">{{ r.aprovadas }}</span><span class="rotulo">Aprovadas</span>
+  </button>
+  <button class="resumo-card negada" [class.ativo]="filtroStatus === 'negada'"
+          (click)="aplicarFiltro('negada')">
+    <span class="valor">{{ r.negadas }}</span><span class="rotulo">Negadas</span>
+  </button>
+
+  <span class="spacer"></span>
+
+  <button mat-raised-button color="primary" *ngIf="ehAluno()" (click)="abrirRegistro()">
+    <mat-icon>add_circle</mat-icon> Registrar irregularidade
+  </button>
+</div>
+
+<!-- ══ Aviso do fluxo para o preceptor ══════════════════════════════════════ -->
+<div class="fluxo-note" *ngIf="ehPreceptor()">
+  <mat-icon>info</mat-icon>
+  <span>
+    Você <strong>não valida</strong> nem altera a situação da ocorrência. Ao registrar
+    a ciência, ela é <strong>encaminhada ao professor responsável</strong>, que aprova
+    ou nega. Sua observação acompanha a ocorrência.
+  </span>
+</div>
+
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+
+<!-- ══ Lista ════════════════════════════════════════════════════════════════ -->
+<ng-container *ngIf="!loading()">
+  <div class="lista" *ngIf="itensFiltrados().length; else vazio">
+
+    <mat-card class="ocorrencia" *ngFor="let item of itensFiltrados()">
+
+      <div class="ocorrencia-topo">
+        <div class="ocorrencia-titulo">
+          <span class="tipo">{{ tipoLabel(item.type) }}</span>
+          <span class="data">{{ item.occurredOn | date:'dd/MM/yyyy' }}</span>
+        </div>
+        <span class="status status-{{ item.status }}">
+          <mat-icon>{{ iconeStatus(item.status) }}</mat-icon>
+          {{ labelStatus(item.status) }}
+        </span>
+      </div>
+
+      <div class="aluno" *ngIf="!ehAluno()">
+        <mat-icon>person</mat-icon>
+        <strong>{{ item.studentName }}</strong>
+        <span class="rgm" *ngIf="item.studentRgm">RGM {{ item.studentRgm }}</span>
+      </div>
+
+      <!-- Trilha do fluxo -->
+      <div class="trilha">
+        <div class="passo concluido">
+          <span class="bolinha">1</span> Aluno registrou
+        </div>
+        <div class="linha" [class.ativa]="etapa(item) >= 2"></div>
+        <div class="passo" [class.concluido]="etapa(item) >= 2">
+          <span class="bolinha">2</span> Ciência do preceptor
+        </div>
+        <div class="linha" [class.ativa]="etapa(item) >= 3"></div>
+        <div class="passo" [class.concluido]="etapa(item) >= 3">
+          <span class="bolinha">3</span> Decisão do professor
+        </div>
+      </div>
+
+      <!-- Conteúdo -->
+      <div class="bloco">
+        <span class="bloco-rotulo">Descrição do aluno</span>
+        <p class="bloco-texto">{{ item.description }}</p>
+      </div>
+
+      <div class="bloco preceptor" *ngIf="item.preceptorAcknowledgedAt">
+        <span class="bloco-rotulo">
+          Observação do preceptor
+          <em>— {{ item.preceptorName }}, {{ item.preceptorAcknowledgedAt | date:'dd/MM/yy HH:mm' }}</em>
+        </span>
+        <p class="bloco-texto">{{ item.preceptorNote || 'Ciência registrada, sem observações.' }}</p>
+      </div>
+
+      <div class="bloco professor" *ngIf="item.professorDecidedAt">
+        <span class="bloco-rotulo">
+          Parecer do professor
+          <em>— {{ item.professorName }}, {{ item.professorDecidedAt | date:'dd/MM/yy HH:mm' }}</em>
+        </span>
+        <p class="bloco-texto">{{ item.professorNote || 'Sem parecer adicional.' }}</p>
+      </div>
+
+      <!-- ── Ação do preceptor: ciência + observação ─────────────────────── -->
+      <div class="acoes" *ngIf="podeDarCiencia(item)">
+        <mat-form-field appearance="outline" class="campo-nota" subscriptSizing="dynamic">
+          <mat-label>Justificativa / observação (opcional)</mat-label>
+          <textarea matInput rows="2" [(ngModel)]="notas[item.id]"
+                    placeholder="Ex.: aluno comunicou o atraso previamente e cumpriu a carga horária."></textarea>
+        </mat-form-field>
+        <button mat-raised-button color="primary"
+                [disabled]="salvandoId() === item.id"
+                (click)="darCiencia(item)">
+          <mat-spinner *ngIf="salvandoId() === item.id" diameter="18"
+                       style="display:inline-block;margin-right:8px"></mat-spinner>
+          <span *ngIf="salvandoId() !== item.id">
+            <mat-icon>forward_to_inbox</mat-icon> Dar ciência e encaminhar ao professor
+          </span>
+        </button>
+      </div>
+
+      <!-- ── Ação do professor: aprovar ou negar ─────────────────────────── -->
+      <div class="acoes" *ngIf="podeDecidir(item)">
+        <mat-form-field appearance="outline" class="campo-nota" subscriptSizing="dynamic">
+          <mat-label>Parecer (opcional)</mat-label>
+          <textarea matInput rows="2" [(ngModel)]="notas[item.id]"
+                    placeholder="Justificativa da aprovação ou da negativa."></textarea>
+        </mat-form-field>
+        <div class="acoes-botoes">
+          <button mat-raised-button color="primary"
+                  [disabled]="salvandoId() === item.id" (click)="decidir(item, true)">
+            <mat-icon>check</mat-icon> Aprovar
+          </button>
+          <button mat-stroked-button color="warn"
+                  [disabled]="salvandoId() === item.id" (click)="decidir(item, false)">
+            <mat-icon>close</mat-icon> Negar
+          </button>
+        </div>
+      </div>
+
+      <!-- Aguardando outra etapa -->
+      <div class="aguardo" *ngIf="ehPreceptor() && item.status === 'aguardando_professor'">
+        <mat-icon>hourglass_top</mat-icon>
+        Encaminhada ao professor. A decisão cabe a ele.
+      </div>
+
+      <div class="aguardo" *ngIf="ehAluno() && item.status === 'aguardando_preceptor'">
+        <mat-icon>hourglass_top</mat-icon>
+        Aguardando a ciência do preceptor.
+      </div>
+      <div class="aguardo" *ngIf="ehAluno() && item.status === 'aguardando_professor'">
+        <mat-icon>hourglass_top</mat-icon>
+        Encaminhada ao professor responsável para análise.
+      </div>
+
+    </mat-card>
+  </div>
+
+  <ng-template #vazio>
+    <mat-card>
+      <div class="empty-state">
+        <mat-icon>fact_check</mat-icon>
+        <p>Nenhuma ocorrência {{ filtroStatus === 'todas' ? '' : 'nesta situação' }}.</p>
+        <button mat-stroked-button *ngIf="ehAluno()" (click)="abrirRegistro()">
+          Registrar irregularidade
+        </button>
+      </div>
+    </mat-card>
+  </ng-template>
+</ng-container>

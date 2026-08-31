@@ -19,7 +19,10 @@ import { UsersService } from '../../core/services/users.service';
 import { GroupsService } from '../../core/services/groups.service';
 import { UserDto, StudentGroup, BulkImportStudent, BulkImportResult } from '../../core/models/models';
 import * as XLSX from 'xlsx';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { AuthService } from '../../core/services/auth.service';
 import { ImportarAlunosDialogComponent } from './importar-alunos-dialog.component';
+import { PermissaoAtrasoDialogComponent } from './permissao-atraso-dialog.component';
 import { CadastrarStaffDialogComponent } from './cadastrar-staff-dialog.component';
 
 type Shift = 'manha' | 'tarde' | 'noite';
@@ -35,7 +38,8 @@ interface TabKey { sem: Sem; shift: Shift; label: string }
     MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
     MatSelectModule, MatFormFieldModule, MatInputModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule,
-    MatTabsModule, MatChipsModule, MatDividerModule, MatTooltipModule
+    MatTabsModule, MatChipsModule, MatDividerModule, MatTooltipModule,
+    MatSlideToggleModule
   ],
   templateUrl: './usuarios.component.html',
   styleUrls: ['./usuarios.component.scss']
@@ -47,6 +51,20 @@ export class UsuariosComponent implements OnInit {
   advancingBusy = signal(false);
   /** Aluno cujo vínculo de turma está sendo gravado. */
   assigningId = signal<string | null>(null);
+  /** Aluno cujo turno está sendo gravado. */
+  savingShiftId = signal<string | null>(null);
+
+  /**
+   * A coordenadora (secretaria/estagiária) usa a mesma tela do professor apenas
+   * para consulta: nenhuma ação de escrita fica disponível para ela.
+   */
+  somenteLeitura = this.auth.somenteLeitura;
+
+  readonly turnos: { valor: 'manha' | 'tarde' | 'noite'; rotulo: string }[] = [
+    { valor: 'manha', rotulo: 'Manhã' },
+    { valor: 'tarde', rotulo: 'Tarde' },
+    { valor: 'noite', rotulo: 'Noite' }
+  ];
 
   readonly tabs: TabKey[] = [
     { sem: 7, shift: 'manha',  label: '7° Manhã'   },
@@ -79,7 +97,8 @@ export class UsuariosComponent implements OnInit {
     private usersService: UsersService,
     private groupsService: GroupsService,
     private snackBar: MatSnackBar,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private auth: AuthService
   ) {}
 
   ngOnInit(): void {
@@ -170,6 +189,68 @@ export class UsuariosComponent implements OnInit {
     });
   }
 
+  // ── Troca de turno ────────────────────────────────────────────────────────
+  /**
+   * Altera o turno do aluno. Usado quando há troca autorizada entre alunos
+   * (por exemplo, da manhã para a tarde): só o turno é editável.
+   */
+  alterarTurno(student: UserDto, shift: 'manha' | 'tarde' | 'noite'): void {
+    if (student.shift === shift) return;
+
+    this.savingShiftId.set(student.id);
+    this.usersService.updateShift(student.id, shift).subscribe({
+      next: () => {
+        this.savingShiftId.set(null);
+        this.snackBar.open(
+          `Turno de ${student.fullName} alterado para ${this.turnoLabel(shift)}.`, '',
+          { duration: 3000, panelClass: 'snack-success' });
+        this.loadUsers();
+      },
+      error: (err) => {
+        this.savingShiftId.set(null);
+        this.snackBar.open(err?.error?.message ?? 'Erro ao alterar o turno do aluno', '',
+          { duration: 4000, panelClass: 'snack-error' });
+      }
+    });
+  }
+
+  turnoLabel(shift: string | undefined): string {
+    if (!shift) return '—';
+    return this.turnos.find(t => t.valor === shift)?.rotulo ?? shift;
+  }
+
+  // ── Permissão de atraso ───────────────────────────────────────────────────
+  /**
+   * Autoriza previamente o aluno a chegar após o início do turno. A carga horária
+   * do dia continua sendo exigida — a permissão só evita a marcação de
+   * irregularidade por horário.
+   */
+  abrirPermissaoAtraso(student: UserDto): void {
+    const ref = this.dialog.open(PermissaoAtrasoDialogComponent, {
+      width: '520px',
+      data: { aluno: student }
+    });
+    ref.afterClosed().subscribe((atualizado: UserDto | null) => {
+      if (atualizado) {
+        this.snackBar.open(
+          atualizado.allowLateArrival
+            ? `${atualizado.fullName} está autorizado(a) a chegar após o horário previsto.`
+            : `Permissão de atraso de ${atualizado.fullName} removida.`,
+          '', { duration: 4000, panelClass: 'snack-success' });
+        this.loadUsers();
+      }
+    });
+  }
+
+  /** Rótulo do perfil, já que o identificador técnico não é o nome usado na faculdade. */
+  perfilLabel(role: string): string {
+    return ({
+      preceptor: 'Preceptor(a)',
+      supervisor: 'Professor(a)',
+      coordenadora: 'Coordenadora'
+    } as Record<string, string>)[role] ?? role;
+  }
+
   // ── Credenciais de acesso ─────────────────────────────────────────────────
   /**
    * Exporta a planilha de credenciais dos alunos. O login é o e-mail
@@ -192,11 +273,12 @@ export class UsuariosComponent implements OnInit {
       'Semestre': a.semester ? `${a.semester}°` : '',
       'Turno': a.shift ? (turnos[a.shift] ?? a.shift) : '',
       'Turma': a.groupCode ?? a.groupName ?? '',
-      '1° acesso': (a.mustChangePassword || a.mustSetEmail) ? 'Pendente' : 'Concluído'
+      '1° acesso': (a.mustChangePassword || a.mustSetEmail) ? 'Pendente' : 'Concluído',
+      'Permissão de atraso': a.allowLateArrival ? 'Sim' : 'Não'
     }));
 
     const ws = XLSX.utils.json_to_sheet(linhas);
-    ws['!cols'] = [{ wch: 32 }, { wch: 12 }, { wch: 34 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }];
+    ws['!cols'] = [{ wch: 32 }, { wch: 12 }, { wch: 34 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Credenciais');
     XLSX.writeFile(wb, `credenciais-alunos-${new Date().toISOString().substring(0, 10)}.xlsx`);

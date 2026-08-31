@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { FormativeFollowup, StudentLookup } from '../models/models';
+import { FormativeFollowup, StudentLookup, ScheduleStudents } from '../models/models';
 
 @Injectable({ providedIn: 'root' })
 export class FollowupsService {
@@ -11,6 +11,14 @@ export class FollowupsService {
 
   getAll(): Observable<FormativeFollowup[]> {
     return this.http.get<FormativeFollowup[]>(this.api);
+  }
+
+  /**
+   * Rodízios do preceptor com os alunos alocados em cada um — usado para
+   * escolher o aluno pela lista da turma em vez de digitar o RGM.
+   */
+  getMySchedules(): Observable<ScheduleStudents[]> {
+    return this.http.get<ScheduleStudents[]>(`${this.api}/my-schedules`);
   }
 
   /** Busca um aluno pelo RGM (nome + id) para preencher o acompanhamento. */

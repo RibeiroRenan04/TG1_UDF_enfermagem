@@ -1,0 +1,165 @@
+<div class="page-header">
+  <div>
+    <h1>Importar unidades de saúde</h1>
+    <p class="page-subtitle">
+      Envie a planilha, confira a prévia e confirme. Nada é gravado antes da confirmação.
+    </p>
+  </div>
+  <a mat-stroked-button routerLink="/app/unidades"><mat-icon>arrow_back</mat-icon> Voltar</a>
+</div>
+
+<!-- ══ 1. Envio ═════════════════════════════════════════════════════════════ -->
+<mat-card class="etapa-card" *ngIf="!previa() && !resultado()">
+  <mat-card-content>
+    <div class="modelo-box">
+      <mat-icon>description</mat-icon>
+      <div>
+        <strong>Colunas esperadas</strong>
+        <code>Nome</code>, <code>Tipo</code>, <code>Endereco</code>, <code>Numero</code>,
+        <code>Complemento</code>, <code>Bairro</code>, <code>Cidade</code>, <code>UF</code>,
+        <code>CEP</code>, <code>Telefone</code>.
+        Apenas <strong>Nome</strong> é obrigatório, mais o endereço ou a cidade —
+        sem eles não há como localizar a unidade no mapa.
+        <a [href]="urlModelo()" target="_blank" rel="noopener">Baixar planilha modelo</a>
+      </div>
+    </div>
+
+    <div class="file-area" (click)="fileInput.click()" [class.has-file]="arquivo">
+      <mat-spinner *ngIf="enviando()" diameter="32"></mat-spinner>
+      <ng-container *ngIf="!enviando()">
+        <mat-icon>upload_file</mat-icon>
+        <span>{{ arquivo?.name || 'Clique para escolher a planilha (.xlsx ou .csv)' }}</span>
+        <span class="file-limite">Até 5 MB e 2000 linhas</span>
+      </ng-container>
+      <input #fileInput type="file" accept=".xlsx,.csv" hidden (change)="onArquivo($event)">
+    </div>
+
+    <div class="erro-box" *ngIf="erro()">
+      <mat-icon>error_outline</mat-icon><span>{{ erro() }}</span>
+    </div>
+  </mat-card-content>
+</mat-card>
+
+<!-- ══ 2. Prévia ════════════════════════════════════════════════════════════ -->
+<ng-container *ngIf="previa() as p">
+  <mat-card class="etapa-card">
+    <mat-card-content>
+      <div class="resumo">
+        <div class="resumo-item"><span class="valor">{{ p.totalLinhas }}</span><span class="rotulo">Linhas</span></div>
+        <div class="resumo-item ok"><span class="valor">{{ p.validas }}</span><span class="rotulo">Novas</span></div>
+        <div class="resumo-item dup"><span class="valor">{{ p.duplicadas }}</span><span class="rotulo">Já cadastradas</span></div>
+        <div class="resumo-item err"><span class="valor">{{ p.invalidas }}</span><span class="rotulo">Com erro</span></div>
+      </div>
+
+      <div class="erro-box" *ngIf="p.invalidas > 0">
+        <mat-icon>warning</mat-icon>
+        <span>
+          {{ p.invalidas }} linha(s) têm erro e <strong>não serão importadas</strong>.
+          Corrija a planilha e reenvie, ou siga sem elas.
+        </span>
+      </div>
+
+      <div class="duplicadas-escolha" *ngIf="p.duplicadas > 0">
+        <span class="secao-titulo">O que fazer com as {{ p.duplicadas }} já cadastradas?</span>
+        <mat-radio-group [(ngModel)]="acaoDuplicadas" class="radios">
+          <mat-radio-button value="ignorar">
+            <strong>Ignorar</strong> — mantém o cadastro atual (recomendado)
+          </mat-radio-button>
+          <mat-radio-button value="atualizar">
+            <strong>Atualizar</strong> — regrava os dados com o que veio da planilha
+          </mat-radio-button>
+        </mat-radio-group>
+        <p class="nota">
+          Coordenadas definidas manualmente nunca são substituídas por uma importação.
+        </p>
+      </div>
+
+      <table mat-table [dataSource]="p.linhas" class="full-width tabela-previa">
+        <ng-container matColumnDef="linha">
+          <th mat-header-cell *matHeaderCellDef class="col-linha">Linha</th>
+          <td mat-cell *matCellDef="let l" class="col-linha">{{ l.linha }}</td>
+        </ng-container>
+        <ng-container matColumnDef="nome">
+          <th mat-header-cell *matHeaderCellDef>Nome</th>
+          <td mat-cell *matCellDef="let l">{{ l.nome || '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="endereco">
+          <th mat-header-cell *matHeaderCellDef>Endereço</th>
+          <td mat-cell *matCellDef="let l">{{ l.enderecoResumo || '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Situação</th>
+          <td mat-cell *matCellDef="let l">
+            <span class="status-chip {{ classeStatusLinha(l.status) }}">
+              {{ rotuloStatusLinha(l.status) }}
+            </span>
+            <div class="linha-erros" *ngIf="l.erros.length">{{ l.erros.join(' ') }}</div>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="colunas"></tr>
+        <tr mat-row *matRowDef="let row; columns: colunas;"
+            [class.row-invalida]="row.status === 'invalida'"></tr>
+      </table>
+    </mat-card-content>
+
+    <mat-card-actions align="end">
+      <button mat-button (click)="recomecar()">Trocar arquivo</button>
+      <button mat-raised-button color="primary"
+              [disabled]="!p.podeConfirmar || totalAImportar() === 0 || confirmando()"
+              (click)="confirmar()">
+        <mat-spinner *ngIf="confirmando()" diameter="18" style="display:inline-block;margin-right:8px"></mat-spinner>
+        <span *ngIf="!confirmando()">Importar {{ totalAImportar() }} unidade(s)</span>
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</ng-container>
+
+<!-- ══ 3. Resultado e progresso da geocodificação ═══════════════════════════ -->
+<mat-card class="etapa-card" *ngIf="resultado() as r">
+  <mat-card-content>
+    <div class="sucesso-cabecalho">
+      <mat-icon>task_alt</mat-icon>
+      <div>
+        <strong>Importação concluída</strong>
+        <div class="sucesso-detalhe">
+          {{ r.criadas }} criada(s) · {{ r.atualizadas }} atualizada(s) · {{ r.ignoradas }} ignorada(s)
+        </div>
+      </div>
+    </div>
+
+    <ng-container *ngIf="progresso() as g">
+      <div class="progresso-bloco">
+        <div class="progresso-topo">
+          <span>{{ g.concluido ? 'Geocodificação concluída' : 'Geocodificando…' }}</span>
+          <span class="progresso-num">{{ g.processados }} / {{ g.total }}</span>
+        </div>
+        <mat-progress-bar [mode]="g.concluido ? 'determinate' : 'determinate'"
+                          [value]="g.percentualConcluido"></mat-progress-bar>
+
+        <div class="progresso-status">
+          <span class="ps ok">Localizadas: {{ g.sucesso }}</span>
+          <span class="ps rev">Revisar: {{ g.revisaoManual }}</span>
+          <span class="ps nf">Não encontradas: {{ g.naoEncontrado }}</span>
+          <span class="ps er">Erro: {{ g.erro }}</span>
+          <span class="ps pd">Na fila: {{ g.pendentes }}</span>
+        </div>
+
+        <p class="nota" *ngIf="!g.concluido">
+          A consulta ao OpenStreetMap respeita cerca de uma requisição por segundo,
+          então planilhas grandes levam alguns minutos. Pode sair desta tela — o
+          processamento continua no servidor.
+        </p>
+        <p class="nota" *ngIf="g.concluido && (g.revisaoManual + g.naoEncontrado + g.erro) > 0">
+          {{ g.revisaoManual + g.naoEncontrado + g.erro }} unidade(s) ficaram sem
+          localização confirmada e precisam de conferência.
+        </p>
+      </div>
+    </ng-container>
+  </mat-card-content>
+
+  <mat-card-actions align="end">
+    <button mat-button (click)="recomecar()">Importar outra planilha</button>
+    <button mat-stroked-button (click)="irParaRevisao()">Revisar localizações</button>
+    <a mat-raised-button color="primary" routerLink="/app/unidades">Ver unidades</a>
+  </mat-card-actions>
+</mat-card>

@@ -180,3 +180,20 @@ mat-sidenav-content > .content > * {
   max-width: 1280px;
 }
 
+
+// Barra superior: identifica o perfil de consulta (coordenadora), que não edita nada.
+.toolbar-spacer { flex: 1 1 auto; }
+
+.readonly-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.18);
+  color: #fff;
+
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+}

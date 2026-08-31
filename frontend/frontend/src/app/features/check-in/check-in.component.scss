@@ -91,3 +91,53 @@ mat-card-actions {
   padding: 12px 16px 16px;
   button { min-width: 200px; }
 }
+
+// ── Bloqueio fora do raio ────────────────────────────────────────────────────
+// O ponto só é aceito dentro do raio da unidade alocada; a foto fica travada
+// junto para o aluno não seguir um fluxo que o backend recusaria no fim.
+.fora-do-raio {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+
+  mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
+  a { color: #991b1b; font-weight: 600; }
+}
+
+.aguardando-gps {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #6B7280;
+  font-size: 0.78rem;
+  margin-top: 10px;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+.photo-section.bloqueada {
+  opacity: 0.6;
+}
+
+.lock-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+  color: #9ca3af;
+}
+
+.bloqueio-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 6px;
+}

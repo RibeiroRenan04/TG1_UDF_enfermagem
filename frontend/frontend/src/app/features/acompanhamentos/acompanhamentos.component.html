@@ -20,17 +20,33 @@
 
       <h3>Identificação do aluno</h3>
       <div class="student-row">
+        <!-- Clicar no nome abre a lista de alunos alocados nos rodízios do preceptor. -->
+        <mat-form-field appearance="outline" class="name-field"
+                        [class.selecionavel]="!selectedFollowup()">
+          <mat-label>Nome do aluno</mat-label>
+          <input matInput [value]="studentName()" readonly
+                 [placeholder]="selectedFollowup() ? '' : 'Clique para escolher na lista do rodízio'"
+                 (click)="abrirListaAlunos()"
+                 [matTooltip]="selectedFollowup() ? '' : 'Ver os alunos alocados nos seus rodízios'">
+          <button matSuffix mat-icon-button type="button" *ngIf="!selectedFollowup()"
+                  (click)="abrirListaAlunos()" matTooltip="Escolher aluno do rodízio">
+            <mat-icon>groups</mat-icon>
+          </button>
+        </mat-form-field>
+
         <mat-form-field appearance="outline" class="rgm-field">
           <mat-label>RGM do aluno</mat-label>
           <input matInput formControlName="rgm" (change)="lookupRgm()" (keyup.enter)="lookupRgm()"
                  [readonly]="!!selectedFollowup()">
           <mat-spinner matSuffix *ngIf="lookingUp()" diameter="18"></mat-spinner>
         </mat-form-field>
-        <mat-form-field appearance="outline" class="name-field">
-          <mat-label>Nome do aluno</mat-label>
-          <input matInput [value]="studentName()" readonly placeholder="Preenchido pelo RGM">
-        </mat-form-field>
       </div>
+
+      <p class="lista-hint" *ngIf="!selectedFollowup() && !studentName()">
+        <mat-icon>groups</mat-icon>
+        Clique em <strong>Nome do aluno</strong> para ver os alunos alocados nos seus
+        rodízios, ou digite o RGM diretamente.
+      </p>
 
       <p class="lookup-error" *ngIf="lookupError()">
         <mat-icon>error_outline</mat-icon> {{ lookupError() }}

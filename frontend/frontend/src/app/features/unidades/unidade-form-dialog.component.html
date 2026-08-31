@@ -1,0 +1,158 @@
+<h2 mat-dialog-title>{{ editando ? 'Editar unidade de saúde' : 'Nova unidade de saúde' }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="form">
+
+    <div class="linha">
+      <mat-form-field appearance="outline" class="f2">
+        <mat-label>Nome da unidade</mat-label>
+        <input matInput formControlName="nome" placeholder="Ex.: UBS 1 Asa Norte">
+        <mat-error *ngIf="form.get('nome')?.hasError('required')">Informe o nome</mat-error>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Tipo</mat-label>
+        <mat-select formControlName="tipo">
+          <mat-option *ngFor="let t of tipos" [value]="t">{{ t }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <div class="linha">
+      <mat-form-field appearance="outline" class="f2">
+        <mat-label>Endereço</mat-label>
+        <input matInput formControlName="endereco" placeholder="SGAN 906">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Número</mat-label>
+        <input matInput formControlName="numero" placeholder="S/N">
+      </mat-form-field>
+    </div>
+
+    <div class="linha">
+      <mat-form-field appearance="outline">
+        <mat-label>Complemento</mat-label>
+        <input matInput formControlName="complemento">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Bairro</mat-label>
+        <input matInput formControlName="bairro">
+      </mat-form-field>
+    </div>
+
+    <div class="linha">
+      <mat-form-field appearance="outline" class="f2">
+        <mat-label>Cidade</mat-label>
+        <input matInput formControlName="cidade">
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="f-uf">
+        <mat-label>UF</mat-label>
+        <input matInput formControlName="uf" maxlength="2">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>CEP</mat-label>
+        <input matInput formControlName="cep" placeholder="70790-060">
+      </mat-form-field>
+    </div>
+
+    <div class="linha">
+      <mat-form-field appearance="outline">
+        <mat-label>Telefone</mat-label>
+        <input matInput formControlName="telefone">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Raio do check-in (m)</mat-label>
+        <input matInput type="number" formControlName="raioMetros">
+        <mat-hint>Distância máxima aceita no registro de ponto</mat-hint>
+      </mat-form-field>
+    </div>
+
+    <div class="linha">
+      <mat-form-field appearance="outline">
+        <mat-label>Início do turno</mat-label>
+        <input matInput formControlName="inicioTurno" placeholder="07:00">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Fim do turno</mat-label>
+        <input matInput formControlName="fimTurno" placeholder="13:00">
+      </mat-form-field>
+    </div>
+
+    <mat-checkbox formControlName="ehInstituicao" class="check">
+      É a instituição de ensino (usada na regra de sexta-feira)
+    </mat-checkbox>
+
+    <!-- ── Localização ───────────────────────────────────────────────────── -->
+    <div class="localizacao">
+      <div class="localizacao-topo">
+        <span class="secao-titulo">Localização</span>
+        <button mat-stroked-button type="button" [disabled]="buscandoLocal()" (click)="buscarLocalizacao()">
+          <mat-spinner *ngIf="buscandoLocal()" diameter="16" style="display:inline-block;margin-right:6px"></mat-spinner>
+          <mat-icon *ngIf="!buscandoLocal()">place</mat-icon>
+          Buscar localização
+        </button>
+      </div>
+
+      <p class="localizacao-hint">
+        A busca é feita pelo servidor do sistema no OpenStreetMap. Sem coordenadas,
+        a unidade entra na fila de geocodificação após ser salva.
+      </p>
+
+      <!-- Resultado da busca, para o usuário conferir antes de adotar. -->
+      <div class="previa" *ngIf="previa() as p">
+        <ng-container *ngIf="p.sucesso; else naoAchou">
+          <div class="previa-cabecalho">
+            <mat-icon>place</mat-icon>
+            <strong>Localização encontrada</strong>
+            <span class="tag" *ngIf="p.veioDoCache">do cache</span>
+            <span class="tag alerta" *ngIf="p.status === 'revisao_manual'">conferir</span>
+          </div>
+          <div class="previa-linha">Latitude: <code>{{ p.latitude }}</code></div>
+          <div class="previa-linha">Longitude: <code>{{ p.longitude }}</code></div>
+          <div class="previa-linha" *ngIf="p.enderecoEncontrado">
+            Endereço encontrado: {{ p.enderecoEncontrado }}
+          </div>
+          <div class="previa-linha" *ngIf="p.precisao">Precisão: {{ p.precisao }}</div>
+          <p class="previa-aviso" *ngIf="p.mensagem">{{ p.mensagem }}</p>
+          <button mat-flat-button color="primary" type="button" (click)="usarLocalizacao()">
+            <mat-icon>check</mat-icon> Usar esta localização
+          </button>
+        </ng-container>
+        <ng-template #naoAchou>
+          <div class="previa-cabecalho erro">
+            <mat-icon>search_off</mat-icon>
+            <strong>{{ p.mensagem || 'Localização não encontrada.' }}</strong>
+          </div>
+          <p class="previa-linha">Confira o endereço ou informe as coordenadas manualmente.</p>
+        </ng-template>
+      </div>
+
+      <div class="linha">
+        <mat-form-field appearance="outline">
+          <mat-label>Latitude</mat-label>
+          <input matInput type="number" formControlName="latitude" placeholder="-15.7401">
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Longitude</mat-label>
+          <input matInput type="number" formControlName="longitude" placeholder="-47.8829">
+        </mat-form-field>
+        <button mat-icon-button type="button" matTooltip="Limpar coordenadas" (click)="limparCoordenadas()">
+          <mat-icon>backspace</mat-icon>
+        </button>
+      </div>
+
+      <p class="localizacao-hint" *ngIf="editando">
+        Para alterar as coordenadas de uma unidade já cadastrada, use a tela de revisão de localização.
+      </p>
+    </div>
+  </form>
+
+  <p class="erro" *ngIf="erro()">{{ erro() }}</p>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="dialogRef.close(null)">Cancelar</button>
+  <button mat-raised-button color="primary" [disabled]="form.invalid || busy()" (click)="onSubmit()">
+    <mat-spinner *ngIf="busy()" diameter="18" style="display:inline-block;margin-right:8px"></mat-spinner>
+    <span *ngIf="!busy()">{{ editando ? 'Salvar' : 'Cadastrar' }}</span>
+  </button>
+</mat-dialog-actions>

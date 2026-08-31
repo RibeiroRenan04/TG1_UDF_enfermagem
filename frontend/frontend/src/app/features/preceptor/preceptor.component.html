@@ -1,38 +1,79 @@
-<div class="page-header"><h1>Meus Alunos — Pendências</h1></div>
+<div class="page-header">
+  <h1>Meus Alunos — Acompanhamento</h1>
+  <p>Registros de ponto em aberto dos alunos sob sua supervisão.</p>
+</div>
+
+<!-- O preceptor acompanha e observa; quem decide é o professor. -->
+<div class="fluxo-note">
+  <mat-icon>info</mat-icon>
+  <span>
+    A validação de presenças e irregularidades é do <strong>professor responsável</strong>.
+    Aqui você acompanha as ocorrências e registra sua <strong>ciência e observação</strong>
+    na tela de <a routerLink="/app/irregularidades">Irregularidades</a>, que encaminha o caso
+    ao professor.
+  </span>
+</div>
 
 <div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
 
-<mat-card *ngIf="!loading()">
-  <mat-card-content>
-    <table mat-table [dataSource]="pending()" class="full-width" *ngIf="pending().length; else empty">
-      <ng-container matColumnDef="date">
-        <th mat-header-cell *matHeaderCellDef>Data</th>
-        <td mat-cell *matCellDef="let r">{{ r.recordedAt | date:'dd/MM/yy HH:mm' }}</td>
-      </ng-container>
-      <ng-container matColumnDef="student">
-        <th mat-header-cell *matHeaderCellDef>Aluno</th>
-        <td mat-cell *matCellDef="let r">{{ r.studentId }}</td>
-      </ng-container>
-      <ng-container matColumnDef="type">
-        <th mat-header-cell *matHeaderCellDef>Tipo</th>
-        <td mat-cell *matCellDef="let r">{{ r.type }}</td>
-      </ng-container>
-      <ng-container matColumnDef="distance">
-        <th mat-header-cell *matHeaderCellDef>Distância</th>
-        <td mat-cell *matCellDef="let r">{{ r.distanceMeters | number:'1.0-0' }}m</td>
-      </ng-container>
-      <ng-container matColumnDef="actions">
-        <th mat-header-cell *matHeaderCellDef>Ações</th>
-        <td mat-cell *matCellDef="let r">
-          <button mat-icon-button color="primary" (click)="validate(r.id, true)" title="Aprovar"><mat-icon>check</mat-icon></button>
-          <button mat-icon-button color="warn" (click)="validate(r.id, false)" title="Reprovar"><mat-icon>close</mat-icon></button>
-        </td>
-      </ng-container>
-      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
-    </table>
-    <ng-template #empty>
-      <div class="empty-state"><mat-icon>check_circle_outline</mat-icon><p>Nenhuma pendência!</p></div>
-    </ng-template>
-  </mat-card-content>
-</mat-card>
+<ng-container *ngIf="!loading()">
+
+  <!-- ══ Ocorrências aguardando a ciência do preceptor ═════════════════════ -->
+  <mat-card class="panel-card" *ngIf="aguardandoCiencia().length">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>pending_actions</mat-icon>
+      <mat-card-title>Aguardando sua ciência</mat-card-title>
+      <mat-card-subtitle>
+        {{ aguardandoCiencia().length }} ocorrência(s) precisam da sua ciência para seguir ao professor.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="ciencia-list">
+        <div class="ciencia-row" *ngFor="let i of aguardandoCiencia()">
+          <div class="ciencia-info">
+            <strong>{{ i.studentName }}</strong>
+            <span class="ciencia-meta">{{ i.occurredOn | date:'dd/MM/yyyy' }} — {{ i.description }}</span>
+          </div>
+          <a mat-stroked-button color="primary" routerLink="/app/irregularidades">Abrir</a>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- ══ Registros de ponto em aberto ══════════════════════════════════════ -->
+  <mat-card>
+    <mat-card-content>
+      <table mat-table [dataSource]="pending()" class="full-width" *ngIf="pending().length; else empty">
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef>Data</th>
+          <td mat-cell *matCellDef="let r">{{ r.recordedAt | date:'dd/MM/yy HH:mm' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="student">
+          <th mat-header-cell *matHeaderCellDef>Aluno</th>
+          <td mat-cell *matCellDef="let r">{{ r.studentName || r.studentId }}</td>
+        </ng-container>
+        <ng-container matColumnDef="type">
+          <th mat-header-cell *matHeaderCellDef>Tipo</th>
+          <td mat-cell *matCellDef="let r">{{ r.type === 'check_in' ? 'Entrada' : 'Saída' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="distance">
+          <th mat-header-cell *matHeaderCellDef>Distância</th>
+          <td mat-cell *matCellDef="let r">{{ r.distanceMeters | number:'1.0-0' }}m</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Situação</th>
+          <td mat-cell *matCellDef="let r">
+            <span class="chip-{{ r.status }}"
+                  [matTooltip]="r.irregularityReason || ''">{{ rotuloStatus(r.status) }}</span>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+      </table>
+      <ng-template #empty>
+        <div class="empty-state"><mat-icon>check_circle_outline</mat-icon><p>Nenhuma pendência!</p></div>
+      </ng-template>
+    </mat-card-content>
+  </mat-card>
+
+</ng-container>

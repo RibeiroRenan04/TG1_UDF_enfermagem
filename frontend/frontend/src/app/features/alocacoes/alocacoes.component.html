@@ -1,0 +1,114 @@
+<div class="page-header">
+  <div>
+    <h1>Alocações</h1>
+    <p class="page-subtitle">
+      Em que unidade cada estagiário está — e onde já esteve. Trocar de unidade
+      encerra a alocação anterior e mantém o histórico.
+    </p>
+  </div>
+  <a mat-stroked-button routerLink="/app/unidades"><mat-icon>domain</mat-icon> Unidades</a>
+</div>
+
+<mat-card class="filtros-card">
+  <div class="filtros">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Estagiário</mat-label>
+      <input matInput [(ngModel)]="filtroTexto" placeholder="Nome ou RGM">
+      <mat-icon matPrefix>search</mat-icon>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Unidade</mat-label>
+      <mat-select [(ngModel)]="filtroUnidade" (selectionChange)="carregar()">
+        <mat-option value="">Todas</mat-option>
+        <mat-option *ngFor="let u of unidades()" [value]="u.id">{{ u.nome }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Situação</mat-label>
+      <mat-select [(ngModel)]="filtroAtivo" (selectionChange)="carregar()">
+        <mat-option [value]="true">Ativas</mat-option>
+        <mat-option [value]="false">Encerradas</mat-option>
+        <mat-option [value]="null">Todas</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Início a partir de</mat-label>
+      <input matInput type="date" [(ngModel)]="filtroDe" (change)="carregar()">
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Início até</mat-label>
+      <input matInput type="date" [(ngModel)]="filtroAte" (change)="carregar()">
+    </mat-form-field>
+
+    <button mat-icon-button matTooltip="Limpar filtros" (click)="limparFiltros()">
+      <mat-icon>filter_alt_off</mat-icon>
+    </button>
+  </div>
+</mat-card>
+
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+
+<mat-card *ngIf="!loading()">
+  <mat-card-content>
+    <p class="contagem" *ngIf="filtradas().length">
+      {{ filtradas().length }} alocação(ões) · {{ ativas() }} ativa(s)
+    </p>
+
+    <table mat-table [dataSource]="filtradas()" class="full-width" *ngIf="filtradas().length; else vazio">
+      <ng-container matColumnDef="estagiario">
+        <th mat-header-cell *matHeaderCellDef>Estagiário</th>
+        <td mat-cell *matCellDef="let a">
+          <strong>{{ a.estagiarioNome }}</strong>
+          <div class="sub">{{ a.estagiarioEmail || '—' }}</div>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="rgm">
+        <th mat-header-cell *matHeaderCellDef>RGM</th>
+        <td mat-cell *matCellDef="let a">{{ a.estagiarioRgm || '—' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="unidade">
+        <th mat-header-cell *matHeaderCellDef>Unidade</th>
+        <td mat-cell *matCellDef="let a">
+          <a [routerLink]="['/app/unidades', a.unidadeId]">{{ a.unidadeNome }}</a>
+          <div class="sub">{{ a.unidadeCidade || '—' }}</div>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="inicio">
+        <th mat-header-cell *matHeaderCellDef>Início</th>
+        <td mat-cell *matCellDef="let a">{{ a.dataInicio | date:'dd/MM/yyyy' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="fim">
+        <th mat-header-cell *matHeaderCellDef>Fim</th>
+        <td mat-cell *matCellDef="let a">{{ a.dataFim ? (a.dataFim | date:'dd/MM/yyyy') : '—' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="situacao">
+        <th mat-header-cell *matHeaderCellDef>Situação</th>
+        <td mat-cell *matCellDef="let a">
+          <span class="status-chip" [class.ativo]="a.ativo">{{ a.ativo ? 'Ativa' : 'Encerrada' }}</span>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="acoes">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let a" class="col-acoes">
+          <button mat-icon-button color="warn" *ngIf="podeEditar() && a.ativo"
+                  matTooltip="Encerrar alocação" (click)="encerrar(a)">
+            <mat-icon>logout</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="colunas"></tr>
+      <tr mat-row *matRowDef="let row; columns: colunas;" [class.row-encerrada]="!row.ativo"></tr>
+    </table>
+
+    <ng-template #vazio>
+      <div class="empty-state">
+        <mat-icon>assignment_ind</mat-icon>
+        <p>Nenhuma alocação encontrada com esses filtros.</p>
+      </div>
+    </ng-template>
+  </mat-card-content>
+</mat-card>

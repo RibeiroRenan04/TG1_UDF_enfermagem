@@ -1,4 +1,15 @@
-<div class="page-header"><h1>Meu Histórico</h1></div>
+<div class="page-header">
+  <h1>Meu Histórico</h1>
+  <p>Seus registros de ponto. Algo errado? Registre uma irregularidade para análise.</p>
+</div>
+
+<div class="actions-bar">
+  <button mat-stroked-button color="primary" (click)="registrarIrregularidade()"
+          matTooltip="A ocorrência vai ao preceptor e depois ao professor responsável">
+    <mat-icon>report_problem</mat-icon> Registrar irregularidade
+  </button>
+  <a mat-button routerLink="/app/irregularidades">Acompanhar minhas ocorrências</a>
+</div>
 
 <div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
 
@@ -29,7 +40,18 @@
       <ng-container matColumnDef="status">
         <th mat-header-cell *matHeaderCellDef>Status</th>
         <td mat-cell *matCellDef="let r">
-          <span class="chip-{{ r.status }}">{{ r.status }}</span>
+          <span class="chip-{{ r.status }}"
+                [matTooltip]="r.irregularityReason || ''">{{ rotuloStatus(r.status) }}</span>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let r">
+          <button mat-icon-button *ngIf="r.status !== 'aprovado'"
+                  matTooltip="Registrar irregularidade sobre este ponto"
+                  (click)="registrarIrregularidade()">
+            <mat-icon>report_problem</mat-icon>
+          </button>
         </td>
       </ng-container>
       <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
@@ -39,6 +61,7 @@
       <div class="empty-state">
         <mat-icon>assignment</mat-icon>
         <p>Nenhum registro encontrado.</p>
+        <button mat-stroked-button (click)="registrarIrregularidade()">Registrar irregularidade</button>
       </div>
     </ng-template>
   </mat-card-content>

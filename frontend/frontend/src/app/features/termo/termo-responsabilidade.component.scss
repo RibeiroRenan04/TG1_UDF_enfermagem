@@ -1,0 +1,53 @@
+.termo-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
+}
+
+.termo-card {
+  width: 100%;
+  max-width: 680px;
+  padding: 8px 4px;
+}
+
+.termo-header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 20px 20px 4px;
+
+  mat-icon { font-size: 34px; width: 34px; height: 34px; color: #0056A6; flex-shrink: 0; }
+  h1 { margin: 0; font-size: 1.3rem; color: #111827; }
+  p  { margin: 4px 0 0; font-size: 0.83rem; color: #6B7280; }
+}
+
+.termo-loading { display: flex; justify-content: center; padding: 40px; }
+
+.saudacao { font-size: 0.9rem; color: #374151; margin-bottom: 8px; }
+
+.itens {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  li { font-size: 0.88rem; color: #374151; line-height: 1.6; margin-bottom: 10px; }
+}
+
+.alerta {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 18px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+
+  mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
+}
+
+.aceite { display: block; font-size: 0.9rem; margin-bottom: 8px; }

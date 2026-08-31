@@ -1,0 +1,79 @@
+.header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.full-width { width: 100%; }
+
+// ── Avisos ───────────────────────────────────────────────────────────────────
+.readonly-note,
+.revisao-note {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+
+  mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
+  span { flex: 1; }
+}
+
+.readonly-note { background: #f3f4f6; border: 1px solid #e5e7eb; color: #374151; }
+.revisao-note  { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+
+// ── Filtros ──────────────────────────────────────────────────────────────────
+.filtros-card { margin-bottom: 16px; padding: 8px 12px; }
+
+.filtros {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+
+  mat-form-field { min-width: 150px; flex: 1 1 150px; }
+}
+
+// ── Tabela ───────────────────────────────────────────────────────────────────
+.unidade-link { font-weight: 600; color: #0056A6; text-decoration: none; &:hover { text-decoration: underline; } }
+.unidade-endereco { font-size: 0.74rem; color: #6B7280; margin-top: 2px; }
+
+.col-num { text-align: right; }
+.col-acoes { white-space: nowrap; text-align: right; }
+
+.icone-ok     { color: #16a34a; }
+.icone-alerta { color: #d97706; }
+
+.geo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 9999px;
+
+  mat-icon { font-size: 14px; width: 14px; height: 14px; }
+}
+
+.geo-sucesso  { background: #dcfce7; color: #166534; }
+.geo-pendente { background: #e0e7ff; color: #3730a3; }
+.geo-revisao  { background: #fef3c7; color: #92400e; }
+.geo-erro     { background: #fee2e2; color: #991b1b; }
+
+.chip-inativa {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: #f3f4f6;
+  color: #6B7280;
+}
+
+.mat-mdc-header-cell {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: #6B7280 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

@@ -7,6 +7,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatIconModule } from '@angular/material/icon';
 import { UsersService } from '../../core/services/users.service';
 
 @Component({
@@ -15,12 +16,23 @@ import { UsersService } from '../../core/services/users.service';
   imports: [
     CommonModule, ReactiveFormsModule,
     MatDialogModule, MatButtonModule, MatSelectModule,
-    MatFormFieldModule, MatInputModule, MatProgressSpinnerModule
+    MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatIconModule
   ],
   template: `
-    <h2 mat-dialog-title>Cadastrar preceptor ou supervisor</h2>
+    <h2 mat-dialog-title>Cadastrar preceptor, professor ou coordenadora</h2>
     <mat-dialog-content>
       <p class="hint">O usuário receberá a senha inicial informada e deverá trocá-la no primeiro acesso.</p>
+
+      <!-- Termo de responsabilidade: registrado no primeiro acesso do usuário. -->
+      <div class="termo-box">
+        <mat-icon>gpp_maybe</mat-icon>
+        <div>
+          <strong>Termo de responsabilidade</strong>
+          No primeiro acesso, este usuário deverá aceitar o termo confirmando que a
+          <strong>senha é pessoal e intransferível</strong> e que ele responde pelas ações
+          realizadas com a própria conta. Informe a senha inicial diretamente à pessoa.
+        </div>
+      </div>
       <form [formGroup]="form" class="form">
         <mat-form-field appearance="outline">
           <mat-label>Nome completo</mat-label>
@@ -31,9 +43,13 @@ import { UsersService } from '../../core/services/users.service';
           <mat-form-field appearance="outline">
             <mat-label>Tipo de perfil</mat-label>
             <mat-select formControlName="role">
-              <mat-option value="preceptor">Preceptor</mat-option>
-              <mat-option value="supervisor">Supervisor</mat-option>
+              <mat-option value="preceptor">Preceptor(a)</mat-option>
+              <mat-option value="supervisor">Professor(a) responsável</mat-option>
+              <mat-option value="coordenadora">Coordenadora (somente consulta)</mat-option>
             </mat-select>
+            <mat-hint *ngIf="form.get('role')?.value === 'coordenadora'">
+              Mesma visão do professor, sem permissão de alteração.
+            </mat-hint>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
@@ -75,6 +91,14 @@ import { UsersService } from '../../core/services/users.service';
   `,
   styles: [`
     .hint { font-size: 0.85rem; color: #6B7280; margin-bottom: 8px; }
+    .termo-box {
+      display: flex; gap: 8px; align-items: flex-start;
+      background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+      border-radius: 8px; padding: 10px 12px; margin-bottom: 16px;
+      font-size: 0.78rem; line-height: 1.5;
+      mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
+      strong:first-child { display: block; margin-bottom: 2px; }
+    }
     .form { display: flex; flex-direction: column; gap: 14px; min-width: 380px; }
     .row-two { display: flex; gap: 12px; mat-form-field { flex: 1; } }
     .erro { color: #b91c1c; font-size: 0.85rem; margin: 8px 0 0; }
@@ -108,7 +132,7 @@ export class CadastrarStaffDialogComponent {
       fullName:    v.fullName!,
       email:       v.email!,
       password:    v.password!,
-      role:        v.role as 'preceptor' | 'supervisor',
+      role:        v.role as 'preceptor' | 'supervisor' | 'coordenadora',
       institution: v.institution || undefined,
       phone:       v.phone || undefined
     }).subscribe({

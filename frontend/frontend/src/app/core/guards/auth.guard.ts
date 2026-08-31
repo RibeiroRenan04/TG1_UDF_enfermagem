@@ -8,6 +8,9 @@ export const authGuard: CanActivateFn = () => {
   if (!auth.isAuth()) return router.createUrlTree(['/auth']);
   const u = auth.user();
   if (u?.mustChangePassword || u?.mustSetEmail) return router.createUrlTree(['/primeiro-acesso']);
+  // Preceptor, professor e coordenadora só entram após aceitar o termo de
+  // responsabilidade de acesso (senha pessoal e intransferível).
+  if (u?.mustAcceptTerms) return router.createUrlTree(['/termo-responsabilidade']);
   return true;
 };
 
@@ -24,5 +27,16 @@ export const firstAccessGuard: CanActivateFn = () => {
   if (!auth.isAuth()) return router.createUrlTree(['/auth']);
   const u = auth.user();
   if (u?.mustChangePassword || u?.mustSetEmail) return true;
+  return router.createUrlTree(['/app']);
+};
+
+/** Libera a tela do termo apenas para quem ainda precisa aceitá-lo. */
+export const termsGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  if (!auth.isAuth()) return router.createUrlTree(['/auth']);
+  const u = auth.user();
+  if (u?.mustChangePassword || u?.mustSetEmail) return router.createUrlTree(['/primeiro-acesso']);
+  if (u?.mustAcceptTerms) return true;
   return router.createUrlTree(['/app']);
 };

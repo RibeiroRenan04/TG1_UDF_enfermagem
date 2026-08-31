@@ -75,6 +75,11 @@ import { BulkImportStudent, BulkImportResult, ImportedStudentLogin } from '../..
         <code>RGM</code> e <code>Nome</code> (opcionalmente <code>Semestre</code> e <code>Turno</code>).
       </p>
 
+      <p class="hint-small rgm-note">
+        O <strong>&quot;14&quot; do início do RGM</strong> não é mais usado e é removido
+        automaticamente na importação — a planilha pode vir em qualquer um dos dois formatos.
+      </p>
+
       <div class="credenciais-box">
         <mat-icon>vpn_key</mat-icon>
         <div>
@@ -157,6 +162,7 @@ import { BulkImportStudent, BulkImportResult, ImportedStudentLogin } from '../..
       code { background: #dbeafe; }
     }
     .hint-small { font-size: 0.75rem; color: #9ca3af; margin: -8px 0 12px; }
+    .rgm-note { margin: 0 0 14px; color: #6B7280; }
     .resumo { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
     .badge {
       font-size: 0.75rem; padding: 3px 10px; border-radius: 9999px;
@@ -250,8 +256,17 @@ export class ImportarAlunosDialogComponent {
     }).filter(s => !!s.rgm);
   }
 
+  /**
+   * Padroniza o RGM: mantém apenas dígitos e remove o "14" do início, que deixou de
+   * fazer parte do formato usado na faculdade. Planilhas antigas continuam válidas.
+   */
+  private normalizarRgm(valor: string): string {
+    const digitos = (valor ?? '').replace(/\D/g, '');
+    return digitos.startsWith('14') && digitos.length > 2 ? digitos.slice(2) : digitos;
+  }
+
   private rowToStudent(row: Record<string, string>): BulkImportStudent {
-    const rgm      = row['rgm'] || row['matricula'] || row['login'] || '';
+    const rgm      = this.normalizarRgm(row['rgm'] || row['matricula'] || row['login'] || '');
     const fullName = row['nome'] || row['name'] || row['fullname'] || '';
     const semRaw   = row['semestre'] || row['semester'] || '';
     const shiftRaw = (row['turno'] || row['shift'] || '').toLowerCase();

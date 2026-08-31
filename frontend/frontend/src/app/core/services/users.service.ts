@@ -26,12 +26,25 @@ export class UsersService {
     return this.http.patch<void>(`${this.api}/${userId}/assign-group`, { groupId });
   }
 
-  /** Cadastra preceptor/supervisor manualmente */
+  /**
+   * Autoriza (ou revoga) a chegada do aluno após o horário previsto de início.
+   * A carga horária do dia continua sendo exigida.
+   */
+  setLatePermission(userId: string, allowLateArrival: boolean, note?: string): Observable<UserDto> {
+    return this.http.patch<UserDto>(`${this.api}/${userId}/late-permission`, { allowLateArrival, note });
+  }
+
+  /** Altera o turno do aluno — usado nas trocas autorizadas entre alunos. */
+  updateShift(userId: string, shift: 'manha' | 'tarde' | 'noite'): Observable<UserDto> {
+    return this.http.patch<UserDto>(`${this.api}/${userId}/shift`, { shift });
+  }
+
+  /** Cadastra preceptor, professor (supervisor) ou coordenadora manualmente */
   createStaff(dto: {
     fullName: string;
     email: string;
     password: string;
-    role: 'preceptor' | 'supervisor';
+    role: 'preceptor' | 'supervisor' | 'coordenadora';
     institution?: string;
     phone?: string;
   }): Observable<UserDto> {

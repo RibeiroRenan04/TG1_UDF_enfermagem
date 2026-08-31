@@ -142,3 +142,21 @@ h4 {
 mat-card-actions { padding: 8px 16px; }
 
 mat-divider { margin: 16px 0 4px; }
+
+// ── Escolha do aluno pela lista do rodízio ───────────────────────────────────
+// O campo de nome é um atalho para a lista de alunos alocados: o preceptor
+// raramente sabe o RGM de cabeça.
+.name-field.selecionavel input {
+  cursor: pointer;
+}
+
+.lista-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #6B7280;
+  margin: -6px 0 12px;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: #0056A6; }
+}

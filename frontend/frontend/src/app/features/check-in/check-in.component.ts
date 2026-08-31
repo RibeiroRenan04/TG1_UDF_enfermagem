@@ -1,5 +1,6 @@
 import { Component, OnInit, OnDestroy, signal, computed, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -9,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { AttendanceService } from '../../core/services/attendance.service';
 import { ActiveSchedule } from '../../core/models/models';
 
@@ -16,9 +18,10 @@ import { ActiveSchedule } from '../../core/models/models';
   selector: 'app-check-in',
   standalone: true,
   imports: [
-    CommonModule, ReactiveFormsModule,
+    CommonModule, ReactiveFormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatFormFieldModule, MatInputModule,
-    MatIconModule, MatProgressSpinnerModule, MatSnackBarModule, MatDividerModule
+    MatIconModule, MatProgressSpinnerModule, MatSnackBarModule, MatDividerModule,
+    MatTooltipModule
   ],
   templateUrl: './check-in.component.html',
   styleUrls: ['./check-in.component.scss']
@@ -55,6 +58,23 @@ export class CheckInComponent implements OnInit, OnDestroy {
     return efetiva <= sched.location.radiusMeters;
   });
 
+  /**
+   * O ponto só é liberado dentro do raio da unidade alocada. Enquanto isso não
+   * for confirmado, a foto e a confirmação ficam bloqueadas — o backend recusa
+   * o registro de qualquer forma, então liberar a câmera antes só faria o aluno
+   * perder tempo com um ponto que não seria aceito.
+   */
+  podeRegistrar = computed(() => this.inRadius() === true);
+
+  /** Quanto falta andar para entrar no raio da unidade. */
+  metrosFaltando = computed<number | null>(() => {
+    const d = this.distance();
+    const sched = this.activeSchedule();
+    if (d === null || !sched) return null;
+    const efetiva = Math.max(0, d - (this.accuracy() ?? 0));
+    return Math.max(0, Math.round(efetiva - sched.location.radiusMeters));
+  });
+
   descForm = this.fb.group({
     activitiesDescription: ['', Validators.required]
   });
@@ -87,6 +107,12 @@ export class CheckInComponent implements OnInit, OnDestroy {
         this.lon.set(pos.coords.longitude);
         this.accuracy.set(pos.coords.accuracy ?? null);
         this.gettingLocation.set(false);
+
+        // Se a nova posição ficou fora do raio, a foto anterior não vale mais.
+        if (!this.podeRegistrar()) {
+          this.stopCamera();
+          this.photoBase64.set(null);
+        }
       },
       () => { this.snackBar.open('Não foi possível obter localização', '', { duration: 3000 }); this.gettingLocation.set(false); },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -95,6 +121,15 @@ export class CheckInComponent implements OnInit, OnDestroy {
 
   // ── Câmera ao vivo ─────────────────────────────────────────────────────────
   async startCamera(): Promise<void> {
+    if (!this.podeRegistrar()) {
+      this.snackBar.open(
+        this.lat() === null
+          ? 'Capture sua localização antes de tirar a foto.'
+          : 'Você está fora do raio da unidade. Aproxime-se para registrar o ponto.',
+        '', { duration: 4000, panelClass: 'snack-error' });
+      return;
+    }
+
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -150,9 +185,16 @@ export class CheckInComponent implements OnInit, OnDestroy {
   }
 
   register(type: 'check_in' | 'check_out'): void {
-    if (!this.lat() || !this.lon()) { this.snackBar.open('Capture sua localização primeiro', '', { duration: 3000 }); return; }
+    if (this.lat() === null || this.lon() === null) { this.snackBar.open('Capture sua localização primeiro', '', { duration: 3000 }); return; }
+    if (!this.activeSchedule()) { this.snackBar.open('Nenhuma escala ativa no momento', '', { duration: 3000 }); return; }
+    if (!this.podeRegistrar()) {
+      this.snackBar.open(
+        `Você está fora do raio de ${this.activeSchedule()!.location.name}. ` +
+        'Aproxime-se da unidade ou registre uma irregularidade.',
+        '', { duration: 6000, panelClass: 'snack-error' });
+      return;
+    }
     if (!this.photoBase64()) { this.snackBar.open('Tire a foto do registro primeiro', '', { duration: 3000 }); return; }
-    if (!this.activeSchedule()) { this.snackBar.open('Nenhum escala ativa no momento', '', { duration: 3000 }); return; }
     this.busy.set(true);
     this.attendanceService.create({
       scheduleId: this.activeSchedule()!.scheduleId,

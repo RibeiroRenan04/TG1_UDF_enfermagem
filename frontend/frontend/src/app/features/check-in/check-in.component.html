@@ -50,15 +50,42 @@
           {{ inRadius() ? 'Dentro do raio' : 'Fora do raio' }}
         </span>
       </div>
+
+      <!-- Fora do raio o ponto não é aceito: nem a foto é liberada. -->
+      <div class="fora-do-raio" *ngIf="inRadius() === false">
+        <mat-icon>wrong_location</mat-icon>
+        <div>
+          <strong>Você está fora do raio de {{ activeSchedule()!.location.name }}.</strong>
+          Aproxime-se
+          <ng-container *ngIf="metrosFaltando()">
+            cerca de <strong>{{ metrosFaltando() }} m</strong>
+          </ng-container>
+          e capture a localização de novo. O ponto só pode ser registrado dentro da unidade.
+          <a routerLink="/app/irregularidades">Registrar uma irregularidade</a> se houver um motivo.
+        </div>
+      </div>
+
+      <div class="aguardando-gps" *ngIf="lat() === null">
+        <mat-icon>info</mat-icon>
+        <span>Capture a localização para liberar a foto e o registro do ponto.</span>
+      </div>
     </div>
 
     <!-- Foto (câmera ao vivo) -->
-    <div class="photo-section">
-      <span class="step-label">2. Foto no momento</span>
+    <div class="photo-section" [class.bloqueada]="!podeRegistrar()">
+      <span class="step-label">
+        2. Foto no momento
+        <mat-icon class="lock-icon" *ngIf="!podeRegistrar()"
+                  matTooltip="Disponível apenas dentro do raio da unidade">lock</mat-icon>
+      </span>
 
-      <button *ngIf="!cameraOn() && !photoBase64()" mat-stroked-button (click)="startCamera()">
+      <button *ngIf="!cameraOn() && !photoBase64()" mat-stroked-button
+              [disabled]="!podeRegistrar()" (click)="startCamera()">
         <mat-icon>photo_camera</mat-icon> Abrir câmera
       </button>
+      <span class="bloqueio-hint" *ngIf="!podeRegistrar()">
+        Disponível quando você estiver dentro do raio da unidade.
+      </span>
 
       <div *ngIf="cameraOn()" class="camera-box">
         <video #video autoplay playsinline muted class="camera-video"></video>
@@ -83,7 +110,9 @@
 
   </mat-card-content>
   <mat-card-actions>
-    <button mat-raised-button color="primary" [disabled]="!lat() || !photoBase64() || busy()"
+    <button mat-raised-button color="primary"
+            [disabled]="!podeRegistrar() || !photoBase64() || busy()"
+            [matTooltip]="!podeRegistrar() ? 'Você precisa estar dentro do raio da unidade' : ''"
             (click)="register(openCheckIn() ? 'check_out' : 'check_in')">
       <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
       <span *ngIf="!busy()">{{ openCheckIn() ? 'Confirmar check-out' : 'Confirmar check-in' }}</span>

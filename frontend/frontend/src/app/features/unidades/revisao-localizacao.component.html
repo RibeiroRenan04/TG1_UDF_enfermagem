@@ -1,0 +1,83 @@
+<div class="page-header">
+  <div>
+    <h1>Revisão de localização</h1>
+    <p class="page-subtitle">
+      Unidades sem localização confirmada. Enquanto a coordenada não estiver correta,
+      o check-in do aluno não pode ser validado nessa unidade.
+    </p>
+  </div>
+  <a mat-stroked-button routerLink="/app/unidades"><mat-icon>arrow_back</mat-icon> Unidades</a>
+</div>
+
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+
+<ng-container *ngIf="!loading()">
+  <mat-card *ngIf="!unidades().length">
+    <div class="empty-state">
+      <mat-icon>where_to_vote</mat-icon>
+      <p>Todas as unidades estão com a localização confirmada.</p>
+      <a mat-stroked-button routerLink="/app/unidades">Ver unidades</a>
+    </div>
+  </mat-card>
+
+  <mat-card class="unidade-card" *ngFor="let u of unidades()">
+    <div class="topo">
+      <div class="identificacao">
+        <a class="nome" [routerLink]="['/app/unidades', u.id]">{{ u.nome }}</a>
+        <span class="geo-chip {{ classeStatus(u.statusGeocodificacao) }}">
+          <mat-icon>{{ iconeStatus(u.statusGeocodificacao) }}</mat-icon>
+          {{ rotuloStatus(u.statusGeocodificacao) }}
+        </span>
+      </div>
+      <span class="tipo">{{ u.tipo || 'Unidade' }}</span>
+    </div>
+
+    <div class="enderecos">
+      <div class="bloco">
+        <span class="rotulo">Endereço cadastrado</span>
+        <p>{{ u.enderecoCompleto || '— sem endereço —' }}</p>
+      </div>
+      <div class="bloco" *ngIf="u.enderecoGeocodificado">
+        <span class="rotulo">Endereço encontrado</span>
+        <p>{{ u.enderecoGeocodificado }}</p>
+        <span class="precisao" *ngIf="u.precisaoLocalizacao">Precisão: {{ u.precisaoLocalizacao }}</span>
+      </div>
+    </div>
+
+    <div class="coordenadas">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Latitude</mat-label>
+        <input matInput type="number" [(ngModel)]="edicao[u.id].lat" placeholder="-15.7401">
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Longitude</mat-label>
+        <input matInput type="number" [(ngModel)]="edicao[u.id].lon" placeholder="-47.8829">
+      </mat-form-field>
+      <a mat-icon-button *ngIf="u.temCoordenadas" [href]="urlMapa(u.latitude, u.longitude)"
+         target="_blank" rel="noopener" matTooltip="Ver a sugestão no mapa">
+        <mat-icon>map</mat-icon>
+      </a>
+    </div>
+
+    <div class="acoes">
+      <button mat-flat-button color="primary" *ngIf="u.temCoordenadas"
+              [disabled]="ocupadaId() === u.id" (click)="aprovar(u)">
+        <mat-icon>check</mat-icon> Aprovar localização
+      </button>
+      <button mat-stroked-button [disabled]="ocupadaId() === u.id" (click)="salvarEdicao(u)">
+        <mat-icon>edit_location_alt</mat-icon> Salvar coordenadas
+      </button>
+      <button mat-stroked-button [disabled]="ocupadaId() === u.id" (click)="geocodificar(u)">
+        <mat-spinner *ngIf="ocupadaId() === u.id" diameter="16"
+                     style="display:inline-block;margin-right:6px"></mat-spinner>
+        <mat-icon *ngIf="ocupadaId() !== u.id">refresh</mat-icon>
+        Geocodificar novamente
+      </button>
+    </div>
+
+    <p class="nota-manual">
+      Ao salvar ou aprovar, as coordenadas passam a constar como
+      <strong>definidas manualmente</strong> e não são mais substituídas por importações.
+    </p>
+  </mat-card>
+</ng-container>

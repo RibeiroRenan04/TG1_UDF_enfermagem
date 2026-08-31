@@ -25,7 +25,7 @@
       <div class="user-details">
         <div class="user-name">{{ user()?.fullName }}</div>
         <div class="user-email">{{ user()?.email }}</div>
-        <div class="user-role">{{ role() | titlecase }}</div>
+        <div class="user-role">{{ rotuloPerfil() }}</div>
       </div>
       <button mat-icon-button (click)="logout()" class="logout-btn" matTooltip="Sair">
         <mat-icon>logout</mat-icon>
@@ -40,6 +40,10 @@
         <mat-icon>menu</mat-icon>
       </button>
       <span class="toolbar-title">EstágioCheck</span>
+      <span class="toolbar-spacer"></span>
+      <span class="readonly-badge" *ngIf="somenteLeitura()" matTooltip="Perfil de consulta: alterações estão desabilitadas">
+        <mat-icon>visibility</mat-icon> Somente leitura
+      </span>
     </mat-toolbar>
 
     <div class="content">
