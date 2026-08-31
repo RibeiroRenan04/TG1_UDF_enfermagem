@@ -1,4 +1,5 @@
 using EstagioCheck.API.DTOs;
+using EstagioCheck.API.Models;
 using EstagioCheck.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,9 +23,9 @@ public class CertificatesController(CertificateService certificates) : Controlle
         return cert == null ? NotFound() : Ok(cert);
     }
 
-    /// <summary>Lista os certificados de todos os alunos (visão do supervisor).</summary>
+    /// <summary>Lista os certificados de todos os alunos (visão da gestão).</summary>
     [HttpGet]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<List<CertificateDto>>> GetAll()
     {
         return Ok(await certificates.ListarAsync());
@@ -32,7 +33,7 @@ public class CertificatesController(CertificateService certificates) : Controlle
 
     /// <summary>Certificado de carga horária de um aluno específico.</summary>
     [HttpGet("{studentId}")]
-    [Authorize(Roles = "supervisor,preceptor")]
+    [Authorize(Roles = Roles.AcompanhamentoEGestao)]
     public async Task<ActionResult<CertificateDto>> GetByStudent(Guid studentId)
     {
         var cert = await certificates.ObterAsync(studentId);

@@ -1,5 +1,7 @@
 using EstagioCheck.API.Data;
 using EstagioCheck.API.Services;
+using EstagioCheck.API.Services.Geocoding;
+using EstagioCheck.API.Services.Import;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -52,6 +54,35 @@ builder.Services.AddScoped<EmailService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<CertificateService>();
 builder.Services.AddScoped<BuscaSaudeService>();
+
+// ── Geocodificação de unidades de saúde ───────────────────────────────────────
+// Toda a aplicação depende de IGeocodingService: trocar o Nominatim por outro
+// provedor é substituir esta única linha de registro.
+builder.Services.Configure<GeocodingOptions>(
+    builder.Configuration.GetSection(GeocodingOptions.SectionName));
+builder.Services.AddSingleton<IAddressNormalizer, AddressNormalizer>();
+builder.Services.AddScoped<IGeocodingService, NominatimGeocodingService>();
+builder.Services.AddScoped<UnitGeocoder>();
+builder.Services.AddScoped<PlanilhaUnidadesReader>();
+builder.Services.AddScoped<UnidadeImportService>();
+
+// Fila e processamento em segundo plano: a geocodificação em massa respeita o
+// limite de ~1 req/s do Nominatim e por isso nunca roda dentro da requisição HTTP.
+builder.Services.AddSingleton<GeocodingQueue>();
+builder.Services.AddHostedService<GeocodingBackgroundService>();
+// O User-Agent identifica a aplicação, como exige a política de uso do Nominatim.
+var geocodingOptions = builder.Configuration
+    .GetSection(GeocodingOptions.SectionName).Get<GeocodingOptions>() ?? new GeocodingOptions();
+
+builder.Services.AddHttpClient(NominatimGeocodingService.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(geocodingOptions.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(geocodingOptions.TimeoutSeconds);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(geocodingOptions.UserAgent);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    client.DefaultRequestHeaders.Add("Accept-Language", geocodingOptions.AcceptLanguage);
+});
+
 builder.Services.AddHttpClient("BuscaSaude", client =>
 {
     // Paginamos várias páginas do CNES em sequência, então damos uma folga maior.

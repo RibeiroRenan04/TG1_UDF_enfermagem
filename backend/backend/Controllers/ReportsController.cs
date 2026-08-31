@@ -1,4 +1,6 @@
 using EstagioCheck.API.Data;
+using EstagioCheck.API.Services;
+using EstagioCheck.API.Models;
 using EstagioCheck.API.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,13 +10,13 @@ namespace EstagioCheck.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "supervisor")]
+[Authorize(Roles = Roles.Gestao)]
 public class ReportsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<ReportRowDto>>> Get()
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = BrasiliaTime.Hoje;
 
         var members = await db.GroupMemberships
             .Include(m => m.Student)

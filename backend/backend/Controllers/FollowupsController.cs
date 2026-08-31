@@ -1,6 +1,7 @@
 using EstagioCheck.API.Data;
 using EstagioCheck.API.DTOs;
 using EstagioCheck.API.Models;
+using EstagioCheck.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,7 @@ namespace EstagioCheck.API.Controllers;
 /// Acompanhamento formativo. Fluxo de responsabilidades:
 ///   • Preceptor  → cria, preenche e finaliza o acompanhamento do aluno;
 ///   • Aluno      → dá ciência do acompanhamento finalizado pelo preceptor;
-///   • Supervisor → consulta somente relatórios já finalizados (acesso de leitura).
+///   • Professor e coordenadora → consultam somente relatórios já finalizados.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -38,14 +39,14 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         query = role switch
         {
             // Aluno vê apenas os próprios documentos já finalizados pelo preceptor.
-            "aluno" => query.Where(f => f.StudentId == userId
+            Roles.Aluno => query.Where(f => f.StudentId == userId
                 && (f.Status == StatusFinalizadoPreceptor || f.Status == StatusCienciaAluno)),
 
             // Preceptor vê apenas os acompanhamentos que ele mesmo realiza.
-            "preceptor" => query.Where(f => f.PreceptorId == userId),
+            Roles.Preceptor => query.Where(f => f.PreceptorId == userId),
 
-            // Supervisor recebe somente o relatório finalizado, para consulta.
-            "supervisor" => query.Where(f => f.Status != StatusRascunho),
+            // Professor e coordenadora recebem somente o relatório finalizado, para consulta.
+            Roles.Supervisor or Roles.Coordenadora => query.Where(f => f.Status != StatusRascunho),
 
             _ => query.Where(_ => false)
         };
@@ -76,7 +77,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
     /// digitação manual e divergência com o que já está cadastrado no sistema.
     /// </summary>
     [HttpGet("student-by-rgm/{rgm}")]
-    [Authorize(Roles = "preceptor")]
+    [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<StudentLookupDto>> GetStudentByRgm(string rgm)
     {
         var termo = rgm.Trim();
@@ -88,7 +89,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         if (student == null)
             return NotFound(new { message = "Aluno não encontrado para esse RGM." });
 
-        var hoje = DateOnly.FromDateTime(DateTime.UtcNow);
+        var hoje = BrasiliaTime.Hoje;
         var groupId = student.GroupMembership?.GroupId;
 
         // Escala do grupo do aluno: prioriza a vigente hoje; senão, a mais recente.
@@ -127,9 +128,83 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         });
     }
 
+    /// <summary>
+    /// Rodízios do preceptor com os alunos alocados em cada um. O preceptor
+    /// escolhe o aluno pela lista da turma em vez de digitar o RGM de memória;
+    /// cada aluno já vem com o contexto do rodízio (período, turno, local e datas)
+    /// para preencher o acompanhamento de uma vez.
+    /// </summary>
+    [HttpGet("my-schedules")]
+    [Authorize(Roles = Roles.Preceptor)]
+    public async Task<ActionResult<List<ScheduleStudentsDto>>> GetMySchedules()
+    {
+        var userId = CurrentUserId();
+        var hoje = BrasiliaTime.Hoje;
+
+        var escalas = await db.RotationSchedules
+            .Include(s => s.Group)
+            .Include(s => s.Location)
+            .Where(s => s.PreceptorId == userId)
+            .OrderByDescending(s => s.StartDate)
+            .ToListAsync();
+
+        if (escalas.Count == 0) return Ok(new List<ScheduleStudentsDto>());
+
+        // Uma consulta só para os alunos de todas as turmas envolvidas.
+        var grupoIds = escalas.Select(e => e.GroupId).Distinct().ToList();
+        var membros = await db.GroupMemberships
+            .Include(m => m.Student)
+            .Where(m => grupoIds.Contains(m.GroupId) && m.Student.IsActive)
+            .OrderBy(m => m.Student.FullName)
+            .ToListAsync();
+
+        var resultado = escalas.Select(escala => new ScheduleStudentsDto
+        {
+            ScheduleId = escala.Id,
+            PeriodLabel = escala.PeriodLabel,
+            Shift = escala.Shift,
+            ActivityType = escala.ActivityType,
+            GroupId = escala.GroupId,
+            GroupCode = escala.Group?.Code,
+            GroupName = escala.Group?.Name,
+            LocationId = escala.LocationId,
+            LocationName = escala.Location?.Name,
+            StartDate = escala.StartDate,
+            EndDate = escala.EndDate,
+            Current = escala.StartDate <= hoje && escala.EndDate >= hoje,
+            Students = membros
+                .Where(m => m.GroupId == escala.GroupId)
+                .Select(m => new StudentLookupDto
+                {
+                    StudentId = m.StudentId,
+                    FullName = m.Student.FullName,
+                    Rgm = m.Student.Rgm,
+                    Semester = m.Student.Semester,
+                    Shift = escala.Shift,
+                    PeriodLabel = escala.PeriodLabel,
+                    GroupId = escala.GroupId,
+                    GroupCode = escala.Group?.Code,
+                    GroupName = escala.Group?.Name,
+                    ScheduleId = escala.Id,
+                    LocationId = escala.LocationId,
+                    LocationName = escala.Location?.Name,
+                    ActivityType = escala.ActivityType,
+                    FollowUpStart = escala.StartDate,
+                    FollowUpEnd = escala.EndDate
+                })
+                .ToList()
+        })
+        // Rodízio vigente primeiro: é o que o preceptor procura no dia a dia.
+        .OrderByDescending(e => e.Current)
+        .ThenByDescending(e => e.StartDate)
+        .ToList();
+
+        return Ok(resultado);
+    }
+
     /// <summary>O acompanhamento do aluno é realizado pelo preceptor.</summary>
     [HttpPost]
-    [Authorize(Roles = "preceptor")]
+    [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<FollowupDto>> Create([FromBody] CreateFollowupDto dto)
     {
         var userId = CurrentUserId();
@@ -169,7 +244,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
 
     /// <summary>Somente o preceptor responsável edita o conteúdo do acompanhamento.</summary>
     [HttpPut("{id}")]
-    [Authorize(Roles = "preceptor")]
+    [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<FollowupDto>> Update(Guid id, [FromBody] UpdateFollowupDto dto)
     {
         var userId = CurrentUserId();
@@ -195,7 +270,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
 
     /// <summary>Preceptor finaliza o acompanhamento e o libera para ciência do aluno.</summary>
     [HttpPost("{id}/finalize-preceptor")]
-    [Authorize(Roles = "preceptor")]
+    [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<FollowupDto>> FinalizePreceptor(Guid id, [FromBody] FinalizeFollowupDto dto)
     {
         var userId = CurrentUserId();
@@ -222,7 +297,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
 
     /// <summary>Aluno dá ciência do acompanhamento realizado pelo preceptor.</summary>
     [HttpPost("{id}/finalize-student")]
-    [Authorize(Roles = "aluno")]
+    [Authorize(Roles = Roles.Aluno)]
     public async Task<ActionResult<FollowupDto>> FinalizeStudent(Guid id, [FromBody] FinalizeFollowupDto dto)
     {
         var userId = CurrentUserId();
@@ -258,9 +333,9 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
 
     private static bool PodeVisualizar(FormativeFollowup f, string role, Guid userId) => role switch
     {
-        "aluno" => f.StudentId == userId && f.Status != StatusRascunho,
-        "preceptor" => f.PreceptorId == userId,
-        "supervisor" => f.Status != StatusRascunho,
+        Roles.Aluno => f.StudentId == userId && f.Status != StatusRascunho,
+        Roles.Preceptor => f.PreceptorId == userId,
+        Roles.Supervisor or Roles.Coordenadora => f.Status != StatusRascunho,
         _ => false
     };
 

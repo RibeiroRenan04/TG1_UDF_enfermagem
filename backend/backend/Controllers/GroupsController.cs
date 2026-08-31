@@ -31,7 +31,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<GroupDto>> Create([FromBody] CreateGroupDto dto)
     {
         var code = dto.Code.Trim().ToUpper();
@@ -51,7 +51,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> Delete(Guid id)
     {
         var group = await db.StudentGroups.FindAsync(id);
@@ -118,7 +118,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPost("schedules")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<ScheduleDto>> CreateSchedule([FromBody] CreateScheduleDto dto)
     {
         var erro = await ValidarAlocacaoAsync(dto);
@@ -145,7 +145,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
     }
 
     [HttpPut("schedules/{id}")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<ScheduleDto>> UpdateSchedule(Guid id, [FromBody] CreateScheduleDto dto)
     {
         var schedule = await db.RotationSchedules.FirstOrDefaultAsync(s => s.Id == id);
@@ -171,7 +171,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
     }
 
     [HttpDelete("schedules/{id}")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> DeleteSchedule(Guid id)
     {
         var schedule = await db.RotationSchedules.FindAsync(id);

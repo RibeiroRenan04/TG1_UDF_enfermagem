@@ -7,9 +7,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EstagioCheck.API.Controllers;
 
+/// <summary>
+/// Gestão de usuários. A leitura é liberada para o professor e para a coordenadora
+/// (perfil de consulta e acompanhamento); toda escrita é exclusiva do professor.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "supervisor")]
+[Authorize(Roles = Roles.Gestao)]
 public class UsersController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
@@ -52,7 +56,7 @@ public class UsersController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<List<UserDto>>> GetPreceptors()
     {
         var users = await db.Users
-            .Where(u => u.Role == "preceptor" || u.Role == "supervisor")
+            .Where(u => u.Role != Roles.Aluno)
             .OrderBy(u => u.Role).ThenBy(u => u.FullName)
             .ToListAsync();
 
@@ -61,6 +65,7 @@ public class UsersController(AppDbContext db) : ControllerBase
 
     // ── Toggle ativo/inativo ──────────────────────────────────────────────────
     [HttpPatch("{id}/active")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> ToggleActive(Guid id)
     {
         var user = await db.Users.FindAsync(id);
@@ -74,6 +79,7 @@ public class UsersController(AppDbContext db) : ControllerBase
     }
 
     [HttpPatch("{id}/assign-group")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> AssignGroup(Guid id, [FromBody] AssignGroupDto dto)
     {
         var user = await db.Users
@@ -103,17 +109,75 @@ public class UsersController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    // ── Criar preceptor / supervisor ──────────────────────────────────────────
+    // ── Permissão de atraso ───────────────────────────────────────────────────
     /// <summary>
-    /// Cadastra preceptor ou supervisor. O e-mail institucional (@cs.udf.edu.br)
-    /// não é obrigatório: muitos preceptores são profissionais externos à UDF e
-    /// utilizam e-mail próprio, que também serve como login.
+    /// Autoriza (ou revoga) a chegada do aluno após o horário previsto de início do
+    /// estágio. A carga horária do dia continua sendo exigida — a permissão apenas
+    /// impede que o registro tardio seja tratado como irregularidade de horário.
+    /// </summary>
+    [HttpPatch("{id}/late-permission")]
+    [Authorize(Roles = Roles.Supervisor)]
+    public async Task<ActionResult<UserDto>> SetLatePermission(Guid id, [FromBody] LatePermissionDto dto)
+    {
+        var user = await db.Users
+            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .FirstOrDefaultAsync(u => u.Id == id);
+
+        if (user == null) return NotFound();
+        if (user.Role != Roles.Aluno)
+            return BadRequest(new { message = "A permissão de atraso se aplica apenas a alunos." });
+
+        user.AllowLateArrival = dto.AllowLateArrival;
+        user.LateArrivalNote = dto.AllowLateArrival && !string.IsNullOrWhiteSpace(dto.Note)
+            ? dto.Note.Trim()
+            : null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok(MapToDto(user));
+    }
+
+    // ── Troca de turno do aluno ───────────────────────────────────────────────
+    /// <summary>
+    /// Altera o turno do aluno — usado quando há troca autorizada entre alunos
+    /// (por exemplo, da manhã para a tarde). Somente o turno é editável aqui.
+    /// </summary>
+    [HttpPatch("{id}/shift")]
+    [Authorize(Roles = Roles.Supervisor)]
+    public async Task<ActionResult<UserDto>> UpdateShift(Guid id, [FromBody] UpdateShiftDto dto)
+    {
+        var shift = dto.Shift?.Trim().ToLowerInvariant();
+        if (shift is not ("manha" or "tarde" or "noite"))
+            return BadRequest(new { message = "Turno deve ser 'manha', 'tarde' ou 'noite'." });
+
+        var user = await db.Users
+            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .FirstOrDefaultAsync(u => u.Id == id);
+
+        if (user == null) return NotFound();
+        if (user.Role != Roles.Aluno)
+            return BadRequest(new { message = "Apenas alunos possuem turno de estágio." });
+
+        user.Shift = shift;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok(MapToDto(user));
+    }
+
+    // ── Criar preceptor / professor / coordenadora ────────────────────────────
+    /// <summary>
+    /// Cadastra preceptor, professor (supervisor) ou coordenadora. O e-mail
+    /// institucional (@cs.udf.edu.br) não é obrigatório: muitos preceptores são
+    /// profissionais externos à UDF e utilizam e-mail próprio, que também serve
+    /// como login.
     /// </summary>
     [HttpPost("staff")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UserDto>> CreateStaff([FromBody] CreateStaffDto dto)
     {
-        if (dto.Role != "preceptor" && dto.Role != "supervisor")
-            return BadRequest(new { message = "Papel deve ser 'preceptor' ou 'supervisor'." });
+        if (dto.Role is not (Roles.Preceptor or Roles.Supervisor or Roles.Coordenadora))
+            return BadRequest(new { message = "Papel deve ser 'preceptor', 'supervisor' ou 'coordenadora'." });
 
         var email = dto.Email.Trim().ToLower();
 
@@ -146,6 +210,7 @@ public class UsersController(AppDbContext db) : ControllerBase
     /// supervisor não tem como informar ao aluno com que e-mail entrar.
     /// </summary>
     [HttpPost("bulk-import")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<BulkImportResponseDto>> BulkImport([FromBody] BulkImportRequestDto dto)
     {
         int imported = 0, updated = 0;
@@ -157,12 +222,27 @@ public class UsersController(AppDbContext db) : ControllerBase
         {
             try
             {
-                var rgm = s.Rgm.Trim();
-                var existing = await db.Users.FirstOrDefaultAsync(u => u.Rgm == rgm);
+                var rgm = NormalizarRgm(s.Rgm);
+                if (string.IsNullOrEmpty(rgm))
+                {
+                    errors.Add($"RGM \"{s.Rgm}\": valor inválido.");
+                    continue;
+                }
+
+                // Reconhece também o formato antigo (com o "14" na frente) para não
+                // duplicar alunos já cadastrados antes da mudança de formato.
+                var rgmLegado = $"{PrefixoRgmLegado}{rgm}";
+                var existing = await db.Users
+                    .FirstOrDefaultAsync(u => u.Rgm == rgm || u.Rgm == rgmLegado);
                 if (existing != null)
                 {
+                    existing.Rgm = rgm;
                     existing.Semester = s.Semester;
                     existing.Shift = s.Shift.ToLower();
+                    // Aluno que ainda não fez o primeiro acesso tem a senha inicial
+                    // igual ao RGM: reemite o hash no formato novo.
+                    if (existing.MustChangePassword)
+                        existing.PasswordHash = BCrypt.Net.BCrypt.HashPassword(rgm);
                     // Preenche o e-mail institucional se ainda não houver.
                     if (string.IsNullOrEmpty(existing.Email))
                     {
@@ -186,7 +266,7 @@ public class UsersController(AppDbContext db) : ControllerBase
                         Email = email,
                         // Senha inicial igual ao RGM; MustChangePassword força a troca.
                         PasswordHash = BCrypt.Net.BCrypt.HashPassword(rgm),
-                        Role = "aluno",
+                        Role = Roles.Aluno,
                         Rgm = rgm, // o RGM é a matrícula do aluno
                         Semester = s.Semester,
                         Shift = s.Shift.ToLower(),
@@ -206,6 +286,23 @@ public class UsersController(AppDbContext db) : ControllerBase
 
         await db.SaveChangesAsync();
         return Ok(new BulkImportResponseDto(imported, updated, errors, logins));
+    }
+
+    // ── Normalização do RGM ───────────────────────────────────────────────────
+    /// <summary>Prefixo que os RGMs da UDF traziam e que deixou de ser usado.</summary>
+    private const string PrefixoRgmLegado = "14";
+
+    /// <summary>
+    /// Padroniza o RGM: mantém apenas dígitos e remove o "14" do início, que não faz
+    /// mais parte do formato. RGMs que são só o próprio prefixo são descartados.
+    /// </summary>
+    internal static string NormalizarRgm(string? rgm)
+    {
+        var digitos = new string((rgm ?? string.Empty).Where(char.IsDigit).ToArray());
+        if (digitos.StartsWith(PrefixoRgmLegado, StringComparison.Ordinal)
+            && digitos.Length > PrefixoRgmLegado.Length)
+            digitos = digitos[PrefixoRgmLegado.Length..];
+        return digitos;
     }
 
     // ── Geração de e-mail institucional ───────────────────────────────────────
@@ -256,6 +353,7 @@ public class UsersController(AppDbContext db) : ControllerBase
 
     // ── Avançar semestre ──────────────────────────────────────────────────────
     [HttpPost("advance-semester")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<AdvanceSemesterResponseDto>> AdvanceSemester()
     {
         // 1. Alunos do 8° semestre → formados
@@ -324,6 +422,11 @@ public class UsersController(AppDbContext db) : ControllerBase
         Shift = u.Shift,
         Role = u.Role,
         IsActive = u.IsActive,
+        AllowLateArrival = u.AllowLateArrival,
+        LateArrivalNote = u.LateArrivalNote,
+        MustChangePassword = u.MustChangePassword,
+        MustSetEmail = u.MustSetEmail,
+        TermsAcceptedAt = u.TermsAcceptedAt,
         GroupId = u.GroupMembership?.GroupId,
         GroupCode = u.GroupMembership?.Group?.Code,
         GroupName = u.GroupMembership?.Group?.Name

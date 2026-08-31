@@ -10,7 +10,7 @@ namespace EstagioCheck.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "preceptor,supervisor")]
+[Authorize(Roles = Roles.AcompanhamentoEGestao)]
 public class EvaluationsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]

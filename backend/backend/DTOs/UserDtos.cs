@@ -12,6 +12,13 @@ public class UserDto
     public string? Shift { get; init; }
     public string Role { get; init; } = string.Empty;
     public bool IsActive { get; init; }
+    /// <summary>Aluno autorizado a chegar após o horário previsto de início.</summary>
+    public bool AllowLateArrival { get; init; }
+    public string? LateArrivalNote { get; init; }
+    public bool MustChangePassword { get; init; }
+    public bool MustSetEmail { get; init; }
+    /// <summary>Quando o usuário aceitou o termo de responsabilidade de acesso.</summary>
+    public DateTime? TermsAcceptedAt { get; init; }
     public Guid? GroupId { get; init; }
     public string? GroupCode { get; init; }
     public string? GroupName { get; init; }
@@ -19,12 +26,23 @@ public class UserDto
 
 public record AssignGroupDto(Guid? GroupId);
 
+// ── Permissão de atraso ───────────────────────────────────────────────────────
+public record LatePermissionDto(
+    [Required] bool AllowLateArrival,
+    [MaxLength(500)] string? Note
+);
+
+// ── Troca de turno do aluno ───────────────────────────────────────────────────
+public record UpdateShiftDto(
+    [Required, MaxLength(10)] string Shift  // "manha" | "tarde" | "noite"
+);
+
 // ── Criação de preceptor / supervisor ─────────────────────────────────────────
 public record CreateStaffDto(
     [Required, MinLength(2), MaxLength(200)] string FullName,
     [Required, EmailAddress, MaxLength(255)] string Email,
     [Required, MinLength(6), MaxLength(100)] string Password,
-    [Required] string Role,   // "preceptor" | "supervisor"
+    [Required] string Role,   // "preceptor" | "supervisor" | "coordenadora"
     [MaxLength(200)] string? Institution,
     [MaxLength(30)] string? Phone
 );

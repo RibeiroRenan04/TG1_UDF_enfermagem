@@ -46,8 +46,8 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub")!);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var currentShift = ShiftFromHour(DateTime.Now.Hour);
+        var today = BrasiliaTime.Hoje;
+        var currentShift = ShiftFromHour(BrasiliaTime.Agora.Hour);
 
         var membership = await db.GroupMemberships.FirstOrDefaultAsync(m => m.StudentId == userId);
         if (membership == null) return Ok(null);
@@ -119,14 +119,39 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         if (dto.Type != "check_in" && dto.Type != "check_out")
             return BadRequest(new { message = "Tipo inválido." });
 
-        var agora = DateTime.UtcNow;
+        // Horário oficial do estágio (GMT-3). Ver Services/BrasiliaTime.cs.
+        var agora = BrasiliaTime.Agora;
+
+        var aluno = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
 
         // Validação inteligente: geolocalização (distância) + janela de horário do turno.
         var location = dto.LocationId.HasValue
             ? await db.Locations.FindAsync(dto.LocationId.Value)
             : null;
-        var (status, irregularityReason, distanceMeters) =
-            AvaliarRegistro(location, dto.Latitude, dto.Longitude, dto.AccuracyMeters, agora);
+        // Fora do raio o ponto não é registrado: o aluno precisa estar na unidade.
+        // Quem tem um motivo legítimo (GPS falhando, atendimento externo) abre uma
+        // irregularidade para análise, em vez de gravar um ponto inválido.
+        if (location != null)
+        {
+            var distancia = geo.HaversineMeters(dto.Latitude, dto.Longitude, location.Latitude, location.Longitude);
+            var precisaoGps = dto.AccuracyMeters.GetValueOrDefault(0);
+            if (Math.Max(0, distancia - precisaoGps) > location.RadiusMeters)
+            {
+                return BadRequest(new
+                {
+                    message = $"Você está a {distancia:0} m de {location.Name} (limite de {location.RadiusMeters} m). "
+                            + "Aproxime-se da unidade para registrar o ponto. Se houver um motivo, registre uma irregularidade.",
+                    code = "fora_do_raio",
+                    distanceMeters = Math.Round(distancia),
+                    radiusMeters = location.RadiusMeters,
+                    locationName = location.Name
+                });
+            }
+        }
+
+        var (status, irregularityReason, distanceMeters) = AvaliarRegistro(
+            location, dto.Latitude, dto.Longitude, dto.AccuracyMeters, agora,
+            dto.Type, aluno?.AllowLateArrival == true);
 
         // Foto do registro: guardamos o data URI completo (MVP). Limite de ~5 MB
         // para proteger o banco; o frontend já comprime a imagem antes de enviar.
@@ -152,6 +177,23 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         };
 
         db.AttendanceRecords.Add(record);
+
+        // Registro irregular abre automaticamente a ocorrência do fluxo de análise:
+        // o preceptor toma ciência e observa, mas quem decide é o professor.
+        if (status == "irregular")
+        {
+            db.PointIrregularities.Add(new PointIrregularity
+            {
+                StudentId = userId,
+                AttendanceRecordId = record.Id,
+                ScheduleId = dto.ScheduleId,
+                Type = "fora_do_local",
+                OccurredOn = DateOnly.FromDateTime(agora),
+                Description = irregularityReason ?? "Registro de ponto fora das regras.",
+                Status = PointIrregularity.StatusAguardandoPreceptor
+            });
+        }
+
         await db.SaveChangesAsync();
 
         await db.Entry(record).Reference(r => r.Student).LoadAsync();
@@ -161,8 +203,13 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         return Ok(Map(record));
     }
 
+    /// <summary>
+    /// Validação manual do registro de ponto. Exclusiva do professor: o preceptor
+    /// acompanha e observa a ocorrência (ver IrregularitiesController), mas não
+    /// aprova nem altera a situação de um registro.
+    /// </summary>
     [HttpPatch("{id}/validate")]
-    [Authorize(Roles = "preceptor,supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<AttendanceRecordDto>> Validate(Guid id, [FromBody] ValidateAttendanceDto dto)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -179,7 +226,7 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         if (!dto.Approve && !string.IsNullOrEmpty(dto.Reason))
             record.IrregularityReason = dto.Reason;
         record.ValidatedById = userId;
-        record.ValidatedAt = DateTime.UtcNow;
+        record.ValidatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
         return Ok(Map(record));
@@ -187,8 +234,6 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
 
     // Tolerância (minutos) aplicada à janela do turno antes de marcar como pendente.
     private const int ToleranciaTurnoMin = 30;
-    // Fuso de Brasília (UTC-3, sem horário de verão) para comparar o horário do turno.
-    private const int OffsetBrasiliaHoras = -3;
 
     /// <summary>
     /// Validação inteligente do registro: combina distância (geofence, ajustada pela precisão do GPS),
@@ -197,9 +242,14 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
     /// - Fora do raio OU sexta-feira fora da instituição → "irregular".
     /// - Dentro do raio, porém fora do horário do turno → "pendente".
     /// - Dentro do raio e dentro do horário → "aprovado".
+    ///
+    /// Alunos com permissão de atraso previamente autorizada não são penalizados por
+    /// chegar depois do início do turno; a carga horária do dia continua sendo exigida,
+    /// pois o cálculo de horas usa o par check-in/check-out.
     /// </summary>
     private (string status, string? reason, double? distance) AvaliarRegistro(
-        Location? location, double lat, double lon, double? accuracyMeters, DateTime recordedAtUtc)
+        Location? location, double lat, double lon, double? accuracyMeters, DateTime recordedAt,
+        string tipo, bool permiteAtraso = false)
     {
         if (location == null)
             return ("pendente", "Sem local vinculado. Aguardando validação manual.", null);
@@ -214,22 +264,35 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         if (foraDoRaio)
             motivos.Add($"Fora do raio ({distance:0}m, precisão GPS ±{precisao:0}m; limite {location.RadiusMeters}m)");
 
-        var localDateTime = recordedAtUtc.AddHours(OffsetBrasiliaHoras);
-        var horaLocal = localDateTime.TimeOfDay;
+        // recordedAt já chega no horário de Brasília (ver BrasiliaTime).
+        var horaLocal = recordedAt.TimeOfDay;
         var foraDoTurno = false;
         if (TimeSpan.TryParse(location.ShiftStart, out var inicio) &&
             TimeSpan.TryParse(location.ShiftEnd, out var fim))
         {
             var tol = TimeSpan.FromMinutes(ToleranciaTurnoMin);
-            if (horaLocal < inicio - tol || horaLocal > fim + tol)
+            var antesDoInicio = horaLocal < inicio - tol;
+            // A permissão de atraso libera apenas a chegada tardia (o limite inferior
+            // do turno); chegar antes ou sair depois continua fora da janela.
+            var depoisDoFim = horaLocal > fim + tol;
+            // O atraso só faz sentido na chegada: o check-out acontece no fim do turno.
+            var atrasado = tipo == "check_in" && !antesDoInicio && !depoisDoFim
+                        && horaLocal > inicio + tol;
+
+            if (antesDoInicio || depoisDoFim)
             {
                 foraDoTurno = true;
                 motivos.Add($"Registro às {horaLocal:hh\\:mm} fora do turno ({location.ShiftStart}–{location.ShiftEnd})");
             }
+            else if (atrasado && !permiteAtraso)
+            {
+                foraDoTurno = true;
+                motivos.Add($"Chegada às {horaLocal:hh\\:mm}, após o início do turno ({location.ShiftStart})");
+            }
         }
 
         // Regra de sexta-feira: o registro deve ser feito na instituição de ensino.
-        var sextaForaInstituicao = localDateTime.DayOfWeek == DayOfWeek.Friday && !location.IsInstitution;
+        var sextaForaInstituicao = recordedAt.DayOfWeek == DayOfWeek.Friday && !location.IsInstitution;
         if (sextaForaInstituicao)
             motivos.Add("Sexta-feira: o registro deve ser feito na instituição de ensino");
 

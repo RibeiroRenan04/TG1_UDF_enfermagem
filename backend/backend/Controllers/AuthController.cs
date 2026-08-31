@@ -25,7 +25,52 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
 
         var token = tokenService.GenerateToken(user);
         return Ok(new AuthResponseDto(token, user.Id.ToString(), user.Email, user.FullName, user.Role,
-            user.MustChangePassword, user.MustSetEmail));
+            user.MustChangePassword, user.MustSetEmail, DeveAceitarTermo(user)));
+    }
+
+    // ── Termo de responsabilidade de acesso ───────────────────────────────────
+    /// <summary>
+    /// Texto do termo exibido a preceptores, professores e coordenadoras. Fica no
+    /// backend para que a versão aceita seja a mesma em qualquer cliente.
+    /// </summary>
+    [HttpGet("terms")]
+    [AllowAnonymous]
+    public ActionResult GetTerms() => Ok(new
+    {
+        titulo = "Termo de Responsabilidade de Acesso",
+        versao = TermoVersao,
+        itens = new[]
+        {
+            "A senha de acesso é pessoal e intransferível: não deve ser compartilhada com alunos, colegas ou terceiros, em nenhuma hipótese.",
+            "Sou responsável por todas as ações realizadas no sistema com a minha conta, incluindo lançamentos, validações e alterações de dados.",
+            "Os dados de alunos acessados aqui são de uso restrito e acadêmico, e não podem ser divulgados fora das atividades de estágio.",
+            "Devo encerrar a sessão ao terminar o uso, especialmente em computadores compartilhados.",
+            "Comunicarei imediatamente à coordenação qualquer suspeita de uso indevido da minha conta e solicitarei a troca da senha."
+        }
+    });
+
+    /// <summary>Registra o aceite do termo pelo usuário autenticado.</summary>
+    [HttpPost("accept-terms")]
+    [Authorize]
+    public async Task<IActionResult> AcceptTerms([FromBody] AcceptTermsDto dto)
+    {
+        if (!dto.Accepted)
+            return BadRequest(new { message = "É necessário aceitar o termo para usar o sistema." });
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
+
+        if (userId == null || !Guid.TryParse(userId, out var id))
+            return Unauthorized();
+
+        var user = await db.Users.FindAsync(id);
+        if (user == null) return NotFound();
+
+        user.TermsAcceptedAt = DateTime.UtcNow;
+        user.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        return Ok(new { acceptedAt = user.TermsAcceptedAt, versao = TermoVersao });
     }
 
     // ── Primeiro Acesso ───────────────────────────────────────────────────────
@@ -63,7 +108,8 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         await db.SaveChangesAsync();
 
         var token = tokenService.GenerateToken(user);
-        return Ok(new AuthResponseDto(token, user.Id.ToString(), user.Email, user.FullName, user.Role));
+        return Ok(new AuthResponseDto(token, user.Id.ToString(), user.Email, user.FullName, user.Role,
+            MustAcceptTerms: DeveAceitarTermo(user)));
     }
 
     // ── Esqueci a senha ───────────────────────────────────────────────────────
@@ -137,7 +183,12 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
     }
 
     private const string DominioInstitucional = "@cs.udf.edu.br";
+    private const string TermoVersao = "1.0";
 
     private static bool EhEmailInstitucional(string email) =>
         email.Trim().EndsWith(DominioInstitucional, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Preceptor, professor e coordenadora só entram após aceitar o termo.</summary>
+    private static bool DeveAceitarTermo(Models.ApplicationUser user) =>
+        Models.Roles.ExigeTermoResponsabilidade(user.Role) && user.TermsAcceptedAt == null;
 }

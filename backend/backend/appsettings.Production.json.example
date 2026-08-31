@@ -9,7 +9,9 @@
     "ExpiresInHours": 8
   },
   "Cors": {
-    "Origins": [ "https://estagiocheck.vercel.app" ]
+    "Origins": [
+      "https://estagiocheck.vercel.app"
+    ]
   },
   "Email": {
     "SmtpHost": "smtp.gmail.com",
@@ -25,5 +27,16 @@
       "Microsoft.AspNetCore": "Warning"
     }
   },
-  "AllowedHosts": "*"
+  "AllowedHosts": "*",
+  "Geocoding": {
+    "Provider": "Nominatim",
+    "BaseUrl": "https://nominatim.openstreetmap.org",
+    "UserAgent": "EstagioCheck-UDF/1.0 (contato@cs.udf.edu.br)",
+    "RequestDelayMilliseconds": 1100,
+    "TimeoutSeconds": 10,
+    "MaxRetries": 2,
+    "RetryAfterSecondsDefault": 60,
+    "CountryCodes": "br",
+    "AcceptLanguage": "pt-BR"
+  }
 }

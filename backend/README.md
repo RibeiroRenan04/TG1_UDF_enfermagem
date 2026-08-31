@@ -79,6 +79,8 @@ Fluxo de autenticação:
 | BCrypt.Net-Next | 4.0.3 | Hash de senhas |
 | MailKit | 4.16.0 | Envio de e-mails (SMTP) |
 | Swashbuckle (Swagger) | 6.9.0 | Documentação da API |
+| ClosedXML | 0.104.2 | Leitura das planilhas de unidades (.xlsx) |
+| xUnit | 2.9.2 | Testes unitários (`backend.Tests`) |
 
 ### Frontend
 
@@ -128,11 +130,73 @@ Fluxo de autenticação:
 
 | Perfil | Identificador | Permissões |
 |---|---|---|
-| Aluno | `aluno` | Check-in/out, histórico próprio, dashboard pessoal |
-| Preceptor | `preceptor` | Acompanhamentos, visualização do grupo, validação |
-| Supervisor | `supervisor` | Acesso total ao sistema |
+| Aluno | `aluno` | Check-in/out, histórico próprio, dashboard pessoal, registro de irregularidades |
+| Preceptor | `preceptor` | Acompanhamentos, visualização do grupo, ciência e observação de irregularidades |
+| Professor (supervisor) | `supervisor` | Acesso total ao sistema; única decisão sobre presenças e irregularidades |
+| Coordenadora | `coordenadora` | Mesma visão do professor, **somente leitura** (secretaria/estagiária) |
 
 O controle de acesso é aplicado tanto no frontend (route guards) quanto no backend (claims JWT + `[Authorize(Roles)]`).
+
+### Fluxo de irregularidades do ponto
+
+O preceptor **não valida nem altera a situação** de uma irregularidade — ele registra
+ciência e observação, e a ocorrência é encaminhada ao professor responsável:
+
+```
+1. Aluno registra a irregularidade  (ou o sistema gera a partir de um ponto fora das regras)
+        ↓  status: aguardando_preceptor
+2. Preceptor toma ciência
+3. Preceptor insere justificativa/observação
+4. Ocorrência encaminhada ao professor
+        ↓  status: aguardando_professor
+5. Professor analisa
+6. Professor aprova, nega ou acrescenta parecer
+        ↓  status: aprovada | negada
+```
+
+Aprovar uma ocorrência vinculada a um registro de ponto também regulariza esse registro.
+
+### Horário e geolocalização do ponto
+
+Os registros são gravados no **horário de Brasília (GMT-3)**, o fuso oficial do estágio —
+não em UTC. Ver `backend/Services/BrasiliaTime.cs`; a migração `006_*.sql` converte os
+registros antigos.
+
+O ponto **só é aceito dentro do raio da unidade alocada**. Fora do raio a API recusa o
+registro (`400`, `code: "fora_do_raio"`) e o app nem libera a câmera — quem tem um motivo
+legítimo abre uma irregularidade para análise do professor.
+
+### Permissão de atraso
+
+Alunos previamente autorizados pelo professor (`PermissaoAtraso` em `Usuarios`) podem
+chegar depois do horário previsto de início sem que o registro seja marcado como
+irregularidade de horário. **A carga horária do dia continua sendo exigida** — a regra
+vale apenas para o check-in; o check-out segue a janela normal do turno.
+
+### Termo de responsabilidade
+
+Preceptores, professores e coordenadoras precisam aceitar, no primeiro acesso, o termo
+que registra que a senha é pessoal e intransferível e que respondem pelas ações feitas
+com a própria conta (`GET /api/auth/terms`, `POST /api/auth/accept-terms`).
+
+### Unidades de saúde e alocação de estagiários
+
+Cadastro das unidades (manual ou por planilha `.xlsx`/`.csv`), geocodificação dos
+endereços via **OpenStreetMap/Nominatim** e alocação de estagiários com histórico.
+
+As unidades ficam na tabela **`Locais`** — a mesma que o check-in usa para o
+geofence —, então a coordenada geocodificada já vale para validar a presença do
+aluno. O Nominatim é consultado **apenas pelo backend**, com User-Agent
+identificado, no máximo ~1 requisição por segundo e cache por endereço; a
+geocodificação em massa roda em segundo plano e nunca entra no fluxo do check-in.
+
+Documentação completa: [`docs/UNIDADES_SAUDE.md`](docs/UNIDADES_SAUDE.md) ·
+planilha de exemplo: [`docs/exemplos/`](docs/exemplos/unidades-saude-exemplo.csv)
+
+### Formato do RGM
+
+O RGM não usa mais o prefixo **"14"**. A importação de planilhas aceita os dois formatos
+e normaliza automaticamente; a migração `database/005_*.sql` limpa os registros antigos.
 
 ---
 
@@ -246,7 +310,22 @@ Base URL (produção): `https://estagiocheckapi-production.up.railway.app/api`
 | GET/POST/PUT/DELETE | `/locations` | Sim | Locais de estágio |
 | GET | `/preceptor` | Sim (preceptor) | Painel do preceptor |
 | GET | `/reports` | Sim | Relatórios |
-| GET/POST/PUT/DELETE | `/users` | Sim | Gestão de usuários |
+| GET/POST/PUT/DELETE | `/users` | Sim (professor) | Gestão de usuários |
+| PATCH | `/users/{id}/late-permission` | Sim (professor) | Permissão de atraso do aluno |
+| PATCH | `/users/{id}/shift` | Sim (professor) | Troca de turno do aluno |
+| GET/POST | `/irregularities` | Sim | Irregularidades do ponto |
+| PATCH | `/irregularities/{id}/preceptor-review` | Sim (preceptor) | Ciência + observação |
+| PATCH | `/irregularities/{id}/professor-decision` | Sim (professor) | Aprovar ou negar |
+| GET | `/followups/my-schedules` | Sim (preceptor) | Rodízios do preceptor e alunos alocados |
+| GET/POST/PUT/DELETE | `/unidades-saude` | Sim | Unidades de saúde (escrita: professor) |
+| POST | `/unidades-saude/importar/preview` | Sim (professor) | Prévia da planilha, sem gravar |
+| POST | `/unidades-saude/importar/confirmar` | Sim (professor) | Confirma e enfileira geocodificação |
+| POST | `/unidades-saude/{id}/geocodificar` | Sim (professor) | Geocodifica pelo Nominatim |
+| GET/POST/DELETE | `/unidades-saude/{id}/estagiarios` | Sim | Alocação de estagiários |
+| GET | `/alocacoes` | Sim (gestão) | Todas as alocações, com histórico |
+| GET | `/estagiarios/{id}/unidade` | Sim | Unidade do estagiário (aluno: só a própria) |
+| GET | `/auth/terms` | Não | Texto do termo de responsabilidade |
+| POST | `/auth/accept-terms` | Sim | Registra o aceite do termo |
 
 Documentação interativa disponível em: `/swagger` (somente em Development)
 
@@ -360,12 +439,22 @@ O banco de dados é **PostgreSQL** gerenciado pelo Entity Framework Core com mig
 | `Evaluations` | Avaliações |
 | `PasswordResetCodes` | Códigos temporários de recuperação de senha |
 | `StudentSemesterHistory` | Histórico semestral do aluno |
+| `Irregularidades` | Ocorrências de ponto (fluxo aluno → preceptor → professor) |
+| `AlocacoesEstagiarios` | Alocação de estagiários às unidades, com histórico |
+| `GeocodificacaoCache` | Endereços já geocodificados, por endereço normalizado |
 
 ### Scripts SQL adicionais
 
 ```
 database/
-└── 002_udf_features.sql    # Funções e features específicas da UDF
+├── 002_udf_features.sql                  # Funções e features específicas da UDF
+├── 003_rename_to_portuguese.sql          # Schema em português
+├── 004_consolidar_rgm_remover_matricula.sql
+├── 005_irregularidades_e_perfis.sql      # Irregularidades, permissão de atraso,
+│                                         # perfil coordenadora, RGM sem o "14"
+├── 006_fuso_brasilia.sql                 # Registros de ponto em GMT-3 (executar UMA vez)
+└── 007_unidades_saude.sql                # Unidades de saúde, alocações e cache
+                                          # de geocodificação
 ```
 
 ---

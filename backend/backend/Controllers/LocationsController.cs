@@ -28,7 +28,7 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
     }
 
     [HttpPost]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<LocationDto>> Create([FromBody] CreateLocationDto dto)
     {
         var loc = new Location
@@ -49,7 +49,7 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
     }
 
     [HttpPost("batch")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult> BatchCreate([FromBody] List<CreateLocationDto> dtos)
     {
         if (dtos.Count == 0)
@@ -73,7 +73,7 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<LocationDto>> Update(Guid id, [FromBody] UpdateLocationDto dto)
     {
         var loc = await db.Locations.FindAsync(id);
@@ -93,7 +93,7 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> Delete(Guid id)
     {
         var loc = await db.Locations.FindAsync(id);
@@ -106,7 +106,7 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
     // ── Busca Saúde DF (CNES / OpenDataSUS) ──────────────────────────────────
     /// <summary>Pesquisa unidades de saúde do DF via API pública do CNES (default: UBS).</summary>
     [HttpGet("busca-saude")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<List<BuscaSaudeEstabelecimentoDto>>> BuscarSaude(
         [FromQuery] string? q,
         [FromQuery] int tipo = BuscaSaudeService.TipoUbs,
@@ -118,7 +118,7 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
 
     /// <summary>Importa um estabelecimento do CNES como local de estágio.</summary>
     [HttpPost("import-from-busca-saude")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<LocationDto>> ImportFromBuscaSaude(
         [FromBody] ImportBuscaSaudeDto dto)
     {

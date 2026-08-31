@@ -76,6 +76,29 @@ public class StudentLookupDto
 }
 
 /// <summary>
+/// Rodízio do preceptor com os alunos alocados nele. Serve para o preceptor
+/// escolher o aluno pela lista da turma, em vez de digitar o RGM de cabeça.
+/// </summary>
+public class ScheduleStudentsDto
+{
+    public Guid ScheduleId { get; init; }
+    public string PeriodLabel { get; init; } = string.Empty;
+    public string Shift { get; init; } = string.Empty;
+    public string ActivityType { get; init; } = string.Empty;
+    public Guid? GroupId { get; init; }
+    public string? GroupCode { get; init; }
+    public string? GroupName { get; init; }
+    public Guid? LocationId { get; init; }
+    public string? LocationName { get; init; }
+    public DateOnly StartDate { get; init; }
+    public DateOnly EndDate { get; init; }
+    /// <summary>Rodízio vigente hoje — destacado na lista.</summary>
+    public bool Current { get; init; }
+    /// <summary>Alunos alocados, já com o contexto do rodízio preenchido.</summary>
+    public List<StudentLookupDto> Students { get; init; } = [];
+}
+
+/// <summary>
 /// Criação do acompanhamento. Herda os campos avaliativos de <see cref="UpdateFollowupDto"/>
 /// para que o preceptor consiga salvar cabeçalho e conteúdo em uma única requisição.
 /// </summary>

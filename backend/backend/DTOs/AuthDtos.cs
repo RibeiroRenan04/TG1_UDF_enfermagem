@@ -7,7 +7,7 @@ public record RegisterDto(
     [Required, EmailAddress, MaxLength(255)] string Email,
     [Required, MinLength(6), MaxLength(100)] string Password,
     [MaxLength(50)] string? Matricula,
-    [Required] string Role  // "aluno" | "preceptor" | "supervisor"
+    [Required] string Role  // "aluno" | "preceptor" | "supervisor" | "coordenadora"
 );
 
 public record LoginDto(
@@ -22,7 +22,18 @@ public record AuthResponseDto(
     string FullName,
     string Role,
     bool MustChangePassword = false,
-    bool MustSetEmail = false
+    bool MustSetEmail = false,
+    /// <summary>
+    /// Perfis não-aluno precisam aceitar o termo de responsabilidade de acesso
+    /// (não compartilhar a senha e responder pelas ações feitas com a conta)
+    /// antes de usar o sistema.
+    /// </summary>
+    bool MustAcceptTerms = false
+);
+
+// ── Termo de responsabilidade ─────────────────────────────────────────────────
+public record AcceptTermsDto(
+    [Required] bool Accepted
 );
 
 // ── Primeiro Acesso ───────────────────────────────────────────────────────────

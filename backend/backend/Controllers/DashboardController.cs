@@ -1,4 +1,5 @@
 using EstagioCheck.API.Data;
+using EstagioCheck.API.Services;
 using EstagioCheck.API.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -91,7 +92,7 @@ public class DashboardController(AppDbContext db) : ControllerBase
 
     private async Task<List<PendencyDto>> GetStudentPendencies(Guid studentId)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = BrasiliaTime.Hoje;
 
         // Busca todos os cronogramas do grupo do aluno
         var membership = await db.GroupMemberships

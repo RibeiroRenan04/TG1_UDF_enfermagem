@@ -24,6 +24,9 @@ public class TokenService(IConfiguration config)
             new Claim(ClaimTypes.Role, user.Role),
             new Claim("mustChangePassword", user.MustChangePassword.ToString().ToLower()),
             new Claim("mustSetEmail", user.MustSetEmail.ToString().ToLower()),
+            new Claim("mustAcceptTerms",
+                (Roles.ExigeTermoResponsabilidade(user.Role) && user.TermsAcceptedAt == null)
+                    .ToString().ToLower()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 

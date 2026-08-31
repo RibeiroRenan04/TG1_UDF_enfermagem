@@ -57,7 +57,7 @@ public class CertificateService(AppDbContext db)
             PeriodLabel = MontarPeriodo(schedules),
             Locations = locais,
             Institution = student.Institution,
-            IssuedAt = DateTime.UtcNow,
+            IssuedAt = BrasiliaTime.Agora,
             VerificationCode = GerarCodigo(student.Id, completed)
         };
     }
