@@ -291,4 +291,186 @@ public class AlocacaoTests
         Assert.Single(ativas);
         Assert.Equal(2, todas.Count);
     }
+
+    // ── Alocação por turno ────────────────────────────────────────────────────
+    [Fact]
+    public async Task Aluno_pode_ser_alocado_em_unidades_diferentes_em_turnos_diferentes()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidadeManha = TestSupport.Unidade("UBS Manhã");
+        var unidadeTarde = TestSupport.Unidade("UBS Tarde");
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidadeManha, unidadeTarde, aluno);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        await controller.Alocar(unidadeManha.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Manha));
+
+        var resposta = await controller.Alocar(unidadeTarde.Id,
+            new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Tarde));
+
+        Assert.IsType<OkObjectResult>(resposta.Result);
+        // As duas convivem: turnos diferentes, unidades diferentes.
+        var ativas = db.StudentAllocations.Where(a => a.Ativo).ToList();
+        Assert.Equal(2, ativas.Count);
+        Assert.Contains(ativas, a => a.Shift == Turnos.Manha && a.LocationId == unidadeManha.Id);
+        Assert.Contains(ativas, a => a.Shift == Turnos.Tarde && a.LocationId == unidadeTarde.Id);
+    }
+
+    [Fact]
+    public async Task Aluno_nao_pode_ter_duas_alocacoes_no_mesmo_turno()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidadeA = TestSupport.Unidade("UBS A");
+        var unidadeB = TestSupport.Unidade("UBS B");
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidadeA, unidadeB, aluno);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        await controller.Alocar(unidadeA.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Tarde));
+
+        var resposta = await controller.Alocar(unidadeB.Id,
+            new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Tarde));
+
+        Assert.IsType<ConflictObjectResult>(resposta.Result);
+        Assert.Single(db.StudentAllocations, a => a.Ativo);
+    }
+
+    [Fact]
+    public async Task Sem_turno_informado_usa_o_turno_cadastrado_do_aluno()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidade = TestSupport.Unidade();
+        var aluno = TestSupport.Aluno();
+        aluno.Shift = Turnos.Noite;
+        db.AddRange(unidade, aluno);
+        await db.SaveChangesAsync();
+
+        var resposta = await Montar(db, Guid.NewGuid())
+            .Alocar(unidade.Id, new CriarAlocacaoDto(aluno.Id, null, null));
+
+        Assert.Equal(Turnos.Noite, Corpo(resposta).Turno);
+    }
+
+    [Fact]
+    public async Task Turno_invalido_e_recusado()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidade = TestSupport.Unidade();
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidade, aluno);
+        await db.SaveChangesAsync();
+
+        var resposta = await Montar(db, Guid.NewGuid())
+            .Alocar(unidade.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: "madrugada"));
+
+        Assert.IsType<BadRequestObjectResult>(resposta.Result);
+        Assert.Empty(db.StudentAllocations);
+    }
+
+    [Fact]
+    public async Task Trocar_de_unidade_encerra_so_a_alocacao_daquele_turno()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidadeA = TestSupport.Unidade("UBS A");
+        var unidadeB = TestSupport.Unidade("UBS B");
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidadeA, unidadeB, aluno);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        await controller.Alocar(unidadeA.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Manha));
+        await controller.Alocar(unidadeA.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Tarde));
+
+        // Transfere só a tarde para a unidade B.
+        await controller.Alocar(unidadeB.Id,
+            new CriarAlocacaoDto(aluno.Id, null, null, EncerrarAlocacaoAtual: true, Turno: Turnos.Tarde));
+
+        var ativas = db.StudentAllocations.Where(a => a.Ativo).ToList();
+        Assert.Equal(2, ativas.Count);
+        // A manhã na unidade A continua intacta.
+        Assert.Contains(ativas, a => a.Shift == Turnos.Manha && a.LocationId == unidadeA.Id);
+        Assert.Contains(ativas, a => a.Shift == Turnos.Tarde && a.LocationId == unidadeB.Id);
+    }
+
+    [Fact]
+    public async Task Encerrar_sem_turno_com_varias_alocacoes_na_unidade_pede_o_turno()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidade = TestSupport.Unidade();
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidade, aluno);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        await controller.Alocar(unidade.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Manha));
+        await controller.Alocar(unidade.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Tarde));
+
+        var resposta = await controller.Encerrar(unidade.Id, aluno.Id, null);
+
+        Assert.IsType<BadRequestObjectResult>(resposta.Result);
+        Assert.Equal(2, db.StudentAllocations.Count(a => a.Ativo));
+    }
+
+    [Fact]
+    public async Task Encerrar_com_turno_nao_afeta_os_demais()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidade = TestSupport.Unidade();
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidade, aluno);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        await controller.Alocar(unidade.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Manha));
+        await controller.Alocar(unidade.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Tarde));
+
+        var resposta = await controller.Encerrar(unidade.Id, aluno.Id, null, turno: Turnos.Manha);
+
+        Assert.Equal(Turnos.Manha, Corpo(resposta).Turno);
+        Assert.Single(db.StudentAllocations, a => a.Ativo);
+        Assert.Equal(Turnos.Tarde, db.StudentAllocations.Single(a => a.Ativo).Shift);
+    }
+
+    [Fact]
+    public async Task Estagiarios_disponiveis_mostram_os_turnos_ainda_livres()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidade = TestSupport.Unidade();
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidade, aluno);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        await controller.Alocar(unidade.Id, new CriarAlocacaoDto(aluno.Id, null, null, Turno: Turnos.Manha));
+
+        var resposta = await controller.GetDisponiveis(unidade.Id, null);
+        var disponivel = ((IEnumerable<EstagiarioDisponivelDto>)((ObjectResult)resposta.Result!).Value!)
+            .Single(x => x.Id == aluno.Id);
+
+        Assert.Equal(new[] { Turnos.Tarde, Turnos.Noite }, disponivel.TurnosDisponiveis);
+        Assert.Single(disponivel.AlocacoesAtivas, a => a.Turno == Turnos.Manha);
+    }
+
+    [Fact]
+    public async Task Aluno_so_ve_a_propria_alocacao_na_lista_da_unidade()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidade = TestSupport.Unidade();
+        var aluno = TestSupport.Aluno("Aluno A");
+        var colega = TestSupport.Aluno("Aluno B");
+        db.AddRange(unidade, aluno, colega);
+        await db.SaveChangesAsync();
+
+        var gestao = Montar(db, Guid.NewGuid());
+        await gestao.Alocar(unidade.Id, new CriarAlocacaoDto(aluno.Id, null, null));
+        await gestao.Alocar(unidade.Id, new CriarAlocacaoDto(colega.Id, null, null));
+
+        var comoAluno = Lista(await Montar(db, aluno.Id, Roles.Aluno).GetEstagiariosDaUnidade(unidade.Id));
+
+        // A relação dos colegas não é dado do aluno.
+        Assert.Single(comoAluno);
+        Assert.Equal(aluno.Id, comoAluno[0].EstagiarioId);
+    }
 }

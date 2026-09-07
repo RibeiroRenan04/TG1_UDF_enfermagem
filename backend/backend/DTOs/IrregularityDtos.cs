@@ -35,6 +35,17 @@ public class IrregularityDto
     public Guid? ScheduleId { get; init; }
     public string Type { get; init; } = string.Empty;
     public DateOnly OccurredOn { get; init; }
+
+    // ── Ponto original contestado ─────────────────────────────────────────────
+    // O painel exibe lado a lado a data de abertura da ocorrência (CreatedAt) e a
+    // data/hora exata do ponto que a originou.
+    /// <summary>Data e hora exatas do registro de ponto contestado.</summary>
+    public DateTime? AttendanceRecordedAt { get; init; }
+    /// <summary>"check_in" | "check_out" do ponto contestado.</summary>
+    public string? AttendanceType { get; init; }
+    public string? AttendanceLocationName { get; init; }
+    public string? AttendanceStatus { get; init; }
+
     public string Description { get; init; } = string.Empty;
     public string Status { get; init; } = string.Empty;
 

@@ -43,6 +43,9 @@ public class IrregularitiesController(AppDbContext db) : ControllerBase
             .Include(i => i.Student)
             .Include(i => i.Preceptor)
             .Include(i => i.Professor)
+            // O ponto original alimenta a coluna "data/hora do ponto" do painel.
+            .Include(i => i.AttendanceRecord).ThenInclude(r => r!.Location)
+            .AsNoTracking()
             .AsQueryable();
 
         if (role == Roles.Aluno)
@@ -101,6 +104,23 @@ public class IrregularitiesController(AppDbContext db) : ControllerBase
                 return BadRequest(new { message = "Registro de presença não encontrado para este aluno." });
         }
 
+        // ── Trava de duplicidade ─────────────────────────────────────────────
+        // Um ponto tem uma contestação por vez. Enquanto a atual não for negada
+        // pelo professor, abrir outra para o mesmo ponto só geraria fila repetida
+        // para o preceptor — a tela também mantém o botão inativo nesse período.
+        var emAberto = await OcorrenciaEmAbertoAsync(userId, dto.AttendanceRecordId, dto.Type, dto.OccurredOn);
+        if (emAberto != null)
+            return Conflict(new
+            {
+                message = dto.AttendanceRecordId.HasValue
+                    ? "Já existe uma irregularidade em análise para este ponto. "
+                      + "Aguarde a decisão do professor — se ela for recusada, você poderá abrir outra."
+                    : "Você já registrou uma irregularidade deste tipo nesta data e ela ainda está em análise.",
+                code = "irregularidade_em_aberto",
+                irregularityId = emAberto.Id,
+                status = emAberto.Status
+            });
+
         var irregularidade = new PointIrregularity
         {
             StudentId = userId,
@@ -115,8 +135,29 @@ public class IrregularitiesController(AppDbContext db) : ControllerBase
         db.PointIrregularities.Add(irregularidade);
         await db.SaveChangesAsync();
 
-        await db.Entry(irregularidade).Reference(i => i.Student).LoadAsync();
-        return Ok(Map(irregularidade));
+        // Devolve a ocorrência já completa: é ela que a tela insere na lista e no
+        // painel sem precisar de um segundo GET.
+        return Ok(Map((await CarregarAsync(irregularidade.Id))!));
+    }
+
+    /// <summary>
+    /// Ocorrência ainda em análise que impede uma nova contestação. Vinculada a um
+    /// ponto, a trava é por ponto; sem ponto, é por tipo + data da ocorrência.
+    /// "Negada" libera o aluno a abrir outra.
+    /// </summary>
+    private async Task<PointIrregularity?> OcorrenciaEmAbertoAsync(
+        Guid studentId, Guid? attendanceRecordId, string tipo, DateOnly ocorridaEm)
+    {
+        var query = db.PointIrregularities
+            .Where(i => i.StudentId == studentId && i.Status != PointIrregularity.StatusNegada);
+
+        query = attendanceRecordId.HasValue
+            ? query.Where(i => i.AttendanceRecordId == attendanceRecordId.Value)
+            : query.Where(i => i.AttendanceRecordId == null
+                            && i.Type == tipo
+                            && i.OccurredOn == ocorridaEm);
+
+        return await query.OrderByDescending(i => i.CreatedAt).FirstOrDefaultAsync();
     }
 
     // ── 2/3/4. O preceptor toma ciência, observa e encaminha ao professor ─────
@@ -242,6 +283,7 @@ public class IrregularitiesController(AppDbContext db) : ControllerBase
             .Include(i => i.Student)
             .Include(i => i.Preceptor)
             .Include(i => i.Professor)
+            .Include(i => i.AttendanceRecord).ThenInclude(r => r!.Location)
             .FirstOrDefaultAsync(i => i.Id == id);
 
     /// <summary>Alunos dos grupos das escalas em que o preceptor atua.</summary>
@@ -282,6 +324,10 @@ public class IrregularitiesController(AppDbContext db) : ControllerBase
         ScheduleId = i.ScheduleId,
         Type = i.Type,
         OccurredOn = i.OccurredOn,
+        AttendanceRecordedAt = i.AttendanceRecord?.RecordedAt,
+        AttendanceType = i.AttendanceRecord?.Type,
+        AttendanceLocationName = i.AttendanceRecord?.Location?.Name,
+        AttendanceStatus = i.AttendanceRecord?.Status,
         Description = i.Description,
         Status = i.Status,
         PreceptorId = i.PreceptorId,

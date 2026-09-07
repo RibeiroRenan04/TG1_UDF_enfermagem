@@ -33,11 +33,34 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
             query = query.Where(r => r.StudentId == studentId.Value);
 
         var recs = await query
+            .Include(r => r.Schedule)
             .OrderByDescending(r => r.RecordedAt)
             .Take(limit)
             .ToListAsync();
 
-        return Ok(recs.Select(Map));
+        // A tela precisa saber, ponto a ponto, se já existe contestação em curso:
+        // é o que desabilita o botão de irregularidade e evita o envio duplicado.
+        var irregularidades = await IrregularidadesPorPontoAsync(recs.Select(r => r.Id).ToList());
+
+        return Ok(recs.Select(r => Map(r, irregularidades.GetValueOrDefault(r.Id))));
+    }
+
+    /// <summary>
+    /// Irregularidade mais recente de cada registro de ponto informado. Uma única
+    /// consulta alimenta a trava de duplicidade da lista inteira.
+    /// </summary>
+    private async Task<Dictionary<Guid, PointIrregularity>> IrregularidadesPorPontoAsync(List<Guid> recordIds)
+    {
+        if (recordIds.Count == 0) return new Dictionary<Guid, PointIrregularity>();
+
+        var ocorrencias = await db.PointIrregularities
+            .Where(i => i.AttendanceRecordId != null && recordIds.Contains(i.AttendanceRecordId.Value))
+            .OrderByDescending(i => i.CreatedAt)
+            .ToListAsync();
+
+        return ocorrencias
+            .GroupBy(i => i.AttendanceRecordId!.Value)
+            .ToDictionary(g => g.Key, g => g.First());
     }
 
     [HttpGet("active-schedule")]
@@ -92,22 +115,37 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         });
     }
 
+    /// <summary>
+    /// Check-in em aberto <b>no turno corrente</b>. Antes esta consulta olhava
+    /// apenas o último registro do aluno, então um check-in de dias atrás deixava
+    /// a tela presa em "check-out" para sempre.
+    /// </summary>
     [HttpGet("open-check-in")]
     public async Task<ActionResult> GetOpenCheckIn()
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub")!);
 
-        var last = await db.AttendanceRecords
-            .Where(r => r.StudentId == userId)
-            .OrderByDescending(r => r.RecordedAt)
-            .Select(r => new { r.Id, r.Type, r.RecordedAt })
-            .FirstOrDefaultAsync();
+        var status = await MontarStatusDoTurnoAsync(userId);
 
-        if (last?.Type == "check_in")
-            return Ok(new { id = last.Id, recorded_at = last.RecordedAt });
+        if (status.CheckInId.HasValue && !status.CheckOutId.HasValue)
+            return Ok(new { id = status.CheckInId.Value, recorded_at = status.CheckInAt });
 
         return Ok(null);
+    }
+
+    /// <summary>
+    /// Situação do ponto no turno corrente: o que já foi registrado e o que ainda
+    /// está liberado. É a trava de segurança da tela — no máximo 1 check-in e
+    /// 1 check-out por turno, a mesma regra que o POST aplica.
+    /// </summary>
+    [HttpGet("shift-status")]
+    public async Task<ActionResult<ShiftPointStatusDto>> GetShiftStatus()
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+
+        return Ok(await MontarStatusDoTurnoAsync(userId));
     }
 
     [HttpPost]
@@ -121,6 +159,42 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
 
         // Horário oficial do estágio (GMT-3). Ver Services/BrasiliaTime.cs.
         var agora = BrasiliaTime.Agora;
+
+        // A descrição das atividades é o registro do que o aluno fez no turno:
+        // sem ela o check-out não é aceito, nem pela tela nem pela API.
+        var descricao = dto.ActivitiesDescription?.Trim();
+        if (dto.Type == "check_out" && string.IsNullOrWhiteSpace(descricao))
+            return BadRequest(new
+            {
+                message = "Descreva as atividades realizadas no turno para finalizar o check-out.",
+                code = "descricao_obrigatoria"
+            });
+
+        // Trava de registro: no máximo 1 check-in e 1 check-out por turno.
+        var turno = await TurnoDoRegistroAsync(dto.ScheduleId, agora);
+        var registrosDoTurno = await RegistrosDoTurnoAsync(userId, DateOnly.FromDateTime(agora), turno);
+
+        var jaRegistrado = registrosDoTurno.FirstOrDefault(r => r.Tipo == dto.Type);
+        if (jaRegistrado != null)
+            return Conflict(new
+            {
+                message = dto.Type == "check_in"
+                    ? $"Você já registrou o check-in do turno da {Turnos.Rotulo(turno)} às "
+                      + $"{jaRegistrado.RegistradoEm:HH\\:mm}. É permitido apenas um por turno."
+                    : $"Você já registrou o check-out do turno da {Turnos.Rotulo(turno)} às "
+                      + $"{jaRegistrado.RegistradoEm:HH\\:mm}. É permitido apenas um por turno.",
+                code = "registro_duplicado_no_turno",
+                shift = turno
+            });
+
+        if (dto.Type == "check_out" && !registrosDoTurno.Any(r => r.Tipo == "check_in"))
+            return BadRequest(new
+            {
+                message = $"Não há check-in registrado no turno da {Turnos.Rotulo(turno)}. "
+                        + "Registre a entrada antes do check-out ou abra uma irregularidade.",
+                code = "sem_check_in_no_turno",
+                shift = turno
+            });
 
         var aluno = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
 
@@ -171,7 +245,7 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
             Longitude = dto.Longitude,
             DistanceMeters = distanceMeters,
             PhotoUrl = photoUrl,
-            ActivitiesDescription = dto.ActivitiesDescription,
+            ActivitiesDescription = string.IsNullOrWhiteSpace(descricao) ? null : descricao,
             Status = status,
             IrregularityReason = irregularityReason
         };
@@ -199,6 +273,8 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         await db.Entry(record).Reference(r => r.Student).LoadAsync();
         if (record.LocationId.HasValue)
             await db.Entry(record).Reference(r => r.Location).LoadAsync();
+        if (record.ScheduleId.HasValue)
+            await db.Entry(record).Reference(r => r.Schedule).LoadAsync();
 
         return Ok(Map(record));
     }
@@ -218,6 +294,7 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         var record = await db.AttendanceRecords
             .Include(r => r.Student)
             .Include(r => r.Location)
+            .Include(r => r.Schedule)
             .FirstOrDefaultAsync(r => r.Id == id);
 
         if (record == null) return NotFound();
@@ -303,11 +380,111 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         return ("aprovado", null, distance);
     }
 
-    private static string ShiftFromHour(int h) =>
-        h is >= 6 and < 13 ? "manha" :
-        h is >= 13 and < 19 ? "tarde" : "noite";
+    private static string ShiftFromHour(int h) => Turnos.DaHora(h);
 
-    private static AttendanceRecordDto Map(AttendanceRecord r) => new()
+    // ── Turno do ponto ────────────────────────────────────────────────────────
+    /// <summary>
+    /// Turno a que um registro pertence: o da escala vinculada quando existe —
+    /// é ela que define o horário oficial do aluno — e, na falta dela, o turno
+    /// correspondente ao horário do registro.
+    /// </summary>
+    private async Task<string> TurnoDoRegistroAsync(Guid? scheduleId, DateTime momento)
+    {
+        if (scheduleId.HasValue)
+        {
+            var turnoEscala = await db.RotationSchedules
+                .Where(sc => sc.Id == scheduleId.Value)
+                .Select(sc => sc.Shift)
+                .FirstOrDefaultAsync();
+
+            var normalizado = Turnos.Normalizar(turnoEscala);
+            if (normalizado != null) return normalizado;
+        }
+
+        return Turnos.DaHora(momento);
+    }
+
+    private sealed record RegistroDoTurno(Guid Id, string Tipo, DateTime RegistradoEm);
+
+    /// <summary>Registros do aluno naquele dia e naquele turno.</summary>
+    private async Task<List<RegistroDoTurno>> RegistrosDoTurnoAsync(Guid studentId, DateOnly dia, string turno)
+    {
+        var inicio = dia.ToDateTime(TimeOnly.MinValue);
+        var fim = inicio.AddDays(1);
+
+        var doDia = await db.AttendanceRecords
+            .Where(r => r.StudentId == studentId && r.RecordedAt >= inicio && r.RecordedAt < fim)
+            .Select(r => new
+            {
+                r.Id,
+                r.Type,
+                r.RecordedAt,
+                TurnoEscala = r.Schedule != null ? r.Schedule.Shift : null
+            })
+            .ToListAsync();
+
+        return [.. doDia
+            .Where(r => (Turnos.Normalizar(r.TurnoEscala) ?? Turnos.DaHora(r.RecordedAt)) == turno)
+            .OrderBy(r => r.RecordedAt)
+            .Select(r => new RegistroDoTurno(r.Id, r.Type, r.RecordedAt))];
+    }
+
+    /// <summary>
+    /// Situação do ponto do aluno no turno corrente — a mesma trava aplicada no
+    /// POST, exposta para a tela desabilitar o que já foi registrado.
+    /// </summary>
+    private async Task<ShiftPointStatusDto> MontarStatusDoTurnoAsync(Guid studentId)
+    {
+        var agora = BrasiliaTime.Agora;
+        var hoje = DateOnly.FromDateTime(agora);
+
+        // A escala ativa manda no turno; sem escala, vale o horário do relógio.
+        var membership = await db.GroupMemberships.FirstOrDefaultAsync(m => m.StudentId == studentId);
+        var turnoDoRelogio = Turnos.DaHora(agora);
+        var turno = turnoDoRelogio;
+
+        if (membership != null)
+        {
+            var turnosHoje = await db.RotationSchedules
+                .Where(sc => sc.GroupId == membership.GroupId
+                          && sc.StartDate <= hoje && sc.EndDate >= hoje)
+                .Select(sc => sc.Shift)
+                .ToListAsync();
+
+            var normalizados = turnosHoje.Select(Turnos.Normalizar).Where(t => t != null).ToList();
+            // Se houver escala no turno do relógio, é ela; senão, a única escala do dia.
+            if (!normalizados.Contains(turnoDoRelogio) && normalizados.Count == 1)
+                turno = normalizados[0]!;
+        }
+
+        var registros = await RegistrosDoTurnoAsync(studentId, hoje, turno);
+        var checkIn = registros.FirstOrDefault(r => r.Tipo == "check_in");
+        var checkOut = registros.FirstOrDefault(r => r.Tipo == "check_out");
+
+        var podeCheckIn = checkIn == null;
+        var podeCheckOut = checkIn != null && checkOut == null;
+        var fechado = checkIn != null && checkOut != null;
+
+        return new ShiftPointStatusDto
+        {
+            Shift = turno,
+            ShiftLabel = Turnos.Rotulo(turno),
+            Date = hoje,
+            CheckInId = checkIn?.Id,
+            CheckInAt = checkIn?.RegistradoEm,
+            CheckOutId = checkOut?.Id,
+            CheckOutAt = checkOut?.RegistradoEm,
+            CanCheckIn = podeCheckIn,
+            CanCheckOut = podeCheckOut,
+            ShiftClosed = fechado,
+            BlockedReason = fechado
+                ? $"O turno da {Turnos.Rotulo(turno)} já tem check-in e check-out registrados. "
+                  + "Se algo estiver errado, abra uma irregularidade."
+                : null
+        };
+    }
+
+    private static AttendanceRecordDto Map(AttendanceRecord r, PointIrregularity? irregularidade = null) => new()
     {
         Id = r.Id,
         StudentId = r.StudentId,
@@ -325,6 +502,12 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         ScheduleId = r.ScheduleId,
         LocationId = r.LocationId,
         ValidatedByName = r.ValidatedBy?.FullName,
-        ValidatedAt = r.ValidatedAt
+        ValidatedAt = r.ValidatedAt,
+        Shift = Turnos.Normalizar(r.Schedule?.Shift) ?? Turnos.DaHora(r.RecordedAt),
+        IrregularityId = irregularidade?.Id,
+        IrregularityStatus = irregularidade?.Status,
+        // Negada libera nova contestação; qualquer outra situação mantém o bloqueio.
+        HasOpenIrregularity = irregularidade != null
+                           && irregularidade.Status != PointIrregularity.StatusNegada
     };
 }

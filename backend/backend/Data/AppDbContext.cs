@@ -369,6 +369,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Id).HasColumnName("IdAlocacao");
             e.Property(x => x.LocationId).HasColumnName("IdUnidade");
             e.Property(x => x.StudentId).HasColumnName("IdEstagiario");
+            e.Property(x => x.Shift).HasColumnName("Turno").HasMaxLength(10)
+             .HasDefaultValue(Turnos.Manha);
             e.Property(x => x.StartDate).HasColumnName("DataInicio");
             e.Property(x => x.EndDate).HasColumnName("DataFim");
             e.Property(x => x.Ativo).HasColumnName("Ativo").HasDefaultValue(true);
@@ -378,11 +380,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.UpdatedAt).HasColumnName("AtualizadoEm");
             e.HasIndex(x => x.LocationId);
             e.HasIndex(x => x.StudentId);
-            // Garante no banco a regra de uma alocação ativa por estagiário.
-            e.HasIndex(x => x.StudentId)
+            // Garante no banco a regra de uma alocação ativa por estagiário e turno:
+            // manhã em uma unidade e tarde em outra é permitido; o mesmo turno duas
+            // vezes, não.
+            e.HasIndex(x => new { x.StudentId, x.Shift })
              .IsUnique()
              .HasFilter("\"Ativo\" = TRUE")
-             .HasDatabaseName("UX_Alocacoes_EstagiarioAtivo");
+             .HasDatabaseName("UX_Alocacoes_EstagiarioTurnoAtivo");
             e.HasOne(x => x.Location)
              .WithMany(l => l.Allocations)
              .HasForeignKey(x => x.LocationId)

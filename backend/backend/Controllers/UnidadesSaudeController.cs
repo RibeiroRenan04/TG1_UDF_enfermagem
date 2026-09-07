@@ -63,6 +63,9 @@ public class UnidadesSaudeController(
     /// Unidades cuja localização precisa de conferência — a tela de revisão manual.
     /// </summary>
     [HttpGet("pendentes-revisao")]
+    // Revisão de coordenadas é trabalho da gestão — a tela já era restrita a ela,
+    // mas o endpoint respondia a qualquer usuário autenticado.
+    [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<List<UnidadeSaudeDto>>> GetPendentesRevisao()
     {
         string[] statusPendentes =

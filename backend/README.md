@@ -98,9 +98,11 @@ Fluxo de autenticação:
 ## Funcionalidades
 
 ### Aluno
-- **Check-in / Check-out** com validação de geolocalização (raio configurável por local)
-- **Histórico de presenças** com status (aprovado / irregular / pendente)
-- **Dashboard pessoal** com horas cumpridas, pendências e progresso
+- **Check-in / Check-out** com validação de geolocalização (raio configurável por local),
+  no máximo **1 de cada por turno**, e descrição das atividades obrigatória no check-out
+- **Histórico de presenças** com status (aprovado / irregular / pendente) e contestação
+  do ponto direto na linha do registro
+- **Dashboard pessoal** com card de **Status Pendentes**, horas cumpridas e progresso
 - Visualização de acompanhamentos formativos recebidos
 
 ### Preceptor
@@ -156,6 +158,15 @@ ciência e observação, e a ocorrência é encaminhada ao professor responsáve
 
 Aprovar uma ocorrência vinculada a um registro de ponto também regulariza esse registro.
 
+**Uma contestação por ponto.** Enquanto a ocorrência de um ponto não for *negada* pelo
+professor, o aluno não abre outra para o mesmo ponto: a API recusa (`409`,
+`code: "irregularidade_em_aberto"`) e a tela mantém o botão de contestação inativo.
+Negada, o ponto volta a aceitar uma nova solicitação. Ocorrências sem ponto vinculado
+seguem a mesma regra por tipo + data.
+
+Cada ocorrência carrega a **data/hora exata do ponto contestado**, exibida no painel ao
+lado da data em que a ocorrência foi aberta.
+
 ### Horário e geolocalização do ponto
 
 Os registros são gravados no **horário de Brasília (GMT-3)**, o fuso oficial do estágio —
@@ -165,6 +176,21 @@ registros antigos.
 O ponto **só é aceito dentro do raio da unidade alocada**. Fora do raio a API recusa o
 registro (`400`, `code: "fora_do_raio"`) e o app nem libera a câmera — quem tem um motivo
 legítimo abre uma irregularidade para análise do professor.
+
+### Registro de ponto: um par por turno
+
+O aluno registra, no máximo, **um check-in e um check-out por turno**. O turno de um
+registro é o da escala vinculada; sem escala, o turno correspondente ao horário do
+ponto (manhã 06–13h, tarde 13–19h, noite nas demais). Um segundo registro do mesmo
+tipo no mesmo turno é recusado (`409`, `code: "registro_duplicado_no_turno"`), e o
+check-out sem check-in no turno também (`400`, `code: "sem_check_in_no_turno"`).
+
+A **descrição das atividades é obrigatória no check-out** — é o registro do que o
+aluno fez no estágio. Sem ela a API recusa o fechamento (`400`,
+`code: "descricao_obrigatoria"`) e o botão da tela fica desabilitado.
+
+`GET /api/attendance/shift-status` devolve a situação do turno corrente (o que já foi
+registrado e o que ainda está liberado); é ele que a tela de registro consulta.
 
 ### Permissão de atraso
 
@@ -183,6 +209,12 @@ com a própria conta (`GET /api/auth/terms`, `POST /api/auth/accept-terms`).
 
 Cadastro das unidades (manual ou por planilha `.xlsx`/`.csv`), geocodificação dos
 endereços via **OpenStreetMap/Nominatim** e alocação de estagiários com histórico.
+
+A alocação é **por turno**: o mesmo aluno pode estagiar de manhã em uma unidade e à
+tarde em outra, mas nunca ter duas alocações ativas no mesmo turno — a regra vale na
+API (`409`, `code: "alocacao_duplicada_no_turno"`) e no índice único
+`UX_Alocacoes_EstagiarioTurnoAtivo`. Trocar de unidade encerra a alocação **daquele
+turno**; as dos outros turnos continuam valendo.
 
 As unidades ficam na tabela **`Locais`** — a mesma que o check-in usa para o
 geofence —, então a coordenada geocodificada já vale para validar a presença do
@@ -279,7 +311,7 @@ frontend/src/app/
 │   ├── historico/                # Histórico de presenças do aluno
 │   ├── acompanhamentos/          # Acompanhamentos formativos
 │   ├── preceptor/                # Painel do preceptor
-│   ├── locais/                   # Gestão de locais (supervisor)
+│   ├── unidades/                 # Unidades de saúde (tela única do cadastro de locais)
 │   ├── rodizios/                 # Gestão de rodízios (supervisor)
 │   ├── usuarios/                 # Gestão de usuários (supervisor)
 │   └── relatorios/               # Relatórios exportáveis
@@ -303,7 +335,9 @@ Base URL (produção): `https://estagiocheckapi-production.up.railway.app/api`
 | POST | `/attendance/check-in` | Sim (aluno) | Registrar check-in |
 | POST | `/attendance/check-out` | Sim (aluno) | Registrar check-out |
 | GET | `/attendance/active-schedule` | Sim | Escala ativa no momento |
+| GET | `/attendance/shift-status` | Sim | Situação do ponto no turno corrente |
 | GET | `/dashboard` | Sim | Estatísticas do dashboard |
+| GET | `/dashboard/status-pendentes` | Sim | Avisos do card "Status Pendentes" |
 | GET/POST | `/evaluations` | Sim | Avaliações formativas |
 | GET/POST | `/followups` | Sim | Acompanhamentos formativos |
 | GET/POST/PUT/DELETE | `/groups` | Sim | Grupos de alunos |
@@ -311,6 +345,7 @@ Base URL (produção): `https://estagiocheckapi-production.up.railway.app/api`
 | GET | `/preceptor` | Sim (preceptor) | Painel do preceptor |
 | GET | `/reports` | Sim | Relatórios |
 | GET/POST/PUT/DELETE | `/users` | Sim (professor) | Gestão de usuários |
+| GET | `/users/vinculos-institucionais` | Sim (gestão) | Opções do vínculo institucional |
 | PATCH | `/users/{id}/late-permission` | Sim (professor) | Permissão de atraso do aluno |
 | PATCH | `/users/{id}/shift` | Sim (professor) | Troca de turno do aluno |
 | GET/POST | `/irregularities` | Sim | Irregularidades do ponto |
@@ -321,9 +356,10 @@ Base URL (produção): `https://estagiocheckapi-production.up.railway.app/api`
 | POST | `/unidades-saude/importar/preview` | Sim (professor) | Prévia da planilha, sem gravar |
 | POST | `/unidades-saude/importar/confirmar` | Sim (professor) | Confirma e enfileira geocodificação |
 | POST | `/unidades-saude/{id}/geocodificar` | Sim (professor) | Geocodifica pelo Nominatim |
-| GET/POST/DELETE | `/unidades-saude/{id}/estagiarios` | Sim | Alocação de estagiários |
+| GET/POST/DELETE | `/unidades-saude/{id}/estagiarios` | Sim | Alocação de estagiários (por turno) |
 | GET | `/alocacoes` | Sim (gestão) | Todas as alocações, com histórico |
 | GET | `/estagiarios/{id}/unidade` | Sim | Unidade do estagiário (aluno: só a própria) |
+| GET | `/estagiarios/{id}/unidades` | Sim | Todas as unidades ativas do estagiário, uma por turno |
 | GET | `/auth/terms` | Não | Texto do termo de responsabilidade |
 | POST | `/auth/accept-terms` | Sim | Registra o aceite do termo |
 
@@ -453,8 +489,11 @@ database/
 ├── 005_irregularidades_e_perfis.sql      # Irregularidades, permissão de atraso,
 │                                         # perfil coordenadora, RGM sem o "14"
 ├── 006_fuso_brasilia.sql                 # Registros de ponto em GMT-3 (executar UMA vez)
-└── 007_unidades_saude.sql                # Unidades de saúde, alocações e cache
-                                          # de geocodificação
+├── 007_unidades_saude.sql                # Unidades de saúde, alocações e cache
+│                                         # de geocodificação
+└── 008_turno_alocacao_e_ponto.sql        # Alocação por turno (índice único por
+                                          # estagiário + turno) e índices das
+                                          # travas do ponto e da irregularidade
 ```
 
 ---

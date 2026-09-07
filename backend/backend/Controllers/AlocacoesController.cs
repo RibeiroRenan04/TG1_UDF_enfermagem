@@ -12,9 +12,13 @@ namespace EstagioCheck.API.Controllers;
 /// <summary>
 /// Alocação de estagiários às unidades de saúde.
 ///
-/// Só usuários com papel "aluno" podem ser alocados, e cada um tem no máximo uma
-/// alocação ativa. Trocar de unidade encerra a alocação atual e cria outra: o
-/// histórico é preservado, nunca sobrescrito.
+/// Só usuários com papel "aluno" podem ser alocados. A alocação é <b>por turno</b>:
+/// o mesmo aluno pode estagiar de manhã em uma unidade e à tarde em outra, mas
+/// nunca ter duas alocações ativas no mesmo turno — a regra vale na API e no
+/// índice único do banco.
+///
+/// Trocar de unidade encerra a alocação daquele turno e cria outra: o histórico é
+/// preservado, nunca sobrescrito.
 /// </summary>
 [ApiController]
 [Route("api")]
@@ -22,6 +26,11 @@ namespace EstagioCheck.API.Controllers;
 public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> logger) : ControllerBase
 {
     // ── Estagiários de uma unidade ────────────────────────────────────────────
+    /// <summary>
+    /// Estagiários alocados na unidade. O preceptor e a gestão veem a lista toda;
+    /// o aluno consulta a unidade (precisa saber onde estagia), mas só enxerga a
+    /// própria alocação — a relação dos colegas não é dado dele.
+    /// </summary>
     [HttpGet("unidades-saude/{id}/estagiarios")]
     public async Task<ActionResult<List<AlocacaoDto>>> GetEstagiariosDaUnidade(
         Guid id, [FromQuery] bool incluirEncerradas = false)
@@ -37,9 +46,16 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
 
         if (!incluirEncerradas) query = query.Where(a => a.Ativo);
 
+        if ((User.FindFirstValue(ClaimTypes.Role) ?? Roles.Aluno) == Roles.Aluno)
+        {
+            var eu = UsuarioAtual();
+            query = query.Where(a => a.StudentId == eu);
+        }
+
         var alocacoes = await query
             .OrderByDescending(a => a.Ativo)
             .ThenBy(a => a.Student.FullName)
+            .ThenBy(a => a.Shift)
             .ToListAsync();
 
         return Ok(alocacoes.Select(Map));
@@ -68,22 +84,46 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
 
         var alunos = await query.OrderBy(u => u.FullName).Take(100).ToListAsync();
 
+        var alunoIds = alunos.Select(u => u.Id).ToList();
+
+        // Um aluno pode ter várias alocações ativas — uma por turno.
         var ativas = await db.StudentAllocations
             .Include(a => a.Location)
-            .Where(a => a.Ativo)
-            .ToDictionaryAsync(a => a.StudentId, a => a.Location);
+            .Where(a => a.Ativo && alunoIds.Contains(a.StudentId))
+            .ToListAsync();
 
-        return Ok(alunos.Select(u => new EstagiarioDisponivelDto
+        var porAluno = ativas
+            .GroupBy(a => a.StudentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        return Ok(alunos.Select(u =>
         {
-            Id = u.Id,
-            Nome = u.FullName,
-            Rgm = u.Rgm,
-            Email = u.Email,
-            Semestre = u.Semester,
-            Turno = u.Shift,
-            Turma = u.GroupMembership?.Group?.Code,
-            UnidadeAtualId = ativas.TryGetValue(u.Id, out var l) ? l.Id : null,
-            UnidadeAtualNome = ativas.TryGetValue(u.Id, out var l2) ? l2.Name : null
+            var minhas = porAluno.GetValueOrDefault(u.Id, []);
+            var ocupados = minhas.Select(a => a.Shift).ToHashSet();
+            // A unidade "atual" continua sendo exibida: é a do turno cadastrado do
+            // aluno, ou a primeira que ele tiver.
+            var principal = minhas.FirstOrDefault(a => a.Shift == Turnos.Normalizar(u.Shift))
+                         ?? minhas.FirstOrDefault();
+
+            return new EstagiarioDisponivelDto
+            {
+                Id = u.Id,
+                Nome = u.FullName,
+                Rgm = u.Rgm,
+                Email = u.Email,
+                Semestre = u.Semester,
+                Turno = u.Shift,
+                Turma = u.GroupMembership?.Group?.Code,
+                UnidadeAtualId = principal?.LocationId,
+                UnidadeAtualNome = principal?.Location?.Name,
+                AlocacoesAtivas = [.. minhas.Select(a => new AlocacaoPorTurnoDto
+                {
+                    Turno = a.Shift,
+                    UnidadeId = a.LocationId,
+                    UnidadeNome = a.Location?.Name ?? string.Empty
+                })],
+                TurnosDisponiveis = [.. Turnos.Validos.Where(t => !ocupados.Contains(t))]
+            };
         }));
     }
 
@@ -113,40 +153,59 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
 
         var inicio = dto.DataInicio ?? BrasiliaTime.Hoje;
 
-        var alocacaoAtual = await db.StudentAllocations
+        // O turno é a chave da alocação. Sem turno informado, vale o do cadastro do
+        // aluno; sem esse também, a manhã.
+        var turnoInformado = Turnos.Normalizar(dto.Turno);
+        if (!string.IsNullOrWhiteSpace(dto.Turno) && turnoInformado == null)
+            return BadRequest(new { message = "Turno inválido. Use manhã, tarde ou noite." });
+
+        var turno = turnoInformado ?? Turnos.Normalizar(aluno.Shift) ?? Turnos.Manha;
+
+        // Alocações em OUTROS turnos convivem: o aluno pode estagiar de manhã em uma
+        // unidade e à tarde em outra. A trava vale só para o mesmo turno.
+        var alocacaoDoTurno = await db.StudentAllocations
             .Include(a => a.Location)
-            .FirstOrDefaultAsync(a => a.StudentId == aluno.Id && a.Ativo);
+            .FirstOrDefaultAsync(a => a.StudentId == aluno.Id && a.Ativo && a.Shift == turno);
 
-        if (alocacaoAtual != null)
+        if (alocacaoDoTurno != null)
         {
-            if (alocacaoAtual.LocationId == id)
-                return Conflict(new { message = $"{aluno.FullName} já está alocado(a) nesta unidade." });
+            if (alocacaoDoTurno.LocationId == id)
+                return Conflict(new
+                {
+                    message = $"{aluno.FullName} já está alocado(a) nesta unidade no turno da "
+                            + $"{Turnos.Rotulo(turno)}.",
+                    code = "alocacao_duplicada_no_turno",
+                    turno
+                });
 
-            // Trocar de unidade precisa ser explícito: encerra a anterior e abre outra,
-            // mantendo o histórico.
+            // Trocar de unidade precisa ser explícito: encerra a anterior daquele
+            // turno e abre outra, mantendo o histórico.
             if (!dto.EncerrarAlocacaoAtual)
                 return Conflict(new
                 {
-                    message = $"{aluno.FullName} já está alocado(a) em \"{alocacaoAtual.Location.Name}\". "
-                            + "Encerre a alocação atual para transferir.",
+                    message = $"{aluno.FullName} já está alocado(a) em \"{alocacaoDoTurno.Location.Name}\" "
+                            + $"no turno da {Turnos.Rotulo(turno)}. "
+                            + "Encerre a alocação desse turno para transferir, ou escolha outro turno.",
                     code = "alocacao_ativa_existente",
-                    unidadeAtualId = alocacaoAtual.LocationId,
-                    unidadeAtualNome = alocacaoAtual.Location.Name
+                    turno,
+                    unidadeAtualId = alocacaoDoTurno.LocationId,
+                    unidadeAtualNome = alocacaoDoTurno.Location.Name
                 });
 
-            alocacaoAtual.Ativo = false;
-            alocacaoAtual.EndDate = inicio;
-            alocacaoAtual.UpdatedAt = BrasiliaTime.Agora;
+            alocacaoDoTurno.Ativo = false;
+            alocacaoDoTurno.EndDate = inicio;
+            alocacaoDoTurno.UpdatedAt = BrasiliaTime.Agora;
 
             logger.LogInformation(
-                "Alocação de {Aluno} na unidade {Unidade} encerrada para transferência.",
-                aluno.FullName, alocacaoAtual.Location.Name);
+                "Alocação de {Aluno} na unidade {Unidade} ({Turno}) encerrada para transferência.",
+                aluno.FullName, alocacaoDoTurno.Location.Name, turno);
         }
 
         var alocacao = new StudentAllocation
         {
             LocationId = id,
             StudentId = aluno.Id,
+            Shift = turno,
             StartDate = inicio,
             Ativo = true,
             Observacao = dto.Observacao?.Trim(),
@@ -154,28 +213,77 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         };
 
         db.StudentAllocations.Add(alocacao);
-        await db.SaveChangesAsync();
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException) when (alocacaoDoTurno == null)
+        {
+            // O índice único (estagiário + turno, ativas) é a última barreira contra
+            // duas requisições simultâneas para o mesmo turno.
+            return Conflict(new
+            {
+                message = $"{aluno.FullName} já possui uma alocação ativa no turno da "
+                        + $"{Turnos.Rotulo(turno)}.",
+                code = "alocacao_duplicada_no_turno",
+                turno
+            });
+        }
 
         await db.Entry(alocacao).Reference(a => a.Student).LoadAsync();
         await db.Entry(alocacao).Reference(a => a.Location).LoadAsync();
 
-        logger.LogInformation("Alocação criada: {Aluno} → {Unidade}.", aluno.FullName, unidade.Name);
+        logger.LogInformation("Alocação criada: {Aluno} → {Unidade} ({Turno}).",
+            aluno.FullName, unidade.Name, turno);
         return Ok(Map(alocacao));
     }
 
     // ── Encerrar alocação ─────────────────────────────────────────────────────
+    /// <summary>
+    /// Encerra a alocação ativa do estagiário na unidade. Com vários turnos por
+    /// aluno, <paramref name="turno"/> diz qual encerrar; sem ele, encerra a única
+    /// existente e recusa quando houver mais de uma.
+    /// </summary>
     [HttpDelete("unidades-saude/{id}/estagiarios/{idEstagiario}")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<AlocacaoDto>> Encerrar(
-        Guid id, Guid idEstagiario, [FromBody] EncerrarAlocacaoDto? dto)
+        Guid id, Guid idEstagiario, [FromBody] EncerrarAlocacaoDto? dto, [FromQuery] string? turno = null)
     {
-        var alocacao = await db.StudentAllocations
+        var ativas = await db.StudentAllocations
             .Include(a => a.Student)
             .Include(a => a.Location)
-            .FirstOrDefaultAsync(a => a.LocationId == id && a.StudentId == idEstagiario && a.Ativo);
+            .Where(a => a.LocationId == id && a.StudentId == idEstagiario && a.Ativo)
+            .ToListAsync();
 
-        if (alocacao == null)
+        if (ativas.Count == 0)
             return NotFound(new { message = "Alocação ativa não encontrada para este estagiário nesta unidade." });
+
+        var turnoAlvo = Turnos.Normalizar(turno);
+        if (!string.IsNullOrWhiteSpace(turno) && turnoAlvo == null)
+            return BadRequest(new { message = "Turno inválido. Use manhã, tarde ou noite." });
+
+        StudentAllocation? alocacao = turnoAlvo != null
+            ? ativas.FirstOrDefault(a => a.Shift == turnoAlvo)
+            : ativas.Count == 1 ? ativas[0] : null;
+
+        if (alocacao == null && turnoAlvo != null)
+            return NotFound(new
+            {
+                message = $"Nenhuma alocação ativa no turno da {Turnos.Rotulo(turnoAlvo)} "
+                        + "para este estagiário nesta unidade."
+            });
+
+        // Sem turno informado e com mais de uma alocação ativa, encerrar qual delas
+        // seria um chute: a API pede o turno em vez de escolher por conta própria.
+        if (alocacao == null)
+            return BadRequest(new
+            {
+                message = "O estagiário tem mais de uma alocação ativa nesta unidade. "
+                        + "Informe o turno que deve ser encerrado.",
+                code = "turno_obrigatorio",
+                turnos = ativas.Select(a => a.Shift).ToList()
+            });
 
         // Encerrar preserva a linha: é o histórico de onde o aluno esteve.
         alocacao.Ativo = false;
@@ -187,8 +295,8 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         await db.SaveChangesAsync();
 
         logger.LogInformation(
-            "Alocação encerrada: {Aluno} deixou a unidade {Unidade}.",
-            alocacao.Student.FullName, alocacao.Location.Name);
+            "Alocação encerrada: {Aluno} deixou a unidade {Unidade} ({Turno}).",
+            alocacao.Student.FullName, alocacao.Location.Name, alocacao.Shift);
 
         return Ok(Map(alocacao));
     }
@@ -200,6 +308,7 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         [FromQuery] Guid? unidadeId,
         [FromQuery] Guid? estagiarioId,
         [FromQuery] bool? ativo,
+        [FromQuery] string? turno,
         [FromQuery] DateOnly? de,
         [FromQuery] DateOnly? ate)
     {
@@ -212,12 +321,15 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         if (unidadeId.HasValue) query = query.Where(a => a.LocationId == unidadeId.Value);
         if (estagiarioId.HasValue) query = query.Where(a => a.StudentId == estagiarioId.Value);
         if (ativo.HasValue) query = query.Where(a => a.Ativo == ativo.Value);
+        var turnoFiltro = Turnos.Normalizar(turno);
+        if (turnoFiltro != null) query = query.Where(a => a.Shift == turnoFiltro);
         if (de.HasValue) query = query.Where(a => a.StartDate >= de.Value);
         if (ate.HasValue) query = query.Where(a => a.StartDate <= ate.Value);
 
         var alocacoes = await query
             .OrderByDescending(a => a.Ativo)
             .ThenByDescending(a => a.StartDate)
+            .ThenBy(a => a.Shift)
             .Take(500)
             .ToListAsync();
 
@@ -226,24 +338,52 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
 
     /// <summary>
     /// Unidade de um estagiário. O aluno só enxerga a própria — e não a altera.
+    ///
+    /// Com alocação por turno o aluno pode ter mais de uma; sem
+    /// <paramref name="turno"/>, devolve a do turno cadastrado dele.
     /// </summary>
     [HttpGet("estagiarios/{id}/unidade")]
-    public async Task<ActionResult<AlocacaoDto>> GetUnidadeDoEstagiario(Guid id)
+    public async Task<ActionResult<AlocacaoDto>> GetUnidadeDoEstagiario(Guid id, [FromQuery] string? turno = null)
     {
         var role = User.FindFirstValue(ClaimTypes.Role) ?? Roles.Aluno;
         if (role == Roles.Aluno && UsuarioAtual() != id)
             return Forbid();
 
-        var alocacao = await db.StudentAllocations
+        var ativas = await db.StudentAllocations
             .Include(a => a.Student)
             .Include(a => a.Location)
             .Include(a => a.CreatedBy)
-            .FirstOrDefaultAsync(a => a.StudentId == id && a.Ativo);
+            .Where(a => a.StudentId == id && a.Ativo)
+            .ToListAsync();
 
-        if (alocacao == null)
+        if (ativas.Count == 0)
             return NotFound(new { message = "Nenhuma unidade alocada para este estagiário." });
 
+        var turnoAlvo = Turnos.Normalizar(turno)
+                     ?? Turnos.Normalizar(ativas[0].Student?.Shift);
+
+        var alocacao = ativas.FirstOrDefault(a => a.Shift == turnoAlvo) ?? ativas[0];
+
         return Ok(Map(alocacao));
+    }
+
+    /// <summary>Todas as alocações ativas do estagiário, uma por turno.</summary>
+    [HttpGet("estagiarios/{id}/unidades")]
+    public async Task<ActionResult<List<AlocacaoDto>>> GetUnidadesDoEstagiario(Guid id)
+    {
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? Roles.Aluno;
+        if (role == Roles.Aluno && UsuarioAtual() != id)
+            return Forbid();
+
+        var ativas = await db.StudentAllocations
+            .Include(a => a.Student)
+            .Include(a => a.Location)
+            .Include(a => a.CreatedBy)
+            .Where(a => a.StudentId == id && a.Ativo)
+            .OrderBy(a => a.Shift)
+            .ToListAsync();
+
+        return Ok(ativas.Select(Map));
     }
 
     /// <summary>Histórico de alocações de um estagiário.</summary>
@@ -260,6 +400,7 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
             .Include(a => a.CreatedBy)
             .Where(a => a.StudentId == id)
             .OrderByDescending(a => a.StartDate)
+            .ThenBy(a => a.Shift)
             .ToListAsync();
 
         return Ok(alocacoes.Select(Map));
@@ -277,6 +418,7 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         UnidadeCidade = a.Location?.Cidade,
         EstagiarioId = a.StudentId,
         EstagiarioNome = a.Student?.FullName ?? string.Empty,
+        Turno = a.Shift,
         EstagiarioRgm = a.Student?.Rgm,
         EstagiarioEmail = a.Student?.Email,
         EstagiarioSemestre = a.Student?.Semester,

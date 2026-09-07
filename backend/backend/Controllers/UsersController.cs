@@ -165,6 +165,25 @@ public class UsersController(AppDbContext db) : ControllerBase
         return Ok(MapToDto(user));
     }
 
+    // ── Vínculo institucional ─────────────────────────────────────────────────
+    /// <summary>
+    /// Opções de vínculo institucional do cadastro de preceptor/professor: as
+    /// unidades de saúde ativas. A lista suspensa da tela vem daqui, e o cadastro
+    /// só aceita um destes valores — em texto livre a mesma unidade chegava
+    /// grafada de várias formas.
+    /// </summary>
+    [HttpGet("vinculos-institucionais")]
+    public async Task<ActionResult<List<string>>> GetVinculosInstitucionais() =>
+        Ok(await VinculosInstitucionaisAsync());
+
+    private async Task<List<string>> VinculosInstitucionaisAsync() =>
+        await db.Locations
+            .Where(l => l.Ativo)
+            .Select(l => l.Name)
+            .Distinct()
+            .OrderBy(nome => nome)
+            .ToListAsync();
+
     // ── Criar preceptor / professor / coordenadora ────────────────────────────
     /// <summary>
     /// Cadastra preceptor, professor (supervisor) ou coordenadora. O e-mail
@@ -179,6 +198,25 @@ public class UsersController(AppDbContext db) : ControllerBase
         if (dto.Role is not (Roles.Preceptor or Roles.Supervisor or Roles.Coordenadora))
             return BadRequest(new { message = "Papel deve ser 'preceptor', 'supervisor' ou 'coordenadora'." });
 
+        // Vínculo institucional é lista fechada (ver GetVinculosInstitucionais):
+        // a tela oferece um dropdown e a API confirma a escolha.
+        var vinculo = dto.Institution?.Trim();
+        if (!string.IsNullOrEmpty(vinculo))
+        {
+            var opcoes = await VinculosInstitucionaisAsync();
+            var escolhido = opcoes.FirstOrDefault(o => string.Equals(o, vinculo, StringComparison.OrdinalIgnoreCase));
+            if (escolhido == null)
+                return BadRequest(new
+                {
+                    message = $"Vínculo institucional \"{vinculo}\" não está cadastrado. "
+                            + "Escolha uma das unidades da lista ou cadastre a unidade antes.",
+                    code = "vinculo_invalido"
+                });
+
+            // Grava exatamente como está no cadastro da unidade.
+            vinculo = escolhido;
+        }
+
         var email = dto.Email.Trim().ToLower();
 
         var exists = await db.Users.AnyAsync(u => u.Email == email);
@@ -191,7 +229,7 @@ public class UsersController(AppDbContext db) : ControllerBase
             Email = email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
             Role = dto.Role,
-            Institution = dto.Institution?.Trim(),
+            Institution = string.IsNullOrEmpty(vinculo) ? null : vinculo,
             Phone = dto.Phone?.Trim(),
             MustChangePassword = true
         };

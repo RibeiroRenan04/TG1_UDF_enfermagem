@@ -126,6 +126,11 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
         if (alreadyExists)
             return Conflict(new { message = "Estabelecimento já importado." });
 
+        // O estabelecimento entra como unidade de saúde comum: "instituição" é a
+        // instituição de ensino, marcada só nela — é o que a regra de sexta-feira
+        // do ponto verifica. Marcar toda UBS como instituição anulava a regra.
+        var temCoordenadas = dto.Latitude != 0 || dto.Longitude != 0;
+
         var loc = new Location
         {
             Name = dto.Nome.Trim(),
@@ -133,10 +138,21 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
             Latitude = dto.Latitude,
             Longitude = dto.Longitude,
             RadiusMeters = 150,
-            IsInstitution = true,
+            IsInstitution = false,
             ShiftStart = "07:00",
             ShiftEnd = "19:00",
-            CodigoCnes = dto.CodigoCnes
+            CodigoCnes = dto.CodigoCnes,
+            Tipo = "UBS",
+            Uf = "DF",
+            Ativo = true,
+            // As coordenadas vêm do CNES, não do Nominatim: registramos a origem
+            // para a tela de unidades não pedir revisão do que já está conferido.
+            OrigemCoordenadas = temCoordenadas ? Models.OrigemCoordenadas.Outro : null,
+            StatusGeocodificacao = temCoordenadas
+                ? Models.StatusGeocodificacao.Sucesso
+                : Models.StatusGeocodificacao.Pendente,
+            PrecisaoLocalizacao = temCoordenadas ? "CNES" : null,
+            GeocodificadoEm = temCoordenadas ? BrasiliaTime.Agora : null
         };
 
         db.Locations.Add(loc);
