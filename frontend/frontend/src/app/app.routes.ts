@@ -93,6 +93,20 @@ export const routes: Routes = [
         canActivate: [roleGuard(['supervisor', 'coordenadora'])],
         loadComponent: () => import('./features/rodizios/rodizios.component').then(m => m.RodiziosComponent)
       },
+      // ── Programação do dia ──
+      // O aluno acompanha a agenda das atividades remotas da própria turma; a
+      // gestão cadastra as atividades e as exceções do calendário.
+      {
+        path: 'atividades-remotas',
+        loadComponent: () => import('./features/atividades-remotas/atividades-remotas.component')
+          .then(m => m.AtividadesRemotasComponent)
+      },
+      {
+        path: 'excecoes',
+        canActivate: [roleGuard(['supervisor', 'coordenadora'])],
+        loadComponent: () => import('./features/excecoes/excecoes.component')
+          .then(m => m.ExcecoesComponent)
+      },
       {
         path: 'usuarios',
         canActivate: [roleGuard(['supervisor', 'coordenadora'])],

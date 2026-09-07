@@ -1,0 +1,250 @@
+<div class="page-header">
+  <h1>Atividades remotas</h1>
+  <button mat-raised-button color="primary" *ngIf="podeEditar()" (click)="novo()">
+    <mat-icon>add</mat-icon> Nova atividade
+  </button>
+</div>
+
+<p class="page-intro">
+  Nos dias em que a turma fica em casa, a presença não é validada por localização:
+  o aluno informa o código da atividade dentro do prazo e, quando exigida, entrega
+  a tarefa.
+</p>
+
+<div class="carregando" *ngIf="loading()">
+  <mat-spinner diameter="32"></mat-spinner>
+  <span>Carregando…</span>
+</div>
+
+<!-- ── Formulário do professor ─────────────────────────────────────────────── -->
+<mat-card class="form-card" *ngIf="showForm()">
+  <mat-card-header>
+    <mat-card-title>{{ editando() ? 'Editar atividade' : 'Nova atividade remota' }}</mat-card-title>
+    <mat-card-subtitle>
+      O código de presença é gerado pelo sistema ao salvar.
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <form [formGroup]="form" class="grid">
+      <mat-form-field appearance="outline" class="col-2">
+        <mat-label>Título</mat-label>
+        <input matInput formControlName="title" placeholder="Estudo dirigido sobre segurança do paciente">
+        <mat-error>Informe o título da atividade</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="col-2">
+        <mat-label>Descrição</mat-label>
+        <textarea matInput rows="2" formControlName="description"
+                  placeholder="Leitura do material e resposta ao questionário."></textarea>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Turma ou grupo autorizado</mat-label>
+        <mat-select formControlName="groupId">
+          <mat-option *ngFor="let g of groups()" [value]="g.id">
+            {{ g.code }} — {{ g.name }}
+          </mat-option>
+        </mat-select>
+        <mat-hint>Só os alunos deste grupo conseguem usar o código.</mat-hint>
+        <mat-error>Selecione a turma</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Rodízio (opcional)</mat-label>
+        <mat-select formControlName="scheduleId">
+          <mat-option value="">Nenhum</mat-option>
+          <mat-option *ngFor="let s of rodiziosDaTurma()" [value]="s.id">
+            {{ s.periodLabel }} — {{ s.locationName }}
+          </mat-option>
+        </mat-select>
+        <mat-hint>Vincule quando a atividade substitui um dia do rodízio.</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Data</mat-label>
+        <input matInput type="date" formControlName="activityDate">
+        <mat-error>Informe a data</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Carga horária (h)</mat-label>
+        <input matInput type="number" step="0.5" min="0.5" max="24" formControlName="estimatedHours">
+        <mat-hint>Horas creditadas a quem concluir.</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Início</mat-label>
+        <input matInput type="time" formControlName="startTime">
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Término</mat-label>
+        <input matInput type="time" formControlName="endTime">
+        <mat-hint>Passado esse horário o código deixa de valer.</mat-hint>
+      </mat-form-field>
+
+      <div class="col-2 checkbox-linha">
+        <mat-checkbox formControlName="requiresTask">
+          Exigir uma tarefa complementar além do código
+        </mat-checkbox>
+      </div>
+
+      <ng-container *ngIf="exigeTarefa()">
+        <mat-form-field appearance="outline">
+          <mat-label>Tipo da tarefa</mat-label>
+          <mat-select formControlName="taskType">
+            <mat-option *ngFor="let t of tiposTarefa" [value]="t.valor">{{ t.rotulo }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Instruções da tarefa</mat-label>
+          <input matInput formControlName="taskInstructions"
+                 placeholder="Responda ao questionário do material da aula 4.">
+        </mat-form-field>
+      </ng-container>
+    </form>
+  </mat-card-content>
+  <mat-card-actions>
+    <button mat-raised-button color="primary" [disabled]="saving()" (click)="salvar()">
+      <mat-spinner *ngIf="saving()" diameter="20"></mat-spinner>
+      <span *ngIf="!saving()">Salvar</span>
+    </button>
+    <button mat-button (click)="showForm.set(false)">Cancelar</button>
+  </mat-card-actions>
+</mat-card>
+
+<!-- ── Lista do professor ──────────────────────────────────────────────────── -->
+<ng-container *ngIf="!loading() && !ehAluno()">
+  <mat-card class="vazio" *ngIf="!atividades().length">
+    <mat-icon>event_note</mat-icon>
+    <p>Nenhuma atividade remota cadastrada.</p>
+  </mat-card>
+
+  <mat-accordion multi="false">
+    <mat-expansion-panel *ngFor="let a of atividades()" (opened)="carregarParticipacoes(a)">
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <span class="titulo">{{ a.title }}</span>
+          <span class="situacao" [class.aberta]="a.situacao === 'aberta'"
+                [class.encerrada]="a.situacao === 'encerrada'">{{ a.situacao }}</span>
+        </mat-panel-title>
+        <mat-panel-description>
+          {{ a.groupCode }} · {{ a.activityDate | date:'dd/MM/yyyy' }}
+          · {{ a.startTime }}–{{ a.endTime }}
+          · {{ a.totalParticipantes }}/{{ a.totalAlunosGrupo }} alunos
+        </mat-panel-description>
+      </mat-expansion-panel-header>
+
+      <div class="detalhe">
+        <div class="codigo-box">
+          <span class="codigo-label">Código de presença</span>
+          <span class="codigo">{{ a.presenceCode }}</span>
+          <button mat-icon-button matTooltip="Copiar código" (click)="copiarCodigo(a)">
+            <mat-icon>content_copy</mat-icon>
+          </button>
+        </div>
+
+        <p *ngIf="a.description">{{ a.description }}</p>
+
+        <div class="meta">
+          <span><strong>Carga horária:</strong> {{ a.estimatedHours }} h</span>
+          <span *ngIf="a.periodLabel"><strong>Rodízio:</strong> {{ a.periodLabel }}</span>
+          <span><strong>Professor:</strong> {{ a.professorName }}</span>
+        </div>
+
+        <div class="tarefa" *ngIf="a.requiresTask">
+          <mat-icon>fact_check</mat-icon>
+          <div>
+            <strong>Tarefa exigida: {{ a.taskTypeLabel }}</strong>
+            <span *ngIf="a.taskInstructions"> — {{ a.taskInstructions }}</span>
+          </div>
+        </div>
+
+        <mat-divider></mat-divider>
+
+        <h3>Participações</h3>
+        <p class="sem-participacoes" *ngIf="!participantes(a.id).length">
+          Nenhum aluno registrou participação ainda.
+        </p>
+        <table mat-table [dataSource]="participantes(a.id)" *ngIf="participantes(a.id).length">
+          <ng-container matColumnDef="aluno">
+            <th mat-header-cell *matHeaderCellDef>Aluno</th>
+            <td mat-cell *matCellDef="let p">{{ p.studentName }}</td>
+          </ng-container>
+          <ng-container matColumnDef="rgm">
+            <th mat-header-cell *matHeaderCellDef>RGM</th>
+            <td mat-cell *matCellDef="let p">{{ p.studentRgm || '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="registro">
+            <th mat-header-cell *matHeaderCellDef>Registro</th>
+            <td mat-cell *matCellDef="let p">{{ p.registeredAt | date:'dd/MM HH:mm' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="entrega">
+            <th mat-header-cell *matHeaderCellDef>Entrega</th>
+            <td mat-cell *matCellDef="let p" class="entrega">{{ p.taskResponse || '—' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="colunas"></tr>
+          <tr mat-row *matRowDef="let row; columns: colunas"></tr>
+        </table>
+
+        <div class="acoes" *ngIf="podeEditar()">
+          <button mat-stroked-button (click)="editar(a)">
+            <mat-icon>edit</mat-icon> Editar
+          </button>
+          <button mat-stroked-button *ngIf="a.ativo" (click)="encerrar(a)"
+                  matTooltip="Invalida o código imediatamente">
+            <mat-icon>lock_clock</mat-icon> Encerrar
+          </button>
+          <button mat-stroked-button (click)="novoCodigo(a)"
+                  matTooltip="Use quando o código vazou para fora do grupo">
+            <mat-icon>autorenew</mat-icon> Novo código
+          </button>
+          <button mat-stroked-button color="warn" *ngIf="!a.totalParticipantes" (click)="excluir(a)">
+            <mat-icon>delete</mat-icon> Excluir
+          </button>
+        </div>
+      </div>
+    </mat-expansion-panel>
+  </mat-accordion>
+</ng-container>
+
+<!-- ── Agenda do aluno ─────────────────────────────────────────────────────── -->
+<ng-container *ngIf="!loading() && ehAluno()">
+  <mat-card class="vazio" *ngIf="!minhas().length">
+    <mat-icon>event_note</mat-icon>
+    <p>Nenhuma atividade remota para a sua turma no período.</p>
+  </mat-card>
+
+  <mat-card class="atividade-card" *ngFor="let a of minhas()"
+            [class.concluida]="a.jaRegistrada">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>{{ a.jaRegistrada ? 'task_alt' : 'assignment' }}</mat-icon>
+      <mat-card-title>{{ a.title }}</mat-card-title>
+      <mat-card-subtitle>
+        {{ a.activityDate | date:'dd/MM/yyyy' }} · {{ a.startTime }}–{{ a.endTime }}
+        · {{ a.estimatedHours }} h
+        <span class="situacao" [class.aberta]="a.situacao === 'aberta'"
+              [class.encerrada]="a.situacao === 'encerrada'">{{ a.situacao }}</span>
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <p *ngIf="a.description">{{ a.description }}</p>
+      <div class="tarefa" *ngIf="a.requiresTask">
+        <mat-icon>fact_check</mat-icon>
+        <div>
+          <strong>Tarefa exigida: {{ a.taskTypeLabel }}</strong>
+          <span *ngIf="a.taskInstructions"> — {{ a.taskInstructions }}</span>
+        </div>
+      </div>
+      <p class="registrada" *ngIf="a.jaRegistrada">
+        <mat-icon>check_circle</mat-icon>
+        Participação registrada em {{ a.registradaEm | date:'dd/MM \'às\' HH:mm' }}.
+      </p>
+      <p class="pendente" *ngIf="!a.jaRegistrada && a.situacao === 'aberta'">
+        <mat-icon>schedule</mat-icon>
+        Informe o código em <strong>Registrar presença</strong> antes do fim do prazo.
+      </p>
+    </mat-card-content>
+  </mat-card>
+</ng-container>

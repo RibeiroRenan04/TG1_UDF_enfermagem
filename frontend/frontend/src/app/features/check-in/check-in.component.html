@@ -2,148 +2,279 @@
   <h1>Registrar Presença</h1>
 </div>
 
-<!-- Escala ativa -->
-<mat-card class="schedule-card" *ngIf="activeSchedule() as sched">
-  <mat-card-header>
-    <mat-icon mat-card-avatar>business</mat-icon>
-    <mat-card-title>{{ sched.location.name }}</mat-card-title>
-    <mat-card-subtitle>Turno {{ sched.shift }} — {{ sched.periodLabel }}</mat-card-subtitle>
-  </mat-card-header>
-</mat-card>
+<div class="carregando" *ngIf="loading()">
+  <mat-spinner diameter="32"></mat-spinner>
+  <span>Carregando a programação de hoje…</span>
+</div>
 
-<mat-card class="no-schedule" *ngIf="!activeSchedule()">
-  <mat-icon>event_busy</mat-icon>
-  <p>Sem escala ativa para hoje.</p>
-</mat-card>
+<ng-container *ngIf="!loading()">
 
-<!-- Situação do turno: 1 check-in e 1 check-out, no máximo -->
-<mat-card class="open-checkin" *ngIf="shiftStatus() as st">
-  <mat-card-header>
-    <mat-icon mat-card-avatar color="accent">{{ st.shiftClosed ? 'task_alt' : 'timer' }}</mat-icon>
-    <mat-card-title>Turno da {{ st.shiftLabel }}</mat-card-title>
-    <mat-card-subtitle>
-      <span *ngIf="st.checkInAt">Entrada {{ st.checkInAt | date:'HH:mm' }}</span>
-      <span *ngIf="st.checkInAt && st.checkOutAt"> · </span>
-      <span *ngIf="st.checkOutAt">Saída {{ st.checkOutAt | date:'HH:mm' }}</span>
-      <span *ngIf="!st.checkInAt">Nenhum registro neste turno ainda.</span>
-    </mat-card-subtitle>
-  </mat-card-header>
-  <mat-card-content *ngIf="st.blockedReason">
-    <div class="turno-fechado">
-      <mat-icon>lock</mat-icon>
-      <span>
-        {{ st.blockedReason }}
-        <a routerLink="/app/irregularidades">Registrar uma irregularidade</a>.
-      </span>
-    </div>
-  </mat-card-content>
-</mat-card>
-
-<!-- Formulário de registro -->
-<mat-card class="register-card" *ngIf="activeSchedule() && !turnoFechado()">
-  <mat-card-header>
-    <mat-card-title>{{ proximaAcao() === 'check_out' ? 'Fazer check-out' : 'Fazer check-in' }}</mat-card-title>
-  </mat-card-header>
-  <mat-card-content>
-
-    <!-- GPS -->
-    <div class="gps-section">
-      <span class="step-label">1. Localização</span>
-      <button mat-stroked-button (click)="getLocation()" [disabled]="gettingLocation()">
-        <mat-spinner *ngIf="gettingLocation()" diameter="18"></mat-spinner>
-        <mat-icon *ngIf="!gettingLocation()">my_location</mat-icon>
-        <span *ngIf="!gettingLocation() && !lat()">Capturar localização</span>
-        <span *ngIf="lat()">{{ lat()! | number:'1.5-5' }}, {{ lon()! | number:'1.5-5' }}</span>
-      </button>
-      <div *ngIf="distance() !== null" class="gps-info">
-        <span>Distância do local: <strong>{{ distance()! | number:'1.0-0' }} m</strong>
-          <ng-container *ngIf="accuracy()"> (precisão ±{{ accuracy()! | number:'1.0-0' }} m)</ng-container>
+  <!-- Programação do dia: o que estava previsto e como a presença é comprovada -->
+  <mat-card class="schedule-card" *ngIf="programacao() as p">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>
+        {{ p.modo === 'presencial' ? 'business' : (p.modo === 'remoto' ? 'home_work' : 'event_busy') }}
+      </mat-icon>
+      <mat-card-title>{{ p.location?.name ?? p.modoLabel }}</mat-card-title>
+      <mat-card-subtitle>
+        Turno da {{ p.turnoLabel }}
+        <ng-container *ngIf="p.periodLabel"> — {{ p.periodLabel }}</ng-container>
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="modo-linha">
+        <span class="modo-chip" [class.presencial]="p.modo === 'presencial'"
+              [class.remoto]="p.modo === 'remoto'" [class.livre]="p.modo === 'sem_atividade'">
+          {{ p.modoLabel }}
         </span>
-        <span class="badge" [class.ok]="inRadius()" [class.bad]="inRadius() === false">
-          <mat-icon>{{ inRadius() ? 'check_circle' : 'error' }}</mat-icon>
-          {{ inRadius() ? 'Dentro do raio' : 'Fora do raio' }}
+        <span class="validacao">
+          <mat-icon>{{ p.validacao === 'localizacao' ? 'my_location'
+                     : (p.validacao === 'codigo' ? 'password' : 'do_not_disturb_on') }}</mat-icon>
+          {{ p.validacao === 'localizacao' ? 'Validação por localização'
+           : (p.validacao === 'codigo' ? 'Validação por código de atividade' : 'Sem obrigação de ponto') }}
         </span>
       </div>
+      <p class="motivo" *ngIf="p.motivo">
+        <mat-icon>info</mat-icon> {{ p.motivo }}
+      </p>
+    </mat-card-content>
+  </mat-card>
 
-      <!-- Fora do raio o ponto não é aceito: nem a foto é liberada. -->
-      <div class="fora-do-raio" *ngIf="inRadius() === false">
-        <mat-icon>wrong_location</mat-icon>
-        <div>
-          <strong>Você está fora do raio de {{ activeSchedule()!.location.name }}.</strong>
-          Aproxime-se
-          <ng-container *ngIf="metrosFaltando()">
-            cerca de <strong>{{ metrosFaltando() }} m</strong>
-          </ng-container>
-          e capture a localização de novo. O ponto só pode ser registrado dentro da unidade.
-          <a routerLink="/app/irregularidades">Registrar uma irregularidade</a> se houver um motivo.
+  <!-- Dia sem obrigação de ponto: feriado, recesso, fim de semana ou cancelamento -->
+  <mat-card class="no-schedule" *ngIf="semAtividade()">
+    <mat-icon>event_available</mat-icon>
+    <p>Não há ponto a registrar hoje.</p>
+    <span class="hint">
+      Se você trabalhou hoje mesmo assim,
+      <a routerLink="/app/irregularidades">registre uma irregularidade</a> para análise.
+    </span>
+  </mat-card>
+
+  <!-- ── Dia presencial ──────────────────────────────────────────────────── -->
+  <ng-container *ngIf="presencial()">
+
+    <!-- Situação do turno: 1 check-in e 1 check-out, no máximo -->
+    <mat-card class="open-checkin" *ngIf="shiftStatus() as st">
+      <mat-card-header>
+        <mat-icon mat-card-avatar color="accent">{{ st.shiftClosed ? 'task_alt' : 'timer' }}</mat-icon>
+        <mat-card-title>Turno da {{ st.shiftLabel }}</mat-card-title>
+        <mat-card-subtitle>
+          <span *ngIf="st.checkInAt">Entrada {{ st.checkInAt | date:'HH:mm' }}</span>
+          <span *ngIf="st.checkInAt && st.checkOutAt"> · </span>
+          <span *ngIf="st.checkOutAt">Saída {{ st.checkOutAt | date:'HH:mm' }}</span>
+          <span *ngIf="!st.checkInAt">Nenhum registro neste turno ainda.</span>
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content *ngIf="st.blockedReason">
+        <div class="turno-fechado">
+          <mat-icon>lock</mat-icon>
+          <span>
+            {{ st.blockedReason }}
+            <a routerLink="/app/irregularidades">Registrar uma irregularidade</a>.
+          </span>
         </div>
-      </div>
+      </mat-card-content>
+    </mat-card>
 
-      <div class="aguardando-gps" *ngIf="lat() === null">
-        <mat-icon>info</mat-icon>
-        <span>Capture a localização para liberar a foto e o registro do ponto.</span>
-      </div>
-    </div>
+    <!-- Formulário de registro -->
+    <mat-card class="register-card" *ngIf="local() && !turnoFechado()">
+      <mat-card-header>
+        <mat-card-title>{{ proximaAcao() === 'check_out' ? 'Fazer check-out' : 'Fazer check-in' }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
 
-    <!-- Foto (câmera ao vivo) -->
-    <div class="photo-section" [class.bloqueada]="!podeRegistrar()">
-      <span class="step-label">
-        2. Foto no momento
-        <mat-icon class="lock-icon" *ngIf="!podeRegistrar()"
-                  matTooltip="Disponível apenas dentro do raio da unidade">lock</mat-icon>
-      </span>
+        <!-- GPS -->
+        <div class="gps-section">
+          <span class="step-label">1. Localização</span>
+          <button mat-stroked-button (click)="getLocation()" [disabled]="gettingLocation()">
+            <mat-spinner *ngIf="gettingLocation()" diameter="18"></mat-spinner>
+            <mat-icon *ngIf="!gettingLocation()">my_location</mat-icon>
+            <span *ngIf="!gettingLocation() && !lat()">Capturar localização</span>
+            <span *ngIf="lat()">{{ lat()! | number:'1.5-5' }}, {{ lon()! | number:'1.5-5' }}</span>
+          </button>
+          <div *ngIf="distance() !== null" class="gps-info">
+            <span>Distância do local: <strong>{{ distance()! | number:'1.0-0' }} m</strong>
+              <ng-container *ngIf="accuracy()"> (precisão ±{{ accuracy()! | number:'1.0-0' }} m)</ng-container>
+            </span>
+            <span class="badge" [class.ok]="inRadius()" [class.bad]="inRadius() === false">
+              <mat-icon>{{ inRadius() ? 'check_circle' : 'error' }}</mat-icon>
+              {{ inRadius() ? 'Dentro do raio' : 'Fora do raio' }}
+            </span>
+          </div>
 
-      <button *ngIf="!cameraOn() && !photoBase64()" mat-stroked-button
-              [disabled]="!podeRegistrar()" (click)="startCamera()">
-        <mat-icon>photo_camera</mat-icon> Abrir câmera
-      </button>
-      <span class="bloqueio-hint" *ngIf="!podeRegistrar()">
-        Disponível quando você estiver dentro do raio da unidade.
-      </span>
+          <!-- Fora do raio o ponto não é aceito: nem a foto é liberada. -->
+          <div class="fora-do-raio" *ngIf="inRadius() === false">
+            <mat-icon>wrong_location</mat-icon>
+            <div>
+              <strong>Você está fora do raio de {{ local()!.name }}.</strong>
+              Aproxime-se
+              <ng-container *ngIf="metrosFaltando()">
+                cerca de <strong>{{ metrosFaltando() }} m</strong>
+              </ng-container>
+              e capture a localização de novo. O ponto só pode ser registrado dentro da unidade.
+              <a routerLink="/app/irregularidades">Registrar uma irregularidade</a> se houver um motivo.
+            </div>
+          </div>
 
-      <div *ngIf="cameraOn()" class="camera-box">
-        <video #video autoplay playsinline muted class="camera-video"></video>
-        <button mat-raised-button color="primary" (click)="takePhoto()">
-          <mat-icon>camera</mat-icon> Tirar foto
+          <div class="aguardando-gps" *ngIf="lat() === null">
+            <mat-icon>info</mat-icon>
+            <span>Capture a localização para liberar a foto e o registro do ponto.</span>
+          </div>
+        </div>
+
+        <!-- Foto (câmera ao vivo) -->
+        <div class="photo-section" [class.bloqueada]="!podeRegistrar()">
+          <span class="step-label">
+            2. Foto no momento
+            <mat-icon class="lock-icon" *ngIf="!podeRegistrar()"
+                      matTooltip="Disponível apenas dentro do raio da unidade">lock</mat-icon>
+          </span>
+
+          <button *ngIf="!cameraOn() && !photoBase64()" mat-stroked-button
+                  [disabled]="!podeRegistrar()" (click)="startCamera()">
+            <mat-icon>photo_camera</mat-icon> Abrir câmera
+          </button>
+          <span class="bloqueio-hint" *ngIf="!podeRegistrar()">
+            Disponível quando você estiver dentro do raio da unidade.
+          </span>
+
+          <div *ngIf="cameraOn()" class="camera-box">
+            <video #video autoplay playsinline muted class="camera-video"></video>
+            <button mat-raised-button color="primary" (click)="takePhoto()">
+              <mat-icon>camera</mat-icon> Tirar foto
+            </button>
+          </div>
+
+          <div *ngIf="photoBase64()" class="camera-box">
+            <img [src]="photoBase64()" class="photo-preview" alt="Foto capturada">
+            <button mat-stroked-button (click)="retakePhoto()">
+              <mat-icon>refresh</mat-icon> Refazer
+            </button>
+          </div>
+        </div>
+
+        <!-- Atividades: obrigatórias para fechar o turno -->
+        <div class="desc-section" *ngIf="proximaAcao() === 'check_out'">
+          <span class="step-label">3. Atividades realizadas <span class="obrigatorio">*</span></span>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Descrição das atividades</mat-label>
+            <textarea matInput rows="3" required
+                      [formControl]="descForm.controls['activitiesDescription']"
+                      placeholder="Descreva o que foi realizado no turno: procedimentos, acompanhamentos, orientações."></textarea>
+            <mat-hint>Obrigatório: sem a descrição o check-out não é registrado.</mat-hint>
+            <mat-error *ngIf="descForm.controls['activitiesDescription'].hasError('required')">
+              Descreva as atividades realizadas
+            </mat-error>
+            <mat-error *ngIf="descForm.controls['activitiesDescription'].hasError('minlength')">
+              Descreva com pelo menos 10 caracteres
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-raised-button color="primary"
+                [disabled]="!podeRegistrar() || !photoBase64() || descricaoPendente() || busy()"
+                [matTooltip]="!podeRegistrar()
+                  ? 'Você precisa estar dentro do raio da unidade'
+                  : (descricaoPendente() ? 'Descreva as atividades realizadas para finalizar o check-out' : '')"
+                (click)="register(proximaAcao())">
+          <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
+          <span *ngIf="!busy()">{{ proximaAcao() === 'check_out' ? 'Confirmar check-out' : 'Confirmar check-in' }}</span>
         </button>
-      </div>
+      </mat-card-actions>
+    </mat-card>
+  </ng-container>
 
-      <div *ngIf="photoBase64()" class="camera-box">
-        <img [src]="photoBase64()" class="photo-preview" alt="Foto capturada">
-        <button mat-stroked-button (click)="retakePhoto()">
-          <mat-icon>refresh</mat-icon> Refazer
+  <!-- ── Dia remoto ──────────────────────────────────────────────────────── -->
+  <ng-container *ngIf="remoto()">
+
+    <!-- Atividades já concluídas: a presença do dia está registrada -->
+    <mat-card class="atividade-card concluida" *ngFor="let a of atividadesRegistradas()">
+      <mat-card-header>
+        <mat-icon mat-card-avatar color="primary">task_alt</mat-icon>
+        <mat-card-title>{{ a.title }}</mat-card-title>
+        <mat-card-subtitle>
+          Participação registrada em {{ a.registradaEm | date:'dd/MM \'às\' HH:mm' }}
+          · {{ a.estimatedHours }} h creditadas
+        </mat-card-subtitle>
+      </mat-card-header>
+    </mat-card>
+
+    <!-- Atividades disponíveis -->
+    <mat-card class="atividade-card" *ngFor="let a of atividadesDisponiveis()">
+      <mat-card-header>
+        <mat-icon mat-card-avatar>assignment</mat-icon>
+        <mat-card-title>{{ a.title }}</mat-card-title>
+        <mat-card-subtitle>
+          {{ a.startTime }} às {{ a.endTime }} · {{ a.estimatedHours }} h
+          <span class="situacao" [class.aberta]="a.situacao === 'aberta'"
+                [class.encerrada]="a.situacao === 'encerrada'">{{ a.situacao }}</span>
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p *ngIf="a.description">{{ a.description }}</p>
+        <div class="tarefa" *ngIf="a.requiresTask">
+          <mat-icon>fact_check</mat-icon>
+          <div>
+            <strong>Tarefa exigida: {{ a.taskTypeLabel }}</strong>
+            <span *ngIf="a.taskInstructions"> — {{ a.taskInstructions }}</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="no-schedule" *ngIf="!atividadesDisponiveis().length && !atividadesRegistradas().length">
+      <mat-icon>hourglass_empty</mat-icon>
+      <p>Nenhuma atividade remota publicada para hoje ainda.</p>
+      <span class="hint">Assim que o professor publicar, ela aparece aqui com o prazo do código.</span>
+    </mat-card>
+
+    <!-- Registro por código -->
+    <mat-card class="register-card" *ngIf="atividadesDisponiveis().length">
+      <mat-card-header>
+        <mat-card-title>Registrar participação</mat-card-title>
+        <mat-card-subtitle>
+          Informe o código de presença fornecido pelo professor.
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="codigo-section">
+          <span class="step-label">1. Código de presença <span class="obrigatorio">*</span></span>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Código</mat-label>
+            <input matInput required autocomplete="off" placeholder="ENF-7K92"
+                   [formControl]="remotoForm.controls['code']">
+            <mat-hint>O código vale uma vez só e apenas dentro do prazo da atividade.</mat-hint>
+            <mat-error *ngIf="remotoForm.controls['code'].hasError('required')">
+              Informe o código de presença
+            </mat-error>
+            <mat-error *ngIf="remotoForm.controls['code'].hasError('minlength')">
+              Código muito curto
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+        <div class="desc-section" *ngIf="exigeTarefa()">
+          <span class="step-label">2. Entrega da tarefa</span>
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Resposta da atividade</mat-label>
+            <textarea matInput rows="4" [formControl]="remotoForm.controls['taskResponse']"
+                      placeholder="Escreva aqui a resposta, o resumo ou o link da entrega."></textarea>
+            <mat-hint>
+              Obrigatória nas atividades que pedem questionário, discursiva, estudo de caso,
+              formulário ou envio de arquivo.
+            </mat-hint>
+          </mat-form-field>
+        </div>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-raised-button color="primary" [disabled]="busy()" (click)="registrarRemoto()">
+          <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
+          <span *ngIf="!busy()">Confirmar participação</span>
         </button>
-      </div>
-    </div>
+      </mat-card-actions>
+    </mat-card>
+  </ng-container>
 
-    <!-- Atividades: obrigatórias para fechar o turno -->
-    <div class="desc-section" *ngIf="proximaAcao() === 'check_out'">
-      <span class="step-label">3. Atividades realizadas <span class="obrigatorio">*</span></span>
-      <mat-form-field appearance="outline" class="full-width">
-        <mat-label>Descrição das atividades</mat-label>
-        <textarea matInput rows="3" required
-                  [formControl]="descForm.controls['activitiesDescription']"
-                  placeholder="Descreva o que foi realizado no turno: procedimentos, acompanhamentos, orientações."></textarea>
-        <mat-hint>Obrigatório: sem a descrição o check-out não é registrado.</mat-hint>
-        <mat-error *ngIf="descForm.controls['activitiesDescription'].hasError('required')">
-          Descreva as atividades realizadas
-        </mat-error>
-        <mat-error *ngIf="descForm.controls['activitiesDescription'].hasError('minlength')">
-          Descreva com pelo menos 10 caracteres
-        </mat-error>
-      </mat-form-field>
-    </div>
-
-  </mat-card-content>
-  <mat-card-actions>
-    <button mat-raised-button color="primary"
-            [disabled]="!podeRegistrar() || !photoBase64() || descricaoPendente() || busy()"
-            [matTooltip]="!podeRegistrar()
-              ? 'Você precisa estar dentro do raio da unidade'
-              : (descricaoPendente() ? 'Descreva as atividades realizadas para finalizar o check-out' : '')"
-            (click)="register(proximaAcao())">
-      <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
-      <span *ngIf="!busy()">{{ proximaAcao() === 'check_out' ? 'Confirmar check-out' : 'Confirmar check-in' }}</span>
-    </button>
-  </mat-card-actions>
-</mat-card>
+</ng-container>

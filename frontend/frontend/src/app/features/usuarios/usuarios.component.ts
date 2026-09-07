@@ -219,6 +219,35 @@ export class UsuariosComponent implements OnInit {
     return this.turnos.find(t => t.valor === shift)?.rotulo ?? shift;
   }
 
+  // ── Curso do aluno ────────────────────────────────────────────────────────
+  /**
+   * Define o curso do aluno. É por ele que uma exceção de calendário com
+   * abrangência "curso" (um recesso só da Enfermagem, por exemplo) o alcança
+   * sem que a coordenação precise cadastrar turma por turma.
+   */
+  definirCurso(student: UserDto): void {
+    const curso = prompt(
+      `Curso de ${student.fullName} (deixe em branco para remover):`,
+      student.course ?? '');
+    if (curso === null) return;
+
+    const valor = curso.trim();
+    if (valor === (student.course ?? '')) return;
+
+    this.usersService.updateCourse(student.id, valor || null).subscribe({
+      next: () => {
+        this.snackBar.open(
+          valor ? `Curso de ${student.fullName} definido como ${valor}.`
+                : `Curso de ${student.fullName} removido.`,
+          '', { duration: 3000, panelClass: 'snack-success' });
+        this.loadUsers();
+      },
+      error: (err) => this.snackBar.open(
+        err?.error?.message ?? 'Erro ao definir o curso do aluno', '',
+        { duration: 4000, panelClass: 'snack-error' })
+    });
+  }
+
   // ── Permissão de atraso ───────────────────────────────────────────────────
   /**
    * Autoriza previamente o aluno a chegar após o início do turno. A carga horária

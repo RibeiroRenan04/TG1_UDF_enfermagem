@@ -44,6 +44,8 @@ export class AppLayoutComponent {
     { path: '/app/unidades',    label: 'Unidades de saúde',  icon: 'domain',           roles: ['aluno','preceptor','supervisor','coordenadora'] },
     { path: '/app/alocacoes',   label: 'Alocações',          icon: 'assignment_ind',   roles: ['supervisor','coordenadora'] },
     { path: '/app/rodizios',    label: 'Rodízios',           icon: 'calendar_today',   roles: ['supervisor','coordenadora'] },
+    { path: '/app/atividades-remotas', label: 'Atividades remotas', icon: 'home_work',  roles: ['aluno','preceptor','supervisor','coordenadora'] },
+    { path: '/app/excecoes',    label: 'Calendário de exceções', icon: 'event_busy',   roles: ['supervisor','coordenadora'] },
     { path: '/app/usuarios',    label: 'Usuários',           icon: 'people',           roles: ['supervisor','coordenadora'] },
     { path: '/app/relatorios',  label: 'Relatórios',         icon: 'bar_chart',        roles: ['supervisor','coordenadora'] }
   ];

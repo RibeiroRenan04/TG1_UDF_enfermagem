@@ -81,6 +81,11 @@ export interface RotationSchedule {
   activityType: string;
   requiredHours: number;
   notes?: string;
+  /**
+   * Programação por dia da semana. Vazia, o rodízio vale como antes: todo dia
+   * útil é presencial no local principal.
+   */
+  days?: DiaRodizio[];
 }
 
 export interface AttendanceRecord {
@@ -103,6 +108,9 @@ export interface AttendanceRecord {
   validatedAt?: string;
   /** Turno em que o ponto foi registrado. */
   shift?: Turno;
+  /** Preenchidos, o ponto veio do código de presença e não do geofence. */
+  remoteActivityId?: string;
+  remoteActivityTitle?: string;
   /** Irregularidade mais recente aberta sobre este ponto. */
   irregularityId?: string;
   irregularityStatus?: IrregularityStatus;
@@ -140,7 +148,169 @@ export interface ActiveSchedule {
   periodLabel: string;
   activityType: string;
   requiredHours: number;
-  location: Location;
+  /** Modo do dia, já resolvido pela programação. */
+  mode: ModoAtividade;
+  modeLabel: string;
+  /** Como a presença do dia é comprovada. */
+  validation: ValidacaoPresenca;
+  /** Explicação do dia, quando ele fugiu da programação normal. */
+  reason?: string;
+  /** Unidade do dia. Ausente em dia remoto ou sem atividade. */
+  location?: Location;
+}
+
+// ── Programação do dia ────────────────────────────────────────────────────────
+/** O que o aluno deve fazer no dia. É o que decide como o ponto é validado. */
+export type ModoAtividade = 'presencial' | 'remoto' | 'sem_atividade';
+
+/** Como a presença é comprovada: geofence, código da atividade ou nada. */
+export type ValidacaoPresenca = 'localizacao' | 'codigo' | 'nenhuma';
+
+/**
+ * Programação de um dia: onde o aluno deveria estar e o que deveria realizar.
+ * A tela de ponto consulta isto antes de tudo — é daqui que sai a decisão de
+ * pedir localização, pedir o código da atividade ou não pedir nada.
+ */
+export interface ProgramacaoDia {
+  data: string;
+  turno: Turno;
+  turnoLabel: string;
+  modo: ModoAtividade;
+  modoLabel: string;
+  validacao: ValidacaoPresenca;
+  exigePonto: boolean;
+  scheduleId?: string;
+  periodLabel?: string;
+  activityType?: string;
+  location?: Location;
+  motivo?: string;
+  excecaoId?: string;
+  tipoExcecao?: TipoExcecao;
+  tipoExcecaoLabel?: string;
+  abrangenciaExcecao?: AbrangenciaExcecao;
+  atividadesRemotas: AtividadeRemotaAluno[];
+}
+
+// ── Programação semanal do rodízio ────────────────────────────────────────────
+/** Regra de um dia da semana do rodízio ("sexta → faculdade → presencial"). */
+export interface DiaRodizio {
+  /** 0 = domingo … 6 = sábado. */
+  dayOfWeek: number;
+  dayLabel: string;
+  mode: ModoAtividade;
+  modeLabel: string;
+  locationId?: string;
+  locationName?: string;
+  notes?: string;
+}
+
+// ── Atividades remotas ────────────────────────────────────────────────────────
+export type TipoTarefaRemota =
+  | 'questionario' | 'arquivo' | 'discursiva' | 'estudo_de_caso'
+  | 'aula_online' | 'leitura' | 'formulario';
+
+/** Situação da janela do código: agendada, aberta ou encerrada. */
+export type SituacaoAtividade = 'agendada' | 'aberta' | 'encerrada';
+
+/** Atividade remota como o professor a enxerga, com o código de presença. */
+export interface AtividadeRemota {
+  id: string;
+  title: string;
+  description?: string;
+  groupId: string;
+  groupCode: string;
+  groupName?: string;
+  scheduleId?: string;
+  periodLabel?: string;
+  professorId: string;
+  professorName: string;
+  activityDate: string;
+  startTime: string;
+  endTime: string;
+  estimatedHours: number;
+  presenceCode: string;
+  requiresTask: boolean;
+  taskType?: TipoTarefaRemota;
+  taskTypeLabel?: string;
+  taskInstructions?: string;
+  ativo: boolean;
+  aberta: boolean;
+  situacao: SituacaoAtividade;
+  totalParticipantes: number;
+  totalAlunosGrupo: number;
+  createdAt: string;
+}
+
+/** Atividade remota como o aluno a enxerga. Nunca traz o código de presença. */
+export interface AtividadeRemotaAluno {
+  id: string;
+  title: string;
+  description?: string;
+  activityDate: string;
+  startTime: string;
+  endTime: string;
+  estimatedHours: number;
+  requiresTask: boolean;
+  taskType?: TipoTarefaRemota;
+  taskTypeLabel?: string;
+  taskInstructions?: string;
+  aberta: boolean;
+  situacao: SituacaoAtividade;
+  jaRegistrada: boolean;
+  registradaEm?: string;
+}
+
+export interface ParticipacaoAtividade {
+  id: string;
+  remoteActivityId: string;
+  studentId: string;
+  studentName: string;
+  studentRgm?: string;
+  registeredAt: string;
+  taskResponse?: string;
+}
+
+export interface PresencaRemotaResultado {
+  participationId: string;
+  remoteActivityId: string;
+  activityTitle: string;
+  registeredAt: string;
+  horasCreditadas: number;
+  message: string;
+}
+
+// ── Exceções do calendário ────────────────────────────────────────────────────
+export type TipoExcecao =
+  | 'feriado' | 'recesso' | 'cancelado' | 'remoto'
+  | 'troca_local' | 'atividade_especial' | 'reposicao';
+
+export type AbrangenciaExcecao = 'faculdade' | 'curso' | 'turma' | 'rodizio' | 'aluno';
+
+export interface ExcecaoCalendario {
+  id: string;
+  type: TipoExcecao;
+  typeLabel: string;
+  scope: AbrangenciaExcecao;
+  scopeLabel: string;
+  startDate: string;
+  endDate: string;
+  shift?: Turno;
+  groupId?: string;
+  groupCode?: string;
+  scheduleId?: string;
+  periodLabel?: string;
+  studentId?: string;
+  studentName?: string;
+  course?: string;
+  locationId?: string;
+  locationName?: string;
+  remoteActivityId?: string;
+  remoteActivityTitle?: string;
+  description: string;
+  /** A exceção dispensa o aluno de bater ponto naquele dia. */
+  dispensaPonto: boolean;
+  createdByName?: string;
+  createdAt: string;
 }
 
 export interface Pendency {
@@ -200,6 +370,8 @@ export interface UserDto {
   groupName?: string;
   semester?: 7 | 8;
   shift?: 'manha' | 'tarde' | 'noite';
+  /** Curso do aluno — é por ele que uma exceção de curso o alcança. */
+  course?: string;
   mustChangePassword?: boolean;
   mustSetEmail?: boolean;
   isActive?: boolean;

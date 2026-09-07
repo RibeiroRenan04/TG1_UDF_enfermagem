@@ -11,9 +11,20 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatChipsModule } from '@angular/material/chips';
 import { AttendanceService } from '../../core/services/attendance.service';
-import { ActiveSchedule, ShiftPointStatus } from '../../core/models/models';
+import { ProgramacaoService } from '../../core/services/programacao.service';
+import { AtividadesRemotasService } from '../../core/services/atividades-remotas.service';
+import { AtividadeRemotaAluno, ProgramacaoDia, ShiftPointStatus } from '../../core/models/models';
 
+/**
+ * Registro de presença guiado pela programação do dia.
+ *
+ * A tela não pergunta mais "onde você está?", e sim "o que estava programado
+ * para hoje?". A resposta decide o que ela pede: em dia presencial, localização
+ * e foto; em dia remoto, o código da atividade e a tarefa; em feriado, recesso
+ * ou fim de semana, nada — não há ponto a registrar.
+ */
 @Component({
   selector: 'app-check-in',
   standalone: true,
@@ -21,7 +32,7 @@ import { ActiveSchedule, ShiftPointStatus } from '../../core/models/models';
     CommonModule, ReactiveFormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatFormFieldModule, MatInputModule,
     MatIconModule, MatProgressSpinnerModule, MatSnackBarModule, MatDividerModule,
-    MatTooltipModule
+    MatTooltipModule, MatChipsModule
   ],
   templateUrl: './check-in.component.html',
   styleUrls: ['./check-in.component.scss']
@@ -29,9 +40,11 @@ import { ActiveSchedule, ShiftPointStatus } from '../../core/models/models';
 export class CheckInComponent implements OnInit, OnDestroy {
   @ViewChild('video') videoRef?: ElementRef<HTMLVideoElement>;
 
-  activeSchedule = signal<ActiveSchedule | null>(null);
+  /** Programação de hoje: é ela que define o que a tela pede. */
+  programacao = signal<ProgramacaoDia | null>(null);
   /** Situação do ponto no turno corrente: 1 check-in e 1 check-out, no máximo. */
   shiftStatus = signal<ShiftPointStatus | null>(null);
+  loading = signal(true);
   busy = signal(false);
   gettingLocation = signal(false);
   lat = signal<number | null>(null);
@@ -42,28 +55,50 @@ export class CheckInComponent implements OnInit, OnDestroy {
 
   private stream: MediaStream | null = null;
 
-  /** Distância (m) entre a posição capturada e o local da escala ativa. */
+  // ── Modo do dia ───────────────────────────────────────────────────────────
+  presencial = computed(() => this.programacao()?.modo === 'presencial');
+  remoto = computed(() => this.programacao()?.modo === 'remoto');
+  semAtividade = computed(() => this.programacao()?.modo === 'sem_atividade');
+
+  /** Unidade em que o ponto de hoje deve ser registrado. */
+  local = computed(() => this.programacao()?.location ?? null);
+
+  /** Atividades remotas de hoje ainda em aberto para o aluno. */
+  atividadesDisponiveis = computed<AtividadeRemotaAluno[]>(() =>
+    (this.programacao()?.atividadesRemotas ?? []).filter(a => !a.jaRegistrada));
+
+  /** Atividades de hoje em que o aluno já registrou participação. */
+  atividadesRegistradas = computed<AtividadeRemotaAluno[]>(() =>
+    (this.programacao()?.atividadesRemotas ?? []).filter(a => a.jaRegistrada));
+
+  /**
+   * Alguma atividade de hoje exige entrega além do código. Enquanto houver, o
+   * campo de resposta fica visível: o aluno não sabe de antemão a qual código
+   * vai responder.
+   */
+  exigeTarefa = computed(() => this.atividadesDisponiveis().some(a => a.requiresTask));
+
+  /** Distância (m) entre a posição capturada e a unidade programada. */
   distance = computed<number | null>(() => {
-    const sched = this.activeSchedule();
+    const local = this.local();
     const la = this.lat(), lo = this.lon();
-    if (!sched || la === null || lo === null) return null;
-    return this.haversine(la, lo, sched.location.latitude, sched.location.longitude);
+    if (!local || la === null || lo === null) return null;
+    return this.haversine(la, lo, local.latitude, local.longitude);
   });
 
   /** Dentro do raio, considerando a precisão do GPS (mais tolerante). */
   inRadius = computed<boolean | null>(() => {
     const d = this.distance();
-    const sched = this.activeSchedule();
-    if (d === null || !sched) return null;
-    const efetiva = Math.max(0, d - (this.accuracy() ?? 0));
-    return efetiva <= sched.location.radiusMeters;
+    const local = this.local();
+    if (d === null || !local) return null;
+    return Math.max(0, d - (this.accuracy() ?? 0)) <= local.radiusMeters;
   });
 
   /**
-   * O ponto só é liberado dentro do raio da unidade alocada. Enquanto isso não
-   * for confirmado, a foto e a confirmação ficam bloqueadas — o backend recusa
-   * o registro de qualquer forma, então liberar a câmera antes só faria o aluno
-   * perder tempo com um ponto que não seria aceito.
+   * O ponto só é liberado dentro do raio da unidade programada. Enquanto isso
+   * não for confirmado, a foto e a confirmação ficam bloqueadas — o backend
+   * recusa o registro de qualquer forma, então liberar a câmera antes só faria
+   * o aluno perder tempo com um ponto que não seria aceito.
    */
   podeRegistrar = computed(() => this.inRadius() === true);
 
@@ -95,18 +130,25 @@ export class CheckInComponent implements OnInit, OnDestroy {
   /** Quanto falta andar para entrar no raio da unidade. */
   metrosFaltando = computed<number | null>(() => {
     const d = this.distance();
-    const sched = this.activeSchedule();
-    if (d === null || !sched) return null;
-    const efetiva = Math.max(0, d - (this.accuracy() ?? 0));
-    return Math.max(0, Math.round(efetiva - sched.location.radiusMeters));
+    const local = this.local();
+    if (d === null || !local) return null;
+    return Math.max(0, Math.round(Math.max(0, d - (this.accuracy() ?? 0)) - local.radiusMeters));
   });
 
   descForm = this.fb.group({
     activitiesDescription: ['', [Validators.required, Validators.minLength(10)]]
   });
 
+  /** Registro da presença remota: o código e, quando exigida, a tarefa. */
+  remotoForm = this.fb.group({
+    code: ['', [Validators.required, Validators.minLength(4)]],
+    taskResponse: ['']
+  });
+
   constructor(
     private attendanceService: AttendanceService,
+    private programacaoService: ProgramacaoService,
+    private atividadesService: AtividadesRemotasService,
     private snackBar: MatSnackBar,
     private fb: FormBuilder
   ) {}
@@ -122,8 +164,14 @@ export class CheckInComponent implements OnInit, OnDestroy {
   }
 
   loadState(): void {
-    this.attendanceService.getActiveSchedule().subscribe({ next: (s) => this.activeSchedule.set(s), error: () => {} });
-    this.attendanceService.getShiftStatus().subscribe({ next: (s) => this.shiftStatus.set(s), error: () => {} });
+    this.loading.set(true);
+    this.programacaoService.getDia().subscribe({
+      next: (p) => { this.programacao.set(p); this.loading.set(false); },
+      error: () => this.loading.set(false)
+    });
+    this.attendanceService.getShiftStatus().subscribe({
+      next: (s) => this.shiftStatus.set(s), error: () => {}
+    });
   }
 
   getLocation(): void {
@@ -212,6 +260,7 @@ export class CheckInComponent implements OnInit, OnDestroy {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
+  // ── Ponto presencial ───────────────────────────────────────────────────────
   register(type: 'check_in' | 'check_out' | null): void {
     if (!type) {
       this.snackBar.open(this.shiftStatus()?.blockedReason ?? 'Nada a registrar neste turno.', '',
@@ -219,10 +268,11 @@ export class CheckInComponent implements OnInit, OnDestroy {
       return;
     }
     if (this.lat() === null || this.lon() === null) { this.snackBar.open('Capture sua localização primeiro', '', { duration: 3000 }); return; }
-    if (!this.activeSchedule()) { this.snackBar.open('Nenhuma escala ativa no momento', '', { duration: 3000 }); return; }
+    const local = this.local();
+    if (!local) { this.snackBar.open('Nenhuma unidade programada para hoje', '', { duration: 3000 }); return; }
     if (!this.podeRegistrar()) {
       this.snackBar.open(
-        `Você está fora do raio de ${this.activeSchedule()!.location.name}. ` +
+        `Você está fora do raio de ${local.name}. ` +
         'Aproxime-se da unidade ou registre uma irregularidade.',
         '', { duration: 6000, panelClass: 'snack-error' });
       return;
@@ -237,8 +287,8 @@ export class CheckInComponent implements OnInit, OnDestroy {
     }
     this.busy.set(true);
     this.attendanceService.create({
-      scheduleId: this.activeSchedule()!.scheduleId,
-      locationId: this.activeSchedule()!.location.id,
+      scheduleId: this.programacao()?.scheduleId,
+      locationId: local.id,
       type,
       latitude: this.lat()!,
       longitude: this.lon()!,
@@ -256,6 +306,38 @@ export class CheckInComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.snackBar.open(err?.error?.message ?? 'Erro ao registrar', '', { duration: 5000, panelClass: 'snack-error' });
         this.busy.set(false);
+      }
+    });
+  }
+
+  // ── Presença remota ────────────────────────────────────────────────────────
+  /**
+   * Registra a participação pelo código. As recusas vêm da API com o motivo
+   * (código errado, prazo encerrado, grupo não autorizado) e são exibidas como
+   * chegam: é o que diz ao aluno o que fazer em seguida.
+   */
+  registrarRemoto(): void {
+    if (this.remotoForm.invalid) {
+      this.remotoForm.markAllAsTouched();
+      this.snackBar.open('Informe o código de presença da atividade.', '',
+        { duration: 4000, panelClass: 'snack-error' });
+      return;
+    }
+
+    this.busy.set(true);
+    const { code, taskResponse } = this.remotoForm.value;
+
+    this.atividadesService.registrarPresenca(code!, taskResponse || undefined).subscribe({
+      next: (res) => {
+        this.busy.set(false);
+        this.remotoForm.reset({ code: '', taskResponse: '' });
+        this.snackBar.open(res.message, '', { duration: 5000, panelClass: 'snack-success' });
+        this.loadState();
+      },
+      error: (err) => {
+        this.busy.set(false);
+        this.snackBar.open(err?.error?.message ?? 'Não foi possível registrar a participação.', 'OK',
+          { duration: 7000, panelClass: 'snack-error' });
       }
     });
   }

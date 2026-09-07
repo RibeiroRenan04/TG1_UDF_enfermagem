@@ -2,7 +2,35 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { StudentGroup, RotationSchedule, GroupMember } from '../models/models';
+import { StudentGroup, RotationSchedule, GroupMember, ModoAtividade } from '../models/models';
+
+/** Regra de um dia da semana enviada junto com o rodízio. */
+export interface DiaRodizioInput {
+  dayOfWeek: number;
+  mode: ModoAtividade;
+  /** Ausente herda o local principal do rodízio. */
+  locationId?: string;
+  notes?: string;
+}
+
+/**
+ * Dados da alocação de rodízio. `days` é a programação semanal: informada, o
+ * sistema gera sozinho a programação de cada data do período; omitida ou vazia,
+ * o rodízio segue no padrão de dias úteis presenciais no local principal.
+ */
+export interface RotationScheduleInput {
+  groupId: string;
+  locationId: string;
+  preceptorId?: string;
+  shift: string;
+  periodLabel: string;
+  startDate: string;
+  endDate: string;
+  activityType: string;
+  requiredHours: number;
+  notes?: string;
+  days?: DiaRodizioInput[];
+}
 
 @Injectable({ providedIn: 'root' })
 export class GroupsService {
@@ -31,11 +59,11 @@ export class GroupsService {
     return this.http.get<RotationSchedule[]>(url);
   }
 
-  createSchedule(dto: Partial<RotationSchedule>): Observable<RotationSchedule> {
+  createSchedule(dto: RotationScheduleInput): Observable<RotationSchedule> {
     return this.http.post<RotationSchedule>(`${this.api}/schedules`, dto);
   }
 
-  updateSchedule(id: string, dto: Partial<RotationSchedule>): Observable<RotationSchedule> {
+  updateSchedule(id: string, dto: RotationScheduleInput): Observable<RotationSchedule> {
     return this.http.put<RotationSchedule>(`${this.api}/schedules/${id}`, dto);
   }
 

@@ -167,3 +167,108 @@ mat-card-actions {
 
   .full-width { width: 100%; margin-top: 8px; }
 }
+
+/* ── Programação do dia ─────────────────────────────────────────────────── */
+.carregando {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 8px;
+  color: #6B7280;
+}
+
+.modo-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 4px;
+}
+
+.modo-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: #f3f4f6;
+  color: #374151;
+
+  &.presencial { background: #dbeafe; color: #1e40af; }
+  &.remoto     { background: #ede9fe; color: #5b21b6; }
+  &.livre      { background: #f3f4f6; color: #6B7280; }
+}
+
+.validacao {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  color: #6B7280;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+.motivo {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 0.5rem;
+  background: #f9fafb;
+  font-size: 0.875rem;
+  color: #374151;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: #6B7280; }
+}
+
+.no-schedule .hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.875rem;
+}
+
+/* ── Atividades remotas ─────────────────────────────────────────────────── */
+.atividade-card {
+  margin-bottom: 16px;
+
+  &.concluida { border-left: 4px solid #10b981; }
+
+  p { margin: 8px 0 0; color: #4B5563; font-size: 0.9375rem; }
+}
+
+.situacao {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: #f3f4f6;
+  color: #6B7280;
+
+  &.aberta    { background: #d1fae5; color: #065f46; }
+  &.encerrada { background: #fee2e2; color: #991b1b; }
+}
+
+.tarefa {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 0.5rem;
+  background: #fffbeb;
+  font-size: 0.875rem;
+  color: #92400e;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}
+
+.codigo-section {
+  margin-bottom: 16px;
+
+  input { text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+}

@@ -40,6 +40,19 @@ export class UsersService {
   }
 
   /**
+   * Define o curso do aluno. É por ele que uma exceção de calendário com
+   * abrangência "curso" o alcança. Vazio limpa o vínculo.
+   */
+  updateCourse(userId: string, course: string | null): Observable<UserDto> {
+    return this.http.patch<UserDto>(`${this.api}/${userId}/course`, { course });
+  }
+
+  /** Cursos já cadastrados — evita o mesmo curso escrito de duas formas. */
+  getCursos(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.api}/cursos`);
+  }
+
+  /**
    * Opções de vínculo institucional do cadastro de preceptor/professor: as
    * unidades de saúde ativas. A lista é fechada — o backend recusa um valor fora
    * dela — para padronizar a entrada de dados.

@@ -112,6 +112,58 @@
         </span>
       </div>
 
+      <!-- Programação semanal: cadastra o dia da semana em vez de data a data -->
+      <div class="dias-block">
+        <div class="dias-header">
+          <div>
+            <h4>Programação semanal (opcional)</h4>
+            <p>
+              Marque os dias e o sistema gera sozinho a programação de cada data do
+              período. Sem nenhum dia marcado, todo dia útil vale como presencial no
+              local principal.
+            </p>
+          </div>
+          <div class="dias-atalhos">
+            <button mat-button type="button" (click)="marcarTodosPresenciais()">
+              <mat-icon>done_all</mat-icon> Seg. a sex. presencial
+            </button>
+            <button mat-button type="button" *ngIf="temProgramacaoSemanal()"
+                    (click)="limparProgramacao()">
+              <mat-icon>backspace</mat-icon> Limpar
+            </button>
+          </div>
+        </div>
+
+        <div class="dia-linha" *ngFor="let d of dias()" [class.inativo]="!d.ativo">
+          <mat-checkbox [checked]="d.ativo"
+                        (change)="atualizarDia(d.dayOfWeek, { ativo: $event.checked })">
+            {{ d.label }}
+          </mat-checkbox>
+
+          <mat-form-field appearance="outline" class="dia-campo">
+            <mat-label>Atividade</mat-label>
+            <mat-select [value]="d.mode" [disabled]="!d.ativo"
+                        (valueChange)="atualizarDia(d.dayOfWeek, { mode: $event })">
+              <mat-option *ngFor="let m of modos" [value]="m.valor">{{ m.rotulo }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="dia-campo">
+            <mat-label>Local</mat-label>
+            <mat-select [value]="d.locationId"
+                        [disabled]="!d.ativo || d.mode !== 'presencial'"
+                        (valueChange)="atualizarDia(d.dayOfWeek, { locationId: $event })">
+              <mat-option value="">Local principal do rodízio</mat-option>
+              <mat-option *ngFor="let l of locations()" [value]="l.id">{{ l.name }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <span class="dia-hint" *ngIf="d.ativo && d.mode === 'remoto'">
+            Validação por código de atividade.
+          </span>
+        </div>
+      </div>
+
       <mat-form-field appearance="outline" class="full-width">
         <mat-label>Detalhamento da atividade (opcional)</mat-label>
         <textarea matInput rows="2" formControlName="notes"
@@ -184,6 +236,13 @@
         <div class="schedule-meta">
           <span><mat-icon>place</mat-icon> {{ s.locationName }}</span>
           <span><mat-icon>badge</mat-icon> {{ s.preceptorName || 'Sem preceptor' }}</span>
+        </div>
+        <div class="schedule-dias" *ngIf="s.days?.length">
+          <span class="dia-chip" *ngFor="let d of s.days" [class.remoto]="d.mode === 'remoto'">
+            {{ d.dayLabel.substring(0, 3) }}
+            <ng-container *ngIf="d.mode === 'presencial'">· {{ d.locationName }}</ng-container>
+            <ng-container *ngIf="d.mode === 'remoto'">· remoto</ng-container>
+          </span>
         </div>
         <div class="schedule-actions">
           <button mat-icon-button matTooltip="Editar alocação" (click)="editarAlocacao(g, s)">

@@ -186,6 +186,15 @@
           (click)="abrirPermissaoAtraso(s)">
     <mat-icon>{{ s.allowLateArrival ? 'alarm_on' : 'alarm_add' }}</mat-icon>
   </button>
+  <!-- O curso define quais exceções do calendário alcançam o aluno. -->
+  <button mat-icon-button *ngIf="!somenteLeitura()"
+          [color]="s.course ? 'primary' : undefined"
+          [matTooltip]="s.course
+            ? 'Curso: ' + s.course + ' — clique para alterar'
+            : 'Definir o curso do aluno'"
+          (click)="definirCurso(s)">
+    <mat-icon>school</mat-icon>
+  </button>
 </ng-template>
 
 <!-- Seletor de turma do aluno: o vínculo libera o rodízio, o check-in e os relatórios. -->

@@ -14,14 +14,30 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { GroupsService } from '../../core/services/groups.service';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { GroupsService, RotationScheduleInput } from '../../core/services/groups.service';
 import { LocationsService } from '../../core/services/locations.service';
 import { UsersService } from '../../core/services/users.service';
-import { StudentGroup, RotationSchedule, Location, GroupMember, UserDto } from '../../core/models/models';
+import {
+  StudentGroup, RotationSchedule, Location, GroupMember, UserDto, ModoAtividade
+} from '../../core/models/models';
 import {
   VincularAlunosDialogComponent,
   VincularAlunosResult
 } from '../usuarios/vincular-alunos-dialog.component';
+
+/**
+ * Linha da programação semanal na tela. `ativo` separa o dia que faz parte do
+ * rodízio daquele sem atividade nenhuma; só os ativos vão para a API.
+ */
+interface LinhaDia {
+  dayOfWeek: number;
+  label: string;
+  ativo: boolean;
+  mode: ModoAtividade;
+  /** Vazio herda o local principal do rodízio. */
+  locationId: string;
+}
 
 @Component({
   selector: 'app-rodizios',
@@ -30,7 +46,8 @@ import {
     CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatTableModule, MatExpansionModule, MatProgressSpinnerModule,
-    MatSnackBarModule, MatTooltipModule, MatDividerModule, MatDialogModule
+    MatSnackBarModule, MatTooltipModule, MatDividerModule, MatDialogModule,
+    MatCheckboxModule
   ],
   templateUrl: './rodizios.component.html',
   styleUrls: ['./rodizios.component.scss']
@@ -65,6 +82,22 @@ export class RodiziosComponent implements OnInit {
     { valor: 'pic', rotulo: 'Práticas Integrativas (PIC)' },
     { valor: 'outro', rotulo: 'Outra atividade' }
   ];
+
+  readonly modos: { valor: ModoAtividade; rotulo: string }[] = [
+    { valor: 'presencial', rotulo: 'Presencial' },
+    { valor: 'remoto', rotulo: 'Atividade remota' }
+  ];
+
+  /**
+   * Programação semanal em edição. Preenchida, o sistema gera sozinho a
+   * programação de cada data do período — não é preciso cadastrar dia a dia.
+   * Deixada inteira desmarcada, o rodízio segue no padrão: todo dia útil
+   * presencial no local principal.
+   */
+  dias = signal<LinhaDia[]>([]);
+
+  /** A programação semanal só é enviada quando o supervisor marca algum dia. */
+  temProgramacaoSemanal = computed(() => this.dias().some(d => d.ativo));
 
   groupForm = this.fb.group({
     code: ['', Validators.required],
@@ -213,6 +246,45 @@ export class RodiziosComponent implements OnInit {
   }
 
   // ── Alocação de rodízio ───────────────────────────────────────────────────
+  /** Linhas de segunda a sexta — os dias em que o estágio acontece. */
+  private linhasPadrao(): LinhaDia[] {
+    const rotulos = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+    return rotulos.map((label, i) => ({
+      dayOfWeek: i + 1, label, ativo: false, mode: 'presencial' as ModoAtividade, locationId: ''
+    }));
+  }
+
+  /** Reidrata a programação salva sobre as linhas da semana. */
+  private linhasDe(schedule: RotationSchedule): LinhaDia[] {
+    return this.linhasPadrao().map(linha => {
+      const dia = schedule.days?.find(d => d.dayOfWeek === linha.dayOfWeek);
+      if (!dia) return linha;
+      return {
+        ...linha,
+        ativo: true,
+        mode: dia.mode,
+        // O local só é reidratado quando difere do principal: assim a tela mostra
+        // "herda do rodízio" no caso comum, em vez de repetir a unidade.
+        locationId: dia.locationId && dia.locationId !== schedule.locationId ? dia.locationId : ''
+      };
+    });
+  }
+
+  atualizarDia(dayOfWeek: number, mudanca: Partial<LinhaDia>): void {
+    this.dias.update(atual => atual.map(d =>
+      d.dayOfWeek === dayOfWeek ? { ...d, ...mudanca } : d));
+  }
+
+  /** Marca segunda a sexta como presencial no local principal — o caso mais comum. */
+  marcarTodosPresenciais(): void {
+    this.dias.update(atual => atual.map(d =>
+      ({ ...d, ativo: true, mode: 'presencial' as ModoAtividade })));
+  }
+
+  limparProgramacao(): void {
+    this.dias.set(this.linhasPadrao());
+  }
+
   abrirAlocacao(group: StudentGroup): void {
     if (!this.temAlunosVinculados(group)) {
       this.snackBar.open(
@@ -234,6 +306,7 @@ export class RodiziosComponent implements OnInit {
       requiredHours: 80,
       notes: ''
     });
+    this.dias.set(this.linhasPadrao());
     this.showScheduleForm.set(true);
   }
 
@@ -252,6 +325,7 @@ export class RodiziosComponent implements OnInit {
       requiredHours: s.requiredHours,
       notes: s.notes ?? ''
     });
+    this.dias.set(this.linhasDe(s));
     this.showScheduleForm.set(true);
   }
 
@@ -279,8 +353,17 @@ export class RodiziosComponent implements OnInit {
       endDate: v.endDate!,
       activityType: v.activityType!,
       requiredHours: Number(v.requiredHours),
-      notes: v.notes || undefined
-    } as Partial<RotationSchedule>;
+      notes: v.notes || undefined,
+      // Só os dias marcados viram programação. Lista vazia devolve o rodízio ao
+      // padrão — todo dia útil presencial no local principal.
+      days: this.dias()
+        .filter(d => d.ativo)
+        .map(d => ({
+          dayOfWeek: d.dayOfWeek,
+          mode: d.mode,
+          locationId: d.mode === 'presencial' && d.locationId ? d.locationId : undefined
+        }))
+    } satisfies RotationScheduleInput;
 
     const atual = this.editingSchedule();
     const op = atual
