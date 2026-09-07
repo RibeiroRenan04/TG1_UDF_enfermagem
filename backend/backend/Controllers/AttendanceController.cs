@@ -12,7 +12,8 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class AttendanceController(AppDbContext db, GeoService geo) : ControllerBase
+public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoService programacao)
+    : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<AttendanceRecordDto>>> GetAll([FromQuery] Guid? studentId, [FromQuery] int limit = 200)
@@ -34,6 +35,7 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
 
         var recs = await query
             .Include(r => r.Schedule)
+            .Include(r => r.RemoteActivity)
             .OrderByDescending(r => r.RecordedAt)
             .Take(limit)
             .ToListAsync();
@@ -63,54 +65,49 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
             .ToDictionary(g => g.Key, g => g.First());
     }
 
+    /// <summary>
+    /// Escala ativa <b>já resolvida pela programação do dia</b>: a unidade devolvida
+    /// é a que vale hoje, considerando a regra do dia da semana e as exceções do
+    /// calendário — e não mais o local fixo do rodízio. Em um dia remoto ou sem
+    /// atividade não há local, e a resposta traz apenas o modo e o motivo.
+    /// </summary>
     [HttpGet("active-schedule")]
     public async Task<ActionResult<ActiveScheduleDto?>> GetActiveSchedule()
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub")!);
 
-        var today = BrasiliaTime.Hoje;
-        var currentShift = ShiftFromHour(BrasiliaTime.Agora.Hour);
+        var dia = await programacao.ObterAsync(userId, BrasiliaTime.Hoje);
+        if (dia.ScheduleId == null) return Ok(null);
 
-        var membership = await db.GroupMemberships.FirstOrDefaultAsync(m => m.StudentId == userId);
-        if (membership == null) return Ok(null);
-
-        var schedule = await db.RotationSchedules
-            .Include(s => s.Location)
-            .Where(s => s.GroupId == membership.GroupId
-                     && s.StartDate <= today
-                     && s.EndDate >= today
-                     && s.Shift == currentShift)
+        var horasExigidas = await db.RotationSchedules
+            .Where(s => s.Id == dia.ScheduleId)
+            .Select(s => s.RequiredHours)
             .FirstOrDefaultAsync();
-
-        // Fallback: qualquer turno hoje
-        schedule ??= await db.RotationSchedules
-            .Include(s => s.Location)
-            .Where(s => s.GroupId == membership.GroupId
-                     && s.StartDate <= today
-                     && s.EndDate >= today)
-            .FirstOrDefaultAsync();
-
-        if (schedule == null) return Ok(null);
 
         return Ok(new ActiveScheduleDto
         {
-            ScheduleId = schedule.Id,
-            Shift = schedule.Shift,
-            PeriodLabel = schedule.PeriodLabel,
-            ActivityType = schedule.ActivityType,
-            RequiredHours = schedule.RequiredHours,
-            Location = new LocationDto
+            ScheduleId = dia.ScheduleId.Value,
+            Shift = dia.Turno,
+            PeriodLabel = dia.PeriodLabel ?? string.Empty,
+            ActivityType = dia.ActivityType ?? string.Empty,
+            RequiredHours = horasExigidas,
+            Mode = dia.Modo,
+            ModeLabel = ModoAtividade.Rotulo(dia.Modo),
+            Validation = dia.Validacao,
+            Reason = dia.Motivo,
+            Location = dia.Local == null ? null : new LocationDto
             {
-                Id = schedule.Location.Id,
-                Name = schedule.Location.Name,
-                Address = schedule.Location.Address,
-                Latitude = schedule.Location.Latitude,
-                Longitude = schedule.Location.Longitude,
-                RadiusMeters = schedule.Location.RadiusMeters,
-                IsInstitution = schedule.Location.IsInstitution,
-                ShiftStart = schedule.Location.ShiftStart,
-                ShiftEnd = schedule.Location.ShiftEnd
+                Id = dia.Local.Id,
+                Name = dia.Local.Name,
+                Address = dia.Local.Address,
+                Latitude = dia.Local.Latitude,
+                Longitude = dia.Local.Longitude,
+                RadiusMeters = dia.Local.RadiusMeters,
+                IsInstitution = dia.Local.IsInstitution,
+                ShiftStart = dia.Local.ShiftStart,
+                ShiftEnd = dia.Local.ShiftEnd,
+                CodigoCnes = dia.Local.CodigoCnes
             }
         });
     }
@@ -160,6 +157,36 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         // Horário oficial do estágio (GMT-3). Ver Services/BrasiliaTime.cs.
         var agora = BrasiliaTime.Agora;
 
+        // A programação do dia manda no ponto: só há registro por localização em dia
+        // presencial. Dia remoto se comprova pelo código da atividade e feriado não
+        // gera obrigação nenhuma — aceitar um ponto aqui produziria presença numa
+        // data em que o aluno não deveria estar em lugar algum.
+        var dia = await programacao.ObterAsync(userId, DateOnly.FromDateTime(agora));
+
+        // Aluno ainda sem rodízio nem exceção não tem programação a contrariar: o
+        // registro segue pelo caminho antigo e cai em "pendente" para validação
+        // manual. Bloqueá-lo aqui só esconderia o cadastro que falta.
+        var temProgramacao = dia.ScheduleId.HasValue || dia.ExcecaoId.HasValue;
+
+        if (temProgramacao && dia.Modo == ModoAtividade.SemAtividade)
+            return BadRequest(new
+            {
+                message = dia.Motivo is null
+                    ? "Não há atividade programada para hoje: nenhum ponto é exigido."
+                    : $"{dia.Motivo} Não há ponto a registrar hoje.",
+                code = "sem_atividade_programada",
+                mode = dia.Modo
+            });
+
+        if (dia.Modo == ModoAtividade.Remoto)
+            return BadRequest(new
+            {
+                message = "Hoje é dia de atividade remota: a presença é registrada com o código "
+                        + "informado pelo professor, não pela localização.",
+                code = "dia_remoto",
+                mode = dia.Modo
+            });
+
         // A descrição das atividades é o registro do que o aluno fez no turno:
         // sem ela o check-out não é aceito, nem pela tela nem pela API.
         var descricao = dto.ActivitiesDescription?.Trim();
@@ -199,9 +226,20 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         var aluno = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
 
         // Validação inteligente: geolocalização (distância) + janela de horário do turno.
-        var location = dto.LocationId.HasValue
-            ? await db.Locations.FindAsync(dto.LocationId.Value)
-            : null;
+        // A unidade que vale é a da programação do dia — uma troca de local ou uma
+        // sexta na faculdade mudam o destino sem que a tela precise saber disso.
+        var location = dia.Local
+            ?? (dto.LocationId.HasValue ? await db.Locations.FindAsync(dto.LocationId.Value) : null);
+
+        if (dia.Local != null && dto.LocationId.HasValue && dto.LocationId.Value != dia.Local.Id)
+            return BadRequest(new
+            {
+                message = $"Hoje o registro é em {dia.Local.Name}"
+                        + (dia.Motivo is null ? "." : $" ({dia.Motivo})."),
+                code = "local_divergente",
+                locationId = dia.Local.Id,
+                locationName = dia.Local.Name
+            });
         // Fora do raio o ponto não é registrado: o aluno precisa estar na unidade.
         // Quem tem um motivo legítimo (GPS falhando, atendimento externo) abre uma
         // irregularidade para análise, em vez de gravar um ponto inválido.
@@ -223,9 +261,14 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
             }
         }
 
+        // A regra fixa de sexta-feira só continua valendo em rodízios sem programação
+        // semanal: com ela cadastrada, é a programação que diz onde é o dia.
+        var temProgramacaoSemanal = dia.ScheduleId.HasValue
+            && await db.RotationDaySchedules.AnyAsync(d => d.ScheduleId == dia.ScheduleId.Value);
+
         var (status, irregularityReason, distanceMeters) = AvaliarRegistro(
             location, dto.Latitude, dto.Longitude, dto.AccuracyMeters, agora,
-            dto.Type, aluno?.AllowLateArrival == true);
+            dto.Type, aluno?.AllowLateArrival == true, temProgramacaoSemanal);
 
         // Foto do registro: guardamos o data URI completo (MVP). Limite de ~5 MB
         // para proteger o banco; o frontend já comprime a imagem antes de enviar.
@@ -237,8 +280,8 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         var record = new AttendanceRecord
         {
             StudentId = userId,
-            ScheduleId = dto.ScheduleId,
-            LocationId = dto.LocationId,
+            ScheduleId = dto.ScheduleId ?? dia.ScheduleId,
+            LocationId = location?.Id ?? dto.LocationId,
             Type = dto.Type,
             RecordedAt = agora,
             Latitude = dto.Latitude,
@@ -323,10 +366,14 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
     /// Alunos com permissão de atraso previamente autorizada não são penalizados por
     /// chegar depois do início do turno; a carga horária do dia continua sendo exigida,
     /// pois o cálculo de horas usa o par check-in/check-out.
+    ///
+    /// A regra de sexta-feira é o padrão de quem ainda não cadastrou a programação
+    /// semanal do rodízio. Com ela cadastrada, quem decide o local de cada dia é a
+    /// programação — inclusive uma sexta que aconteça na própria unidade.
     /// </summary>
     private (string status, string? reason, double? distance) AvaliarRegistro(
         Location? location, double lat, double lon, double? accuracyMeters, DateTime recordedAt,
-        string tipo, bool permiteAtraso = false)
+        string tipo, bool permiteAtraso = false, bool temProgramacaoSemanal = false)
     {
         if (location == null)
             return ("pendente", "Sem local vinculado. Aguardando validação manual.", null);
@@ -369,7 +416,8 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         }
 
         // Regra de sexta-feira: o registro deve ser feito na instituição de ensino.
-        var sextaForaInstituicao = recordedAt.DayOfWeek == DayOfWeek.Friday && !location.IsInstitution;
+        var sextaForaInstituicao = !temProgramacaoSemanal
+            && recordedAt.DayOfWeek == DayOfWeek.Friday && !location.IsInstitution;
         if (sextaForaInstituicao)
             motivos.Add("Sexta-feira: o registro deve ser feito na instituição de ensino");
 
@@ -504,6 +552,8 @@ public class AttendanceController(AppDbContext db, GeoService geo) : ControllerB
         ValidatedByName = r.ValidatedBy?.FullName,
         ValidatedAt = r.ValidatedAt,
         Shift = Turnos.Normalizar(r.Schedule?.Shift) ?? Turnos.DaHora(r.RecordedAt),
+        RemoteActivityId = r.RemoteActivityId,
+        RemoteActivityTitle = r.RemoteActivity?.Title,
         IrregularityId = irregularidade?.Id,
         IrregularityStatus = irregularidade?.Status,
         // Negada libera nova contestação; qualquer outra situação mantém o bloqueio.

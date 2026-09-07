@@ -10,6 +10,8 @@ public class UserDto
     public string? Rgm { get; init; }
     public int? Semester { get; init; }
     public string? Shift { get; init; }
+    /// <summary>Curso do aluno — é por ele que uma exceção de curso o alcança.</summary>
+    public string? Course { get; init; }
     public string Role { get; init; } = string.Empty;
     public bool IsActive { get; init; }
     /// <summary>Aluno autorizado a chegar após o horário previsto de início.</summary>
@@ -37,6 +39,12 @@ public record UpdateShiftDto(
     [Required, MaxLength(10)] string Shift  // "manha" | "tarde" | "noite"
 );
 
+// ── Curso do aluno ────────────────────────────────────────────────────────────
+// Vazio limpa o curso: o aluno deixa de ser alcançado por exceções de curso.
+public record UpdateCourseDto(
+    [MaxLength(150)] string? Course
+);
+
 // ── Criação de preceptor / supervisor ─────────────────────────────────────────
 public record CreateStaffDto(
     [Required, MinLength(2), MaxLength(200)] string FullName,
@@ -52,7 +60,9 @@ public record BulkImportStudentDto(
     [Required, MaxLength(50)] string Rgm,
     [Required, MinLength(2), MaxLength(200)] string FullName,
     [Required] int Semester,
-    [Required, MaxLength(10)] string Shift  // "manha" | "tarde" | "noite"
+    [Required, MaxLength(10)] string Shift,  // "manha" | "tarde" | "noite"
+    // Opcional: define o alcance das exceções de calendário por curso.
+    [MaxLength(150)] string? Course = null
 );
 
 public record BulkImportRequestDto(

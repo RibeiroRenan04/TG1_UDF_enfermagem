@@ -12,7 +12,7 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class DashboardController(AppDbContext db) : ControllerBase
+public class DashboardController(AppDbContext db, ProgramacaoService programacao) : ControllerBase
 {
     [HttpGet("stats")]
     public async Task<ActionResult<DashboardStatsDto>> GetStats()
@@ -292,62 +292,71 @@ public class DashboardController(AppDbContext db) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Dias passados em que faltou o registro de presença.
+    ///
+    /// A varredura é dirigida pela programação, não mais pelo calendário civil: só
+    /// vira pendência o dia que exigia alguma coisa do aluno. Feriado, recesso,
+    /// estágio cancelado e fim de semana simplesmente não entram, e um dia remoto
+    /// já cumprido pelo código da atividade também não.
+    /// </summary>
     private async Task<List<PendencyDto>> GetStudentPendencies(Guid studentId)
     {
         var today = BrasiliaTime.Hoje;
 
-        // Busca todos os cronogramas do grupo do aluno
         var membership = await db.GroupMemberships
             .FirstOrDefaultAsync(m => m.StudentId == studentId);
         if (membership == null) return [];
 
         var schedules = await db.RotationSchedules
-            .Include(s => s.Location)
             .Where(s => s.GroupId == membership.GroupId)
+            .Select(s => new { s.StartDate, s.EndDate })
             .ToListAsync();
+        if (schedules.Count == 0) return [];
 
-        // Check-ins existentes
-        var checkIns = await db.AttendanceRecords
-            .Where(r => r.StudentId == studentId && r.Type == "check_in")
-            .Select(r => new { r.ScheduleId, Date = DateOnly.FromDateTime(r.RecordedAt) })
-            .ToListAsync();
+        var inicio = schedules.Min(s => s.StartDate);
+        var fim = schedules.Max(s => s.EndDate);
+        if (fim >= today) fim = today.AddDays(-1);
+        if (fim < inicio) return [];
 
-        var checkInSet = checkIns
-            .Select(r => $"{r.ScheduleId}|{r.Date:yyyy-MM-dd}")
+        // Check-ins existentes, indexados por data: o dia remoto gera o mesmo par
+        // de registros do presencial, então a comparação vale para os dois.
+        var checkInSet = (await db.AttendanceRecords
+                .Where(r => r.StudentId == studentId && r.Type == "check_in")
+                .Select(r => r.RecordedAt)
+                .ToListAsync())
+            .Select(DateOnly.FromDateTime)
             .ToHashSet();
 
-        var pendencies = new List<PendencyDto>();
-        foreach (var schedule in schedules)
-        {
-            var current = schedule.StartDate;
-            var end = schedule.EndDate < today ? schedule.EndDate : today.AddDays(-1);
-            while (current <= end)
-            {
-                // Apenas dias úteis (seg-sex)
-                if (current.DayOfWeek != DayOfWeek.Saturday && current.DayOfWeek != DayOfWeek.Sunday)
-                {
-                    var key = $"{schedule.Id}|{current:yyyy-MM-dd}";
-                    if (!checkInSet.Contains(key))
-                    {
-                        // Horas esperadas com base no horário do local
-                        double expectedHours = 8;
-                        if (TimeSpan.TryParse(schedule.Location.ShiftStart, out var start) &&
-                            TimeSpan.TryParse(schedule.Location.ShiftEnd, out var finish))
-                            expectedHours = (finish - start).TotalHours;
+        var programacao_ = await programacao.ObterIntervaloAsync(studentId, inicio, fim);
 
-                        pendencies.Add(new PendencyDto
-                        {
-                            PendencyDate = current,
-                            ScheduleId = schedule.Id,
-                            LocationName = schedule.Location.Name,
-                            ExpectedHours = expectedHours
-                        });
-                    }
-                }
-                current = current.AddDays(1);
-            }
-        }
+        var pendencies = programacao_
+            .Where(dia => dia.ExigePonto && !checkInSet.Contains(dia.Data))
+            .Select(dia => new PendencyDto
+            {
+                PendencyDate = dia.Data,
+                ScheduleId = dia.ScheduleId,
+                LocationName = dia.Local?.Name ?? ModoAtividade.Rotulo(dia.Modo),
+                ExpectedHours = HorasEsperadas(dia)
+            });
 
         return [.. pendencies.OrderByDescending(p => p.PendencyDate)];
+    }
+
+    /// <summary>
+    /// Carga horária do dia. Vem da janela do turno da unidade; em dia remoto, da
+    /// carga informada pelo professor na atividade. Sem nenhuma das duas, 8 horas.
+    /// </summary>
+    private static double HorasEsperadas(ProgramacaoService.ProgramacaoDia dia)
+    {
+        if (dia.Local != null
+            && TimeSpan.TryParse(dia.Local.ShiftStart, out var inicio)
+            && TimeSpan.TryParse(dia.Local.ShiftEnd, out var fim))
+            return (fim - inicio).TotalHours;
+
+        if (dia.AtividadesRemotas.Count > 0)
+            return dia.AtividadesRemotas.Sum(a => a.EstimatedHours);
+
+        return 8;
     }
 }

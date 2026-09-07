@@ -9,6 +9,13 @@ public class AttendanceRecord
     public Guid? ScheduleId { get; set; }
     public Guid? LocationId { get; set; }
 
+    /// <summary>
+    /// Atividade remota que originou o ponto. Preenchida, o registro veio do código
+    /// de presença e não do geofence — é o que distingue os dois na hora de exibir
+    /// e de auditar.
+    /// </summary>
+    public Guid? RemoteActivityId { get; set; }
+
     /// <summary>"check_in" | "check_out"</summary>
     public string Type { get; set; } = "check_in";
 
@@ -33,4 +40,5 @@ public class AttendanceRecord
     public RotationSchedule? Schedule { get; set; }
     public Location? Location { get; set; }
     public ApplicationUser? ValidatedBy { get; set; }
+    public RemoteActivity? RemoteActivity { get; set; }
 }

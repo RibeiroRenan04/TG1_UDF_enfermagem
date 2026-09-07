@@ -96,6 +96,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
             .Include(s => s.Group)
             .Include(s => s.Location)
             .Include(s => s.Preceptor)
+            .Include(s => s.Days).ThenInclude(d => d.Location)
             .OrderBy(s => s.StartDate)
             .ToListAsync();
 
@@ -110,6 +111,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
             .Include(s => s.Group)
             .Include(s => s.Location)
             .Include(s => s.Preceptor)
+            .Include(s => s.Days).ThenInclude(d => d.Location)
             .Where(s => s.GroupId == groupId)
             .OrderBy(s => s.StartDate)
             .ToListAsync();
@@ -139,6 +141,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
         };
 
         db.RotationSchedules.Add(schedule);
+        AplicarDias(schedule, dto.Days);
         await db.SaveChangesAsync();
 
         return Ok(MapSchedule(await RecarregarAsync(schedule.Id)));
@@ -148,7 +151,9 @@ public class GroupsController(AppDbContext db) : ControllerBase
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<ScheduleDto>> UpdateSchedule(Guid id, [FromBody] CreateScheduleDto dto)
     {
-        var schedule = await db.RotationSchedules.FirstOrDefaultAsync(s => s.Id == id);
+        var schedule = await db.RotationSchedules
+            .Include(s => s.Days)
+            .FirstOrDefaultAsync(s => s.Id == id);
         if (schedule == null) return NotFound();
 
         var erro = await ValidarAlocacaoAsync(dto, id);
@@ -164,6 +169,12 @@ public class GroupsController(AppDbContext db) : ControllerBase
         schedule.ActivityType = dto.ActivityType.Trim().ToLower();
         schedule.RequiredHours = dto.RequiredHours;
         schedule.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
+
+        // A programação semanal é substituída inteira: enviar a lista vazia volta o
+        // rodízio ao padrão (todo dia útil presencial no local principal).
+        db.RotationDaySchedules.RemoveRange(schedule.Days);
+        schedule.Days.Clear();
+        AplicarDias(schedule, dto.Days);
 
         await db.SaveChangesAsync();
 
@@ -243,7 +254,60 @@ public class GroupsController(AppDbContext db) : ControllerBase
                  + $"{conflito.StartDate:dd/MM/yyyy} e {conflito.EndDate:dd/MM/yyyy} "
                  + $"({conflito.Location?.Name}).";
 
+        var erroDias = await ValidarDiasAsync(dto.Days);
+        if (erroDias != null) return erroDias;
+
         return null;
+    }
+
+    /// <summary>
+    /// Confere a programação semanal: um dia da semana aparece uma vez só, o modo
+    /// é conhecido e o local informado existe. Sem dias, o rodízio segue no padrão.
+    /// </summary>
+    private async Task<string?> ValidarDiasAsync(List<CriarDiaRodizioDto>? dias)
+    {
+        if (dias == null || dias.Count == 0) return null;
+
+        var vistos = new HashSet<int>();
+        foreach (var dia in dias)
+        {
+            if (!DiasSemana.Valido(dia.DayOfWeek))
+                return "Dia da semana inválido na programação.";
+            if (!vistos.Add(dia.DayOfWeek))
+                return $"{DiasSemana.Rotulo(dia.DayOfWeek)} aparece mais de uma vez na programação.";
+
+            var modo = ModoAtividade.Normalizar(dia.Mode);
+            if (modo == null)
+                return $"Tipo de atividade inválido em {DiasSemana.Rotulo(dia.DayOfWeek)}.";
+
+            if (modo == ModoAtividade.Presencial && dia.LocationId.HasValue
+                && !await db.Locations.AnyAsync(l => l.Id == dia.LocationId.Value))
+                return $"Local informado em {DiasSemana.Rotulo(dia.DayOfWeek)} não foi encontrado.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Grava a programação semanal. O local só é guardado no dia presencial: em um
+    /// dia remoto ou sem atividade ele não significa nada e só confundiria a tela.
+    /// </summary>
+    private static void AplicarDias(RotationSchedule schedule, List<CriarDiaRodizioDto>? dias)
+    {
+        if (dias == null) return;
+
+        foreach (var dia in dias)
+        {
+            var modo = ModoAtividade.Normalizar(dia.Mode) ?? ModoAtividade.Presencial;
+            schedule.Days.Add(new RotationDaySchedule
+            {
+                ScheduleId = schedule.Id,
+                DayOfWeek = dia.DayOfWeek,
+                Mode = modo,
+                LocationId = modo == ModoAtividade.Presencial ? dia.LocationId : null,
+                Notes = string.IsNullOrWhiteSpace(dia.Notes) ? null : dia.Notes.Trim()
+            });
+        }
     }
 
     private async Task<RotationSchedule> RecarregarAsync(Guid id) =>
@@ -251,6 +315,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
             .Include(s => s.Group)
             .Include(s => s.Location)
             .Include(s => s.Preceptor)
+            .Include(s => s.Days).ThenInclude(d => d.Location)
             .FirstAsync(s => s.Id == id);
 
     private static ScheduleDto MapSchedule(RotationSchedule s) => new()
@@ -261,6 +326,24 @@ public class GroupsController(AppDbContext db) : ControllerBase
         PreceptorId = s.PreceptorId, PreceptorName = s.Preceptor?.FullName,
         Shift = s.Shift, PeriodLabel = s.PeriodLabel,
         StartDate = s.StartDate, EndDate = s.EndDate,
-        ActivityType = s.ActivityType, RequiredHours = s.RequiredHours, Notes = s.Notes
+        ActivityType = s.ActivityType, RequiredHours = s.RequiredHours, Notes = s.Notes,
+        Days = [.. s.Days.OrderBy(d => d.DayOfWeek == 0 ? 7 : d.DayOfWeek).Select(d => MapDia(d, s))]
+    };
+
+    /// <summary>
+    /// O dia herda o local principal do rodízio quando nenhum outro foi informado —
+    /// é o que a tela mostra e o que a programação usa para validar o ponto.
+    /// </summary>
+    private static DiaRodizioDto MapDia(RotationDaySchedule d, RotationSchedule s) => new()
+    {
+        DayOfWeek = d.DayOfWeek,
+        DayLabel = DiasSemana.Rotulo(d.DayOfWeek),
+        Mode = d.Mode,
+        ModeLabel = ModoAtividade.Rotulo(d.Mode),
+        LocationId = d.Mode == ModoAtividade.Presencial ? d.LocationId ?? s.LocationId : null,
+        LocationName = d.Mode == ModoAtividade.Presencial
+            ? d.Location?.Name ?? s.Location?.Name
+            : null,
+        Notes = d.Notes
     };
 }

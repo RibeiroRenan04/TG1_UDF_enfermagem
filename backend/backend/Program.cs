@@ -54,6 +54,9 @@ builder.Services.AddScoped<EmailService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<CertificateService>();
 builder.Services.AddScoped<BuscaSaudeService>();
+// Programação do dia: é ela que decide se o ponto é validado por localização,
+// por código de atividade remota ou se o dia não gera obrigação nenhuma.
+builder.Services.AddScoped<ProgramacaoService>();
 
 // ── Geocodificação de unidades de saúde ───────────────────────────────────────
 // Toda a aplicação depende de IGeocodingService: trocar o Nominatim por outro

@@ -13,4 +13,5 @@ public class StudentGroup
     // Navigation
     public ICollection<GroupMembership> Memberships { get; set; } = [];
     public ICollection<RotationSchedule> Schedules { get; set; } = [];
+    public ICollection<RemoteActivity> RemoteActivities { get; set; } = [];
 }

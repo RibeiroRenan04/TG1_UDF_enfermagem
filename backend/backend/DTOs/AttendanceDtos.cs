@@ -43,6 +43,11 @@ public class AttendanceRecordDto
     /// <summary>Turno em que o ponto foi registrado ("manha" | "tarde" | "noite").</summary>
     public string Shift { get; init; } = string.Empty;
 
+    // ── Atividade remota ──────────────────────────────────────────────────────
+    // Preenchidos, o ponto veio do código de presença e não do geofence.
+    public Guid? RemoteActivityId { get; init; }
+    public string? RemoteActivityTitle { get; init; }
+
     // ── Irregularidade aberta sobre este ponto ────────────────────────────────
     // Alimenta a trava de duplicidade da tela: enquanto houver uma contestação em
     // andamento, o aluno não abre outra para o mesmo ponto.
@@ -93,5 +98,17 @@ public class ActiveScheduleDto
     public string PeriodLabel { get; init; } = string.Empty;
     public string ActivityType { get; init; } = string.Empty;
     public int RequiredHours { get; init; }
-    public LocationDto Location { get; init; } = null!;
+
+    /// <summary>Modo do dia: "presencial" | "remoto" | "sem_atividade".</summary>
+    public string Mode { get; init; } = string.Empty;
+    public string ModeLabel { get; init; } = string.Empty;
+
+    /// <summary>Como a presença do dia é comprovada: "localizacao" | "codigo" | "nenhuma".</summary>
+    public string Validation { get; init; } = string.Empty;
+
+    /// <summary>Explicação do dia, quando ele fugiu da programação normal.</summary>
+    public string? Reason { get; init; }
+
+    /// <summary>Unidade do dia. Nula em dia remoto ou sem atividade.</summary>
+    public LocationDto? Location { get; init; }
 }

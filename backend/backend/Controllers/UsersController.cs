@@ -165,6 +165,46 @@ public class UsersController(AppDbContext db) : ControllerBase
         return Ok(MapToDto(user));
     }
 
+    // ── Curso do aluno ────────────────────────────────────────────────────────
+    /// <summary>
+    /// Define o curso do aluno. É por ele que uma exceção de calendário com
+    /// abrangência "curso" (um recesso só da Enfermagem, por exemplo) alcança o
+    /// aluno sem precisar listar turma por turma.
+    /// </summary>
+    [HttpPatch("{id}/course")]
+    [Authorize(Roles = Roles.Supervisor)]
+    public async Task<ActionResult<UserDto>> UpdateCourse(Guid id, [FromBody] UpdateCourseDto dto)
+    {
+        var user = await db.Users
+            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .FirstOrDefaultAsync(u => u.Id == id);
+
+        if (user == null) return NotFound();
+
+        user.Course = string.IsNullOrWhiteSpace(dto.Course) ? null : dto.Course.Trim();
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok(MapToDto(user));
+    }
+
+    /// <summary>
+    /// Cursos já cadastrados. Alimenta a lista da tela de exceções, para o mesmo
+    /// curso não ser digitado de duas formas diferentes e deixar de casar.
+    /// </summary>
+    [HttpGet("cursos")]
+    public async Task<ActionResult<List<string>>> GetCursos()
+    {
+        var cursos = await db.Users
+            .Where(u => u.Course != null && u.Course != "")
+            .Select(u => u.Course!)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToListAsync();
+
+        return Ok(cursos);
+    }
+
     // ── Vínculo institucional ─────────────────────────────────────────────────
     /// <summary>
     /// Opções de vínculo institucional do cadastro de preceptor/professor: as
@@ -277,6 +317,7 @@ public class UsersController(AppDbContext db) : ControllerBase
                     existing.Rgm = rgm;
                     existing.Semester = s.Semester;
                     existing.Shift = s.Shift.ToLower();
+                    if (!string.IsNullOrWhiteSpace(s.Course)) existing.Course = s.Course.Trim();
                     // Aluno que ainda não fez o primeiro acesso tem a senha inicial
                     // igual ao RGM: reemite o hash no formato novo.
                     if (existing.MustChangePassword)
@@ -308,6 +349,7 @@ public class UsersController(AppDbContext db) : ControllerBase
                         Rgm = rgm, // o RGM é a matrícula do aluno
                         Semester = s.Semester,
                         Shift = s.Shift.ToLower(),
+                        Course = string.IsNullOrWhiteSpace(s.Course) ? null : s.Course.Trim(),
                         MustChangePassword = true,
                         MustSetEmail = false
                     });
@@ -458,6 +500,7 @@ public class UsersController(AppDbContext db) : ControllerBase
         Rgm = u.Rgm,
         Semester = u.Semester,
         Shift = u.Shift,
+        Course = u.Course,
         Role = u.Role,
         IsActive = u.IsActive,
         AllowLateArrival = u.AllowLateArrival,

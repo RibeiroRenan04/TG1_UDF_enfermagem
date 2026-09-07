@@ -18,6 +18,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PointIrregularity> PointIrregularities => Set<PointIrregularity>();
     public DbSet<StudentAllocation> StudentAllocations => Set<StudentAllocation>();
     public DbSet<GeocodingCacheEntry> GeocodingCache => Set<GeocodingCacheEntry>();
+    public DbSet<RotationDaySchedule> RotationDaySchedules => Set<RotationDaySchedule>();
+    public DbSet<RemoteActivity> RemoteActivities => Set<RemoteActivity>();
+    public DbSet<RemoteActivityParticipation> RemoteActivityParticipations => Set<RemoteActivityParticipation>();
+    public DbSet<CalendarException> CalendarExceptions => Set<CalendarException>();
 
     // As propriedades das entidades permanecem em inglês; o mapeamento aponta para
     // o schema do banco em português (tabelas e colunas).
@@ -40,6 +44,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Shift).HasColumnName("Turno").HasMaxLength(10);
             e.Property(x => x.Phone).HasColumnName("Telefone").HasMaxLength(30);
             e.Property(x => x.Institution).HasColumnName("Instituicao").HasMaxLength(200);
+            e.Property(x => x.Course).HasColumnName("Curso").HasMaxLength(150);
             e.Property(x => x.AllowLateArrival).HasColumnName("PermissaoAtraso").HasDefaultValue(false);
             e.Property(x => x.LateArrivalNote).HasColumnName("ObservacaoAtraso");
             e.Property(x => x.TermsAcceptedAt).HasColumnName("TermoAceitoEm");
@@ -199,6 +204,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.StudentId).HasColumnName("IdEstudante");
             e.Property(x => x.ScheduleId).HasColumnName("IdEscala");
             e.Property(x => x.LocationId).HasColumnName("IdLocal");
+            e.Property(x => x.RemoteActivityId).HasColumnName("IdAtividadeRemota");
             e.Property(x => x.Type).HasColumnName("Tipo").HasMaxLength(10);
             e.Property(x => x.RecordedAt).HasColumnName("RegistradoEm");
             e.Property(x => x.DistanceMeters).HasColumnName("DistanciaMetros");
@@ -226,6 +232,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.ValidatedBy)
              .WithMany()
              .HasForeignKey(x => x.ValidatedById)
+             .OnDelete(DeleteBehavior.SetNull)
+             .IsRequired(false);
+            e.HasOne(x => x.RemoteActivity)
+             .WithMany()
+             .HasForeignKey(x => x.RemoteActivityId)
              .OnDelete(DeleteBehavior.SetNull)
              .IsRequired(false);
         });
@@ -420,6 +431,155 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.UpdatedAt).HasColumnName("AtualizadoEm");
             e.Ignore(x => x.TemCoordenadas);
             e.HasIndex(x => x.EnderecoNormalizado).IsUnique();
+        });
+
+        // ── RotationDaySchedule → DiasRodizio ─────────────────────────────────
+        mb.Entity<RotationDaySchedule>(e =>
+        {
+            e.ToTable("DiasRodizio");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("IdDiaRodizio");
+            e.Property(x => x.ScheduleId).HasColumnName("IdEscala");
+            e.Property(x => x.DayOfWeek).HasColumnName("DiaSemana");
+            e.Property(x => x.Mode).HasColumnName("Modo").HasMaxLength(20)
+             .HasDefaultValue(ModoAtividade.Presencial);
+            e.Property(x => x.LocationId).HasColumnName("IdLocal");
+            e.Property(x => x.Notes).HasColumnName("Observacoes");
+            e.Property(x => x.CreatedAt).HasColumnName("CriadoEm");
+            // Um rodízio tem, no máximo, uma regra por dia da semana.
+            e.HasIndex(x => new { x.ScheduleId, x.DayOfWeek }).IsUnique();
+            e.HasOne(x => x.Schedule)
+             .WithMany(s => s.Days)
+             .HasForeignKey(x => x.ScheduleId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Location)
+             .WithMany()
+             .HasForeignKey(x => x.LocationId)
+             .OnDelete(DeleteBehavior.Restrict)
+             .IsRequired(false);
+        });
+
+        // ── RemoteActivity → AtividadesRemotas ────────────────────────────────
+        mb.Entity<RemoteActivity>(e =>
+        {
+            e.ToTable("AtividadesRemotas");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("IdAtividadeRemota");
+            e.Property(x => x.Title).HasColumnName("Titulo").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Description).HasColumnName("Descricao");
+            e.Property(x => x.GroupId).HasColumnName("IdGrupo");
+            e.Property(x => x.ScheduleId).HasColumnName("IdEscala");
+            e.Property(x => x.ProfessorId).HasColumnName("IdProfessor");
+            e.Property(x => x.ActivityDate).HasColumnName("Data");
+            e.Property(x => x.StartTime).HasColumnName("HoraInicio");
+            e.Property(x => x.EndTime).HasColumnName("HoraFim");
+            e.Property(x => x.EstimatedHours).HasColumnName("CargaHoraria");
+            e.Property(x => x.PresenceCode).HasColumnName("CodigoPresenca").HasMaxLength(20).IsRequired();
+            e.Property(x => x.RequiresTask).HasColumnName("ExigeTarefa").HasDefaultValue(false);
+            e.Property(x => x.TaskType).HasColumnName("TipoTarefa").HasMaxLength(30);
+            e.Property(x => x.TaskInstructions).HasColumnName("InstrucoesTarefa");
+            e.Property(x => x.Ativo).HasColumnName("Ativo").HasDefaultValue(true);
+            e.Property(x => x.CreatedAt).HasColumnName("CriadoEm");
+            e.Property(x => x.UpdatedAt).HasColumnName("AtualizadoEm");
+            e.Ignore(x => x.InicioEm);
+            e.Ignore(x => x.FimEm);
+            // O código identifica a atividade na hora do registro: não pode repetir
+            // enquanto duas atividades estiverem abertas ao mesmo tempo.
+            e.HasIndex(x => new { x.PresenceCode, x.ActivityDate }).IsUnique();
+            e.HasIndex(x => x.ActivityDate);
+            e.HasOne(x => x.Group)
+             .WithMany(g => g.RemoteActivities)
+             .HasForeignKey(x => x.GroupId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Schedule)
+             .WithMany(s => s.RemoteActivities)
+             .HasForeignKey(x => x.ScheduleId)
+             .OnDelete(DeleteBehavior.SetNull)
+             .IsRequired(false);
+            e.HasOne(x => x.Professor)
+             .WithMany()
+             .HasForeignKey(x => x.ProfessorId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── RemoteActivityParticipation → ParticipacoesAtividadeRemota ────────
+        mb.Entity<RemoteActivityParticipation>(e =>
+        {
+            e.ToTable("ParticipacoesAtividadeRemota");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("IdParticipacao");
+            e.Property(x => x.RemoteActivityId).HasColumnName("IdAtividadeRemota");
+            e.Property(x => x.StudentId).HasColumnName("IdEstudante");
+            e.Property(x => x.RegisteredAt).HasColumnName("RegistradoEm");
+            e.Property(x => x.CodeUsed).HasColumnName("CodigoInformado").HasMaxLength(20);
+            e.Property(x => x.TaskResponse).HasColumnName("RespostaTarefa");
+            e.Property(x => x.AttendanceRecordId).HasColumnName("IdPresenca");
+            e.Property(x => x.CreatedAt).HasColumnName("CriadoEm");
+            // O código vale uma única vez por aluno.
+            e.HasIndex(x => new { x.RemoteActivityId, x.StudentId }).IsUnique();
+            e.HasOne(x => x.RemoteActivity)
+             .WithMany(a => a.Participations)
+             .HasForeignKey(x => x.RemoteActivityId)
+             .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Student)
+             .WithMany()
+             .HasForeignKey(x => x.StudentId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── CalendarException → ExcecoesCalendario ────────────────────────────
+        mb.Entity<CalendarException>(e =>
+        {
+            e.ToTable("ExcecoesCalendario");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("IdExcecao");
+            e.Property(x => x.Type).HasColumnName("Tipo").HasMaxLength(30);
+            e.Property(x => x.Scope).HasColumnName("Abrangencia").HasMaxLength(20);
+            e.Property(x => x.StartDate).HasColumnName("DataInicio");
+            e.Property(x => x.EndDate).HasColumnName("DataFim");
+            e.Property(x => x.Shift).HasColumnName("Turno").HasMaxLength(10);
+            e.Property(x => x.GroupId).HasColumnName("IdGrupo");
+            e.Property(x => x.ScheduleId).HasColumnName("IdEscala");
+            e.Property(x => x.StudentId).HasColumnName("IdEstudante");
+            e.Property(x => x.Course).HasColumnName("Curso").HasMaxLength(150);
+            e.Property(x => x.LocationId).HasColumnName("IdLocal");
+            e.Property(x => x.RemoteActivityId).HasColumnName("IdAtividadeRemota");
+            e.Property(x => x.Description).HasColumnName("Descricao").HasMaxLength(300);
+            e.Property(x => x.CreatedById).HasColumnName("CriadoPorId");
+            e.Property(x => x.CreatedAt).HasColumnName("CriadoEm");
+            e.Property(x => x.UpdatedAt).HasColumnName("AtualizadoEm");
+            e.HasIndex(x => new { x.StartDate, x.EndDate });
+            e.HasIndex(x => x.Scope);
+            e.HasOne(x => x.Group)
+             .WithMany()
+             .HasForeignKey(x => x.GroupId)
+             .OnDelete(DeleteBehavior.Cascade)
+             .IsRequired(false);
+            e.HasOne(x => x.Schedule)
+             .WithMany()
+             .HasForeignKey(x => x.ScheduleId)
+             .OnDelete(DeleteBehavior.Cascade)
+             .IsRequired(false);
+            e.HasOne(x => x.Student)
+             .WithMany()
+             .HasForeignKey(x => x.StudentId)
+             .OnDelete(DeleteBehavior.Cascade)
+             .IsRequired(false);
+            e.HasOne(x => x.Location)
+             .WithMany()
+             .HasForeignKey(x => x.LocationId)
+             .OnDelete(DeleteBehavior.Restrict)
+             .IsRequired(false);
+            e.HasOne(x => x.RemoteActivity)
+             .WithMany()
+             .HasForeignKey(x => x.RemoteActivityId)
+             .OnDelete(DeleteBehavior.SetNull)
+             .IsRequired(false);
+            e.HasOne(x => x.CreatedBy)
+             .WithMany()
+             .HasForeignKey(x => x.CreatedById)
+             .OnDelete(DeleteBehavior.SetNull)
+             .IsRequired(false);
         });
     }
 }

@@ -21,10 +21,17 @@ public class RotationSchedule
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Programação por dia da semana. Vazia, o rodízio vale como antes: todo dia
+    /// útil é presencial no local principal.
+    /// </summary>
+    public ICollection<RotationDaySchedule> Days { get; set; } = [];
+
     // Navigation
     public StudentGroup Group { get; set; } = null!;
     public Location Location { get; set; } = null!;
     public ApplicationUser? Preceptor { get; set; }
     public ICollection<AttendanceRecord> AttendanceRecords { get; set; } = [];
     public ICollection<FormativeFollowup> Followups { get; set; } = [];
+    public ICollection<RemoteActivity> RemoteActivities { get; set; } = [];
 }

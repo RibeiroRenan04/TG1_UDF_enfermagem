@@ -23,6 +23,9 @@ public class ApplicationUser
     public string? Phone { get; set; }
     public string? Institution { get; set; }
 
+    /// <summary>Curso do aluno, ex: "Enfermagem". Define o alcance das exceções de curso.</summary>
+    public string? Course { get; set; }
+
     /// <summary>
     /// Autoriza o aluno a chegar depois do horário previsto de início do estágio.
     /// A carga horária do dia continua sendo exigida: a permissão só evita que o

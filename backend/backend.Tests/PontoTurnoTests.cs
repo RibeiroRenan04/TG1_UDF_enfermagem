@@ -22,7 +22,7 @@ public class PontoTurnoTests
     private static AttendanceController Montar(
         EstagioCheck.API.Data.AppDbContext db, Guid usuarioId, string papel = Roles.Aluno)
     {
-        var controller = new AttendanceController(db, new GeoService());
+        var controller = new AttendanceController(db, new GeoService(), new ProgramacaoService(db));
         var identidade = new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, usuarioId.ToString()),
