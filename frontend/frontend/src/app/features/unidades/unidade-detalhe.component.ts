@@ -35,7 +35,7 @@ export class UnidadeDetalheComponent implements OnInit {
   loading = signal(true);
   mostrarEncerradas = false;
 
-  colunas = ['nome', 'rgm', 'periodo', 'inicio', 'situacao', 'acoes'];
+  colunas = ['nome', 'rgm', 'turnoAlocacao', 'periodo', 'inicio', 'situacao', 'acoes'];
 
   readonly statusGeo = STATUS_GEO;
   readonly origens = ORIGEM_COORDENADAS;
@@ -94,9 +94,11 @@ export class UnidadeDetalheComponent implements OnInit {
   }
 
   encerrar(a: Alocacao): void {
-    if (!confirm(`Encerrar a alocação de ${a.estagiarioNome} nesta unidade? O histórico é preservado.`)) return;
+    // Encerrar é por turno: os outros turnos do aluno continuam valendo.
+    if (!confirm(`Encerrar a alocação de ${a.estagiarioNome} nesta unidade no turno da ` +
+                 `${this.turnoLabel(a.turno).toLowerCase()}? O histórico é preservado.`)) return;
 
-    this.service.encerrarAlocacao(this.unidadeId, a.estagiarioId).subscribe({
+    this.service.encerrarAlocacao(this.unidadeId, a.estagiarioId, a.turno).subscribe({
       next: () => {
         this.snackBar.open('Alocação encerrada.', '', { duration: 3000, panelClass: 'snack-success' });
         this.carregar();

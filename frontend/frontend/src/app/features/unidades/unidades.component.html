@@ -6,6 +6,9 @@
     </p>
   </div>
   <div class="header-actions" *ngIf="podeEditar()">
+    <button mat-stroked-button (click)="buscarNoCnes()">
+      <mat-icon>health_and_safety</mat-icon> Buscar no CNES
+    </button>
     <a mat-stroked-button routerLink="/app/unidades/importar">
       <mat-icon>upload_file</mat-icon> Importar planilha
     </a>
@@ -15,13 +18,15 @@
   </div>
 </div>
 
-<div class="readonly-note" *ngIf="somenteLeitura()">
+<!-- O preceptor consulta as unidades (precisa ver onde os alunos dele estão),
+     mas não cadastra nem altera — a tela diz isso em vez de só esconder botões. -->
+<div class="readonly-note" *ngIf="!podeEditar()">
   <mat-icon>visibility</mat-icon>
   <span>Perfil de <strong>consulta</strong>: as alterações são feitas pelo professor responsável.</span>
 </div>
 
 <!-- Atalho para a revisão quando há localização pendente de conferência. -->
-<div class="revisao-note" *ngIf="precisamRevisao() > 0">
+<div class="revisao-note" *ngIf="ehGestao() && precisamRevisao() > 0">
   <mat-icon>wrong_location</mat-icon>
   <span>
     <strong>{{ precisamRevisao() }} unidade(s)</strong> estão sem localização confirmada.
@@ -61,7 +66,7 @@
       </mat-select>
     </mat-form-field>
 
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" *ngIf="ehGestao()">
       <mat-label>Localização</mat-label>
       <mat-select [(ngModel)]="filtroStatus" (selectionChange)="carregar()">
         <mat-option value="">Qualquer</mat-option>
@@ -146,8 +151,8 @@
         </td>
       </ng-container>
 
-      <tr mat-header-row *matHeaderRowDef="colunas"></tr>
-      <tr mat-row *matRowDef="let row; columns: colunas;"></tr>
+      <tr mat-header-row *matHeaderRowDef="colunas()"></tr>
+      <tr mat-row *matRowDef="let row; columns: colunas();"></tr>
     </table>
 
     <ng-template #vazio>

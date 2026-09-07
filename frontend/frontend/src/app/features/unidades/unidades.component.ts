@@ -17,6 +17,7 @@ import { UnidadesSaudeService } from '../../core/services/unidades-saude.service
 import { AuthService } from '../../core/services/auth.service';
 import { UnidadeSaude, StatusGeocodificacao } from '../../core/models/models';
 import { UnidadeFormDialogComponent } from './unidade-form-dialog.component';
+import { BuscaCnesDialogComponent } from './busca-cnes-dialog.component';
 import { STATUS_GEO } from './status-geocodificacao';
 
 /** Lista das unidades de saúde, com os filtros da tela. */
@@ -42,8 +43,6 @@ export class UnidadesComponent implements OnInit {
   filtroAtivo: boolean | null = true;
   filtroStatus: StatusGeocodificacao | '' = '';
 
-  colunas = ['nome', 'tipo', 'cidade', 'coordenadas', 'estagiarios', 'status', 'acoes'];
-
   readonly statusGeo = STATUS_GEO;
   readonly opcoesStatus: StatusGeocodificacao[] =
     ['pendente', 'processando', 'sucesso', 'revisao_manual', 'nao_encontrado', 'erro'];
@@ -51,6 +50,18 @@ export class UnidadesComponent implements OnInit {
   /** Só o professor altera; a coordenadora consulta. */
   podeEditar = this.auth.ehProfessor;
   somenteLeitura = this.auth.somenteLeitura;
+
+  /**
+   * Situação da geocodificação e revisão de coordenadas são assunto de quem
+   * cadastra a unidade. Aluno e preceptor consultam a unidade — mostrar a eles
+   * uma coluna de "revisão manual" que não podem resolver só polui a tela.
+   */
+  ehGestao = this.auth.ehGestao;
+
+  /** Colunas por perfil: a de status geo só faz sentido para a gestão. */
+  colunas = computed(() => this.ehGestao()
+    ? ['nome', 'tipo', 'cidade', 'coordenadas', 'estagiarios', 'status', 'acoes']
+    : ['nome', 'tipo', 'cidade', 'coordenadas', 'estagiarios', 'acoes']);
 
   /** Unidades que precisam de conferência da localização. */
   precisamRevisao = computed(() =>
@@ -91,6 +102,22 @@ export class UnidadesComponent implements OnInit {
     this.filtroAtivo = true;
     this.filtroStatus = '';
     this.carregar();
+  }
+
+  /**
+   * Busca no CNES. Antes era uma tela própria ("Locais") que listava e editava a
+   * mesma tabela desta aqui; virou um diálogo para não haver dois cadastros da
+   * mesma unidade.
+   */
+  buscarNoCnes(): void {
+    const ref = this.dialog.open(BuscaCnesDialogComponent, { width: '820px', maxHeight: '90vh' });
+    ref.afterClosed().subscribe((importou: boolean) => {
+      if (importou) {
+        this.snackBar.open('Unidades importadas do CNES.', '',
+          { duration: 4000, panelClass: 'snack-success' });
+        this.carregar();
+      }
+    });
   }
 
   novaUnidade(): void {

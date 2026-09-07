@@ -27,7 +27,7 @@ import { RegistrarIrregularidadeDialogComponent } from '../irregularidades/regis
 export class HistoricoComponent implements OnInit {
   records = signal<AttendanceRecord[]>([]);
   loading = signal(true);
-  displayedColumns = ['date', 'type', 'location', 'distance', 'status', 'actions'];
+  displayedColumns = ['date', 'shift', 'type', 'location', 'distance', 'status', 'actions'];
 
   constructor(
     private attendanceService: AttendanceService,
@@ -46,17 +46,45 @@ export class HistoricoComponent implements OnInit {
   }
 
   /**
-   * Abre o registro de irregularidade. A ocorrência segue para a ciência do
-   * preceptor e, na sequência, para a decisão do professor responsável.
+   * Abre o registro de irregularidade. Quando parte de uma linha da tabela, o
+   * ponto já vai vinculado — o aluno não precisa procurá-lo numa lista.
+   *
+   * A ocorrência segue para a ciência do preceptor e, na sequência, para a
+   * decisão do professor responsável.
    */
-  registrarIrregularidade(): void {
-    const ref = this.dialog.open(RegistrarIrregularidadeDialogComponent, { width: '520px' });
+  registrarIrregularidade(registro?: AttendanceRecord): void {
+    if (registro?.hasOpenIrregularity) {
+      this.snackBar.open(this.motivoBloqueio(registro), '', { duration: 5000 });
+      return;
+    }
+
+    const ref = this.dialog.open(RegistrarIrregularidadeDialogComponent, {
+      width: '560px', maxHeight: '90vh', data: { registro }
+    });
     ref.afterClosed().subscribe((criada: boolean) => {
       if (criada) {
         this.snackBar.open('Irregularidade registrada. Acompanhe em "Irregularidades".', '',
           { duration: 5000, panelClass: 'snack-success' });
+        // Recarrega para o ponto já aparecer com a contestação em andamento.
+        this.carregar();
       }
     });
+  }
+
+  /**
+   * O botão de contestação fica inativo enquanto houver uma ocorrência em
+   * análise para o mesmo ponto: só volta a valer se o professor recusá-la.
+   */
+  podeContestar(r: AttendanceRecord): boolean {
+    return r.status !== 'aprovado' && !r.hasOpenIrregularity;
+  }
+
+  motivoBloqueio(r: AttendanceRecord): string {
+    if (!r.hasOpenIrregularity) return 'Registrar irregularidade sobre este ponto';
+    return r.irregularityStatus === 'aprovada'
+      ? 'Este ponto já teve uma irregularidade aprovada.'
+      : 'Já existe uma irregularidade em análise para este ponto. '
+        + 'Você poderá abrir outra se o professor recusar a atual.';
   }
 
   rotuloStatus(status: string): string {
@@ -65,5 +93,9 @@ export class HistoricoComponent implements OnInit {
       case 'irregular': return 'Irregular';
       default: return 'Pendente';
     }
+  }
+
+  rotuloTurno(turno?: string): string {
+    return ({ manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' } as Record<string, string>)[turno ?? ''] ?? '—';
   }
 }

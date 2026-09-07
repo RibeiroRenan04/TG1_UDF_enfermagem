@@ -101,6 +101,37 @@ export interface AttendanceRecord {
   locationId?: string;
   validatedByName?: string;
   validatedAt?: string;
+  /** Turno em que o ponto foi registrado. */
+  shift?: Turno;
+  /** Irregularidade mais recente aberta sobre este ponto. */
+  irregularityId?: string;
+  irregularityStatus?: IrregularityStatus;
+  /**
+   * Contestação em andamento: enquanto for `true`, o aluno não abre outra
+   * irregularidade para este ponto — só depois que o professor negar a atual.
+   */
+  hasOpenIrregularity?: boolean;
+}
+
+/** Turnos do estágio. */
+export type Turno = 'manha' | 'tarde' | 'noite';
+
+/**
+ * Situação do ponto do aluno no turno corrente. A trava de 1 check-in e
+ * 1 check-out por turno é aplicada na API; a tela apenas reflete o resultado.
+ */
+export interface ShiftPointStatus {
+  shift: Turno;
+  shiftLabel: string;
+  date: string;
+  checkInId?: string;
+  checkInAt?: string;
+  checkOutId?: string;
+  checkOutAt?: string;
+  canCheckIn: boolean;
+  canCheckOut: boolean;
+  shiftClosed: boolean;
+  blockedReason?: string;
 }
 
 export interface ActiveSchedule {
@@ -128,8 +159,34 @@ export interface DashboardStats {
   required: number;
   pendencyDays: number;
   pendencyHours: number;
-  totalStudents?: number;
+  /** Alunos ativos — contador do painel do professor. */
+  totalStudents: number;
   pendencies: Pendency[];
+  irregularities: IrregularityCounts;
+  /** Avisos centralizados do card "Status Pendentes". */
+  pendingStatuses: PendingStatus[];
+}
+
+export interface IrregularityCounts {
+  awaitingPreceptor: number;
+  awaitingProfessor: number;
+  approved: number;
+  denied: number;
+  total: number;
+  /** Ocorrências ainda em análise. */
+  open: number;
+}
+
+/** Um aviso do card "Status Pendentes" do painel inicial. */
+export interface PendingStatus {
+  kind: string;
+  severity: 'info' | 'atencao' | 'critico';
+  title: string;
+  detail: string;
+  link?: string;
+  linkLabel?: string;
+  count: number;
+  referenceDate?: string;
 }
 
 export interface UserDto {
@@ -333,9 +390,17 @@ export interface Irregularity {
   attendanceRecordId?: string;
   scheduleId?: string;
   type: IrregularityType;
+  /** Data em que a ocorrência aconteceu (informada pelo aluno). */
   occurredOn: string;
   description: string;
   status: IrregularityStatus;
+
+  // ── Ponto original contestado ───────────────────────────────────────────────
+  /** Data e hora exatas do ponto que originou a ocorrência. */
+  attendanceRecordedAt?: string;
+  attendanceType?: 'check_in' | 'check_out';
+  attendanceLocationName?: string;
+  attendanceStatus?: 'aprovado' | 'irregular' | 'pendente';
 
   preceptorId?: string;
   preceptorName?: string;
@@ -521,6 +586,8 @@ export interface Alocacao {
   unidadeCidade?: string;
   estagiarioId: string;
   estagiarioNome: string;
+  /** Turno da alocação — o aluno pode ter uma por turno, nunca duas no mesmo. */
+  turno: Turno;
   estagiarioRgm?: string;
   estagiarioEmail?: string;
   estagiarioSemestre?: number;
@@ -544,4 +611,14 @@ export interface EstagiarioDisponivel {
   /** Unidade em que já está alocado, se houver. */
   unidadeAtualId?: string;
   unidadeAtualNome?: string;
+  /** Alocações ativas do aluno, uma por turno. */
+  alocacoesAtivas: AlocacaoPorTurno[];
+  /** Turnos ainda livres para este aluno. */
+  turnosDisponiveis: Turno[];
+}
+
+export interface AlocacaoPorTurno {
+  turno: Turno;
+  unidadeId: string;
+  unidadeNome: string;
 }

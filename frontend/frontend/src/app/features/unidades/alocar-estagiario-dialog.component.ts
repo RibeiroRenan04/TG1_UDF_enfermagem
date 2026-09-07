@@ -8,12 +8,17 @@ import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSelectModule } from '@angular/material/select';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
-import { EstagiarioDisponivel, UnidadeSaude } from '../../core/models/models';
+import { EstagiarioDisponivel, Turno, UnidadeSaude } from '../../core/models/models';
 
 /**
  * Busca e alocação de um estagiário. Só aparecem usuários com perfil de aluno —
  * e a API confirma isso de novo, não confiando na tela.
+ *
+ * A alocação é por turno: o mesmo aluno pode estagiar de manhã em uma unidade e
+ * à tarde em outra. Os turnos já ocupados aparecem desabilitados na lista, e a
+ * API recusa a duplicidade de qualquer forma.
  */
 @Component({
   selector: 'app-alocar-estagiario-dialog',
@@ -21,7 +26,7 @@ import { EstagiarioDisponivel, UnidadeSaude } from '../../core/models/models';
   imports: [
     CommonModule, FormsModule,
     MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule,
-    MatIconModule, MatProgressSpinnerModule, MatTooltipModule
+    MatIconModule, MatProgressSpinnerModule, MatTooltipModule, MatSelectModule
   ],
   template: `
     <h2 mat-dialog-title>Alocar estagiário em {{ data.unidade.nome }}</h2>
@@ -52,26 +57,45 @@ import { EstagiarioDisponivel, UnidadeSaude } from '../../core/models/models';
               <ng-container *ngIf="a.turma"> · turma {{ a.turma }}</ng-container>
             </span>
             <span class="email">{{ a.email || '—' }}</span>
-            <!-- Alocar quem já tem unidade é uma transferência: precisa ser explícito. -->
-            <span class="ja-alocado" *ngIf="a.unidadeAtualId && a.unidadeAtualId !== data.unidade.id">
-              <mat-icon>info</mat-icon>
-              Já alocado(a) em <strong>{{ a.unidadeAtualNome }}</strong>
+
+            <!-- Alocações já ativas, turno a turno. -->
+            <span class="turnos-ativos" *ngIf="a.alocacoesAtivas?.length">
+              <span class="turno-chip" *ngFor="let al of a.alocacoesAtivas"
+                    [class.aqui]="al.unidadeId === data.unidade.id"
+                    [matTooltip]="al.unidadeNome">
+                <mat-icon>{{ al.unidadeId === data.unidade.id ? 'check_circle' : 'schedule' }}</mat-icon>
+                {{ turnoLabel(al.turno) }} · {{ al.unidadeNome }}
+              </span>
             </span>
-            <span class="aqui" *ngIf="a.unidadeAtualId === data.unidade.id">
-              <mat-icon>check_circle</mat-icon> Já está nesta unidade
+
+            <span class="sem-turno" *ngIf="!turnosLivres(a).length && !podeTransferir(a)">
+              <mat-icon>block</mat-icon>
+              Todos os turnos já estão alocados nesta unidade.
             </span>
           </span>
 
-          <button mat-flat-button color="primary"
-                  *ngIf="a.unidadeAtualId !== data.unidade.id"
-                  [disabled]="salvandoId() === a.id"
-                  (click)="alocar(a)">
-            <mat-spinner *ngIf="salvandoId() === a.id" diameter="16"
-                         style="display:inline-block;margin-right:6px"></mat-spinner>
-            <span *ngIf="salvandoId() !== a.id">
-              {{ a.unidadeAtualId ? 'Transferir' : 'Alocar' }}
-            </span>
-          </button>
+          <span class="acao">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="turno-select">
+              <mat-label>Turno</mat-label>
+              <mat-select [ngModel]="turnoEscolhido(a)" (ngModelChange)="definirTurno(a, $event)">
+                <mat-option *ngFor="let t of turnos" [value]="t"
+                            [disabled]="turnoOcupadoNestaUnidade(a, t)">
+                  {{ turnoLabel(t) }}
+                  <span class="opcao-nota" *ngIf="ocupacao(a, t) as u">— {{ u }}</span>
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <button mat-flat-button color="primary"
+                    [disabled]="salvandoId() === a.id || !turnoEscolhido(a)"
+                    (click)="alocar(a)">
+              <mat-spinner *ngIf="salvandoId() === a.id" diameter="16"
+                           style="display:inline-block;margin-right:6px"></mat-spinner>
+              <span *ngIf="salvandoId() !== a.id">
+                {{ rotuloBotao(a) }}
+              </span>
+            </button>
+          </span>
         </div>
       </div>
 
@@ -112,6 +136,23 @@ import { EstagiarioDisponivel, UnidadeSaude } from '../../core/models/models';
     }
     .ja-alocado { color: #92400e; }
     .aqui { color: #166534; }
+    .turnos-ativos { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .turno-chip {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 0.68rem; padding: 2px 8px; border-radius: 999px;
+      background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+      max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      mat-icon { font-size: 13px; width: 13px; height: 13px; }
+      &.aqui { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+    }
+    .sem-turno {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.7rem; color: #6B7280; margin-top: 4px;
+      mat-icon { font-size: 14px; width: 14px; height: 14px; }
+    }
+    .acao { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .turno-select { width: 116px; }
+    .opcao-nota { color: #9ca3af; font-size: 0.72rem; }
     .erro { color: #b91c1c; font-size: 0.85rem; margin: 10px 0 0; }
   `]
 })
@@ -122,6 +163,11 @@ export class AlocarEstagiarioDialogComponent implements OnInit {
   erro = signal('');
   termo = '';
   alocouAlgum = false;
+
+  readonly turnos: Turno[] = ['manha', 'tarde', 'noite'];
+
+  /** Turno escolhido por aluno na lista, antes de confirmar a alocação. */
+  private turnosSelecionados: Record<string, Turno> = {};
 
   private debounce?: ReturnType<typeof setTimeout>;
 
@@ -141,7 +187,11 @@ export class AlocarEstagiarioDialogComponent implements OnInit {
   private carregar(): void {
     this.carregando.set(true);
     this.service.getEstagiariosDisponiveis(this.data.unidade.id, this.termo || undefined).subscribe({
-      next: (a) => { this.alunos.set(a); this.carregando.set(false); },
+      next: (a) => {
+        this.alunos.set(a);
+        this.turnosSelecionados = {};
+        this.carregando.set(false);
+      },
       error: () => { this.carregando.set(false); this.erro.set('Erro ao buscar os alunos.'); }
     });
   }
@@ -150,17 +200,78 @@ export class AlocarEstagiarioDialogComponent implements OnInit {
     return ({ manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' } as Record<string, string>)[t] ?? t;
   }
 
+  /** Turnos ainda livres para o aluno (sem alocação ativa em nenhuma unidade). */
+  turnosLivres(a: EstagiarioDisponivel): Turno[] {
+    return a.turnosDisponiveis ?? [];
+  }
+
+  /** Alocação ativa do aluno naquele turno, se houver. */
+  private alocacaoNoTurno(a: EstagiarioDisponivel, t: Turno) {
+    return (a.alocacoesAtivas ?? []).find(x => x.turno === t);
+  }
+
+  /** Texto curto de ocupação do turno, para a opção do seletor. */
+  ocupacao(a: EstagiarioDisponivel, t: Turno): string | null {
+    const atual = this.alocacaoNoTurno(a, t);
+    if (!atual) return null;
+    return atual.unidadeId === this.data.unidade.id ? 'já nesta unidade' : atual.unidadeNome;
+  }
+
+  /** Turno ocupado por esta mesma unidade: não há nada a fazer nele. */
+  turnoOcupadoNestaUnidade(a: EstagiarioDisponivel, t: Turno): boolean {
+    return this.alocacaoNoTurno(a, t)?.unidadeId === this.data.unidade.id;
+  }
+
+  /** O aluno tem algum turno alocado em OUTRA unidade — dá para transferir. */
+  podeTransferir(a: EstagiarioDisponivel): boolean {
+    return (a.alocacoesAtivas ?? []).some(x => x.unidadeId !== this.data.unidade.id);
+  }
+
+  /**
+   * Turno pré-selecionado: o primeiro livre; se não houver, o primeiro alocado em
+   * outra unidade (uma transferência).
+   */
+  turnoEscolhido(a: EstagiarioDisponivel): Turno | null {
+    const escolhido = this.turnosSelecionados[a.id];
+    if (escolhido) return escolhido;
+
+    const livre = this.turnosLivres(a)[0];
+    if (livre) return livre;
+
+    return (a.alocacoesAtivas ?? []).find(x => x.unidadeId !== this.data.unidade.id)?.turno ?? null;
+  }
+
+  definirTurno(a: EstagiarioDisponivel, t: Turno): void {
+    this.turnosSelecionados[a.id] = t;
+  }
+
+  rotuloBotao(a: EstagiarioDisponivel): string {
+    const t = this.turnoEscolhido(a);
+    if (!t) return 'Alocar';
+    return this.alocacaoNoTurno(a, t) ? 'Transferir' : 'Alocar';
+  }
+
   alocar(a: EstagiarioDisponivel): void {
-    // Transferir encerra a alocação anterior; confirmamos antes de fazer isso.
-    if (a.unidadeAtualId &&
-        !confirm(`${a.nome} está alocado(a) em "${a.unidadeAtualNome}". ` +
-                 `Encerrar essa alocação e transferir para "${this.data.unidade.nome}"?`)) return;
+    const turno = this.turnoEscolhido(a);
+    if (!turno) {
+      this.erro.set(`${a.nome} já tem alocação ativa em todos os turnos nesta unidade.`);
+      return;
+    }
+
+    // Transferir encerra a alocação daquele turno; as dos outros turnos continuam
+    // valendo. Confirmamos antes de encerrar.
+    const atual = this.alocacaoNoTurno(a, turno);
+    if (atual &&
+        !confirm(`${a.nome} está alocado(a) em "${atual.unidadeNome}" no turno da ` +
+                 `${this.turnoLabel(turno).toLowerCase()}. Encerrar essa alocação e transferir ` +
+                 `para "${this.data.unidade.nome}"? As alocações dos outros turnos continuam.`)) return;
 
     this.salvandoId.set(a.id);
     this.erro.set('');
 
     this.service.alocar(this.data.unidade.id, a.id, {
-      encerrarAlocacaoAtual: !!a.unidadeAtualId
+      turno,
+      encerrarAlocacaoAtual: !!atual
     }).subscribe({
       next: () => {
         this.salvandoId.set(null);

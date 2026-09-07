@@ -103,7 +103,9 @@ export class IrregularidadesComponent implements OnInit {
 
   // ── Aluno: registra a ocorrência ──────────────────────────────────────────
   abrirRegistro(): void {
-    const ref = this.dialog.open(RegistrarIrregularidadeDialogComponent, { width: '520px' });
+    const ref = this.dialog.open(RegistrarIrregularidadeDialogComponent, {
+      width: '560px', maxHeight: '90vh'
+    });
     ref.afterClosed().subscribe((criada: boolean) => {
       if (criada) {
         this.snackBar.open('Irregularidade registrada. O preceptor será notificado.', '',

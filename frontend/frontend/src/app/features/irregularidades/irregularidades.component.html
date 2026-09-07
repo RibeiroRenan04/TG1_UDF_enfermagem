@@ -67,6 +67,31 @@
         </span>
       </div>
 
+      <!-- Datas lado a lado: quando a ocorrência foi aberta e qual ponto ela
+           contesta. Sem o horário exato do ponto o professor precisava abrir o
+           histórico do aluno para decidir. -->
+      <div class="datas">
+        <div class="data-bloco">
+          <span class="data-rotulo"><mat-icon>event_note</mat-icon> Aberta em</span>
+          <span class="data-valor">{{ item.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
+        </div>
+        <div class="data-bloco">
+          <span class="data-rotulo"><mat-icon>schedule</mat-icon> Ponto original</span>
+          <ng-container *ngIf="item.attendanceRecordedAt; else semPonto">
+            <span class="data-valor">{{ item.attendanceRecordedAt | date:'dd/MM/yyyy HH:mm' }}</span>
+            <span class="data-sub">
+              {{ item.attendanceType === 'check_in' ? 'Entrada' : 'Saída' }}
+              <ng-container *ngIf="item.attendanceLocationName"> · {{ item.attendanceLocationName }}</ng-container>
+              <ng-container *ngIf="item.attendanceStatus"> · {{ item.attendanceStatus }}</ng-container>
+            </span>
+          </ng-container>
+          <ng-template #semPonto>
+            <span class="data-sub">Sem ponto vinculado</span>
+            <span class="data-sub">Ocorrência registrada para {{ item.occurredOn | date:'dd/MM/yyyy' }}</span>
+          </ng-template>
+        </div>
+      </div>
+
       <div class="aluno" *ngIf="!ehAluno()">
         <mat-icon>person</mat-icon>
         <strong>{{ item.studentName }}</strong>

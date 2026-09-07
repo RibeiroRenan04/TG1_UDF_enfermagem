@@ -141,3 +141,29 @@ mat-card-actions {
   color: #9ca3af;
   margin-top: 6px;
 }
+
+/* Turno já fechado: entrada e saída registradas, nada mais a fazer nele. */
+.turno-fechado {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+
+  mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
+  a { color: #1f2937; font-weight: 600; }
+}
+
+/* Descrição das atividades — campo obrigatório do check-out. */
+.desc-section {
+  margin-top: 18px;
+
+  .obrigatorio { color: #b91c1c; }
+
+  .full-width { width: 100%; margin-top: 8px; }
+}

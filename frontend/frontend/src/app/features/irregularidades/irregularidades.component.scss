@@ -200,3 +200,24 @@
 
   mat-icon { font-size: 18px; width: 18px; height: 18px; }
 }
+
+/* Datas lado a lado: abertura da ocorrência × data/hora exata do ponto original.
+   Em telas estreitas os blocos quebram sozinhos (flex-wrap + largura mínima). */
+.datas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  font-size: 0.72rem;
+  color: #6B7280;
+
+  .data-bloco { flex: 1 1 200px; min-width: 0; }
+  .data-bloco > * { display: block; }
+  .data-rotulo { text-transform: uppercase; font-size: 0.68rem; }
+  .data-rotulo mat-icon { font-size: 14px; width: 14px; height: 14px; vertical-align: -3px; }
+  .data-valor { font-size: 0.88rem; font-weight: 600; color: #111827; }
+}

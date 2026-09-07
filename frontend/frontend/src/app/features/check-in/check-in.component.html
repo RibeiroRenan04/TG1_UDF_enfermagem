@@ -16,19 +16,33 @@
   <p>Sem escala ativa para hoje.</p>
 </mat-card>
 
-<!-- Check-in aberto -->
-<mat-card class="open-checkin" *ngIf="openCheckIn() as oc">
+<!-- Situação do turno: 1 check-in e 1 check-out, no máximo -->
+<mat-card class="open-checkin" *ngIf="shiftStatus() as st">
   <mat-card-header>
-    <mat-icon mat-card-avatar color="accent">timer</mat-icon>
-    <mat-card-title>Check-in aberto</mat-card-title>
-    <mat-card-subtitle>desde {{ oc.recorded_at | date:'HH:mm' }}</mat-card-subtitle>
+    <mat-icon mat-card-avatar color="accent">{{ st.shiftClosed ? 'task_alt' : 'timer' }}</mat-icon>
+    <mat-card-title>Turno da {{ st.shiftLabel }}</mat-card-title>
+    <mat-card-subtitle>
+      <span *ngIf="st.checkInAt">Entrada {{ st.checkInAt | date:'HH:mm' }}</span>
+      <span *ngIf="st.checkInAt && st.checkOutAt"> · </span>
+      <span *ngIf="st.checkOutAt">Saída {{ st.checkOutAt | date:'HH:mm' }}</span>
+      <span *ngIf="!st.checkInAt">Nenhum registro neste turno ainda.</span>
+    </mat-card-subtitle>
   </mat-card-header>
+  <mat-card-content *ngIf="st.blockedReason">
+    <div class="turno-fechado">
+      <mat-icon>lock</mat-icon>
+      <span>
+        {{ st.blockedReason }}
+        <a routerLink="/app/irregularidades">Registrar uma irregularidade</a>.
+      </span>
+    </div>
+  </mat-card-content>
 </mat-card>
 
 <!-- Formulário de registro -->
-<mat-card class="register-card" *ngIf="activeSchedule()">
+<mat-card class="register-card" *ngIf="activeSchedule() && !turnoFechado()">
   <mat-card-header>
-    <mat-card-title>{{ openCheckIn() ? 'Fazer check-out' : 'Fazer check-in' }}</mat-card-title>
+    <mat-card-title>{{ proximaAcao() === 'check_out' ? 'Fazer check-out' : 'Fazer check-in' }}</mat-card-title>
   </mat-card-header>
   <mat-card-content>
 
@@ -102,20 +116,34 @@
       </div>
     </div>
 
-    <!-- Atividades (check-out apenas) -->
-    <mat-form-field appearance="outline" *ngIf="openCheckIn()" class="full-width">
-      <mat-label>Descrição das atividades</mat-label>
-      <textarea matInput rows="3" [formControl]="descForm.controls['activitiesDescription']"></textarea>
-    </mat-form-field>
+    <!-- Atividades: obrigatórias para fechar o turno -->
+    <div class="desc-section" *ngIf="proximaAcao() === 'check_out'">
+      <span class="step-label">3. Atividades realizadas <span class="obrigatorio">*</span></span>
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Descrição das atividades</mat-label>
+        <textarea matInput rows="3" required
+                  [formControl]="descForm.controls['activitiesDescription']"
+                  placeholder="Descreva o que foi realizado no turno: procedimentos, acompanhamentos, orientações."></textarea>
+        <mat-hint>Obrigatório: sem a descrição o check-out não é registrado.</mat-hint>
+        <mat-error *ngIf="descForm.controls['activitiesDescription'].hasError('required')">
+          Descreva as atividades realizadas
+        </mat-error>
+        <mat-error *ngIf="descForm.controls['activitiesDescription'].hasError('minlength')">
+          Descreva com pelo menos 10 caracteres
+        </mat-error>
+      </mat-form-field>
+    </div>
 
   </mat-card-content>
   <mat-card-actions>
     <button mat-raised-button color="primary"
-            [disabled]="!podeRegistrar() || !photoBase64() || busy()"
-            [matTooltip]="!podeRegistrar() ? 'Você precisa estar dentro do raio da unidade' : ''"
-            (click)="register(openCheckIn() ? 'check_out' : 'check_in')">
+            [disabled]="!podeRegistrar() || !photoBase64() || descricaoPendente() || busy()"
+            [matTooltip]="!podeRegistrar()
+              ? 'Você precisa estar dentro do raio da unidade'
+              : (descricaoPendente() ? 'Descreva as atividades realizadas para finalizar o check-out' : '')"
+            (click)="register(proximaAcao())">
       <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
-      <span *ngIf="!busy()">{{ openCheckIn() ? 'Confirmar check-out' : 'Confirmar check-in' }}</span>
+      <span *ngIf="!busy()">{{ proximaAcao() === 'check_out' ? 'Confirmar check-out' : 'Confirmar check-in' }}</span>
     </button>
   </mat-card-actions>
 </mat-card>

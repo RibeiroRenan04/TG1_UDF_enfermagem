@@ -39,6 +39,15 @@ export class UsersService {
     return this.http.patch<UserDto>(`${this.api}/${userId}/shift`, { shift });
   }
 
+  /**
+   * Opções de vínculo institucional do cadastro de preceptor/professor: as
+   * unidades de saúde ativas. A lista é fechada — o backend recusa um valor fora
+   * dela — para padronizar a entrada de dados.
+   */
+  getVinculosInstitucionais(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.api}/vinculos-institucionais`);
+  }
+
   /** Cadastra preceptor, professor (supervisor) ou coordenadora manualmente */
   createStaff(dto: {
     fullName: string;

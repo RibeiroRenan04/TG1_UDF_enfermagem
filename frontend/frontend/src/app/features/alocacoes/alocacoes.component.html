@@ -2,8 +2,10 @@
   <div>
     <h1>Alocações</h1>
     <p class="page-subtitle">
-      Em que unidade cada estagiário está — e onde já esteve. Trocar de unidade
-      encerra a alocação anterior e mantém o histórico.
+      Em que unidade cada estagiário está — e onde já esteve. A alocação é por turno:
+      o aluno pode estagiar de manhã em uma unidade e à tarde em outra, mas nunca duas
+      vezes no mesmo turno. Trocar de unidade encerra a alocação daquele turno e
+      mantém o histórico.
     </p>
   </div>
   <a mat-stroked-button routerLink="/app/unidades"><mat-icon>domain</mat-icon> Unidades</a>
@@ -13,7 +15,8 @@
   <div class="filtros">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Estagiário</mat-label>
-      <input matInput [(ngModel)]="filtroTexto" placeholder="Nome ou RGM">
+      <input matInput [ngModel]="filtroTexto()" (ngModelChange)="filtroTexto.set($event)"
+             placeholder="Nome ou RGM">
       <mat-icon matPrefix>search</mat-icon>
     </mat-form-field>
 
@@ -31,6 +34,14 @@
         <mat-option [value]="true">Ativas</mat-option>
         <mat-option [value]="false">Encerradas</mat-option>
         <mat-option [value]="null">Todas</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Turno</mat-label>
+      <mat-select [(ngModel)]="filtroTurno" (selectionChange)="carregar()">
+        <mat-option value="">Todos</mat-option>
+        <mat-option *ngFor="let t of turnos" [value]="t">{{ turnoLabel(t) }}</mat-option>
       </mat-select>
     </mat-form-field>
 
@@ -76,6 +87,10 @@
           <a [routerLink]="['/app/unidades', a.unidadeId]">{{ a.unidadeNome }}</a>
           <div class="sub">{{ a.unidadeCidade || '—' }}</div>
         </td>
+      </ng-container>
+      <ng-container matColumnDef="turno">
+        <th mat-header-cell *matHeaderCellDef>Turno</th>
+        <td mat-cell *matCellDef="let a">{{ turnoLabel(a.turno) }}</td>
       </ng-container>
       <ng-container matColumnDef="inicio">
         <th mat-header-cell *matHeaderCellDef>Início</th>

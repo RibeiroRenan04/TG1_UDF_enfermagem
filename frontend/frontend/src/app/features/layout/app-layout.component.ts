@@ -39,9 +39,10 @@ export class AppLayoutComponent {
     { path: '/app/certificados', label: 'Certificados',      icon: 'workspace_premium', roles: ['aluno','supervisor','coordenadora'] },
     { path: '/app/acompanhamentos', label: 'Acompanhamentos', icon: 'description',    roles: ['aluno','preceptor','supervisor','coordenadora'] },
     { path: '/app/preceptor',   label: 'Meus alunos',        icon: 'star',             roles: ['preceptor'] },
+    // "Locais" saiu do menu: era a mesma tabela de "Unidades de saúde", em outra
+    // tela. A rota antiga continua existindo e redireciona para cá.
     { path: '/app/unidades',    label: 'Unidades de saúde',  icon: 'domain',           roles: ['aluno','preceptor','supervisor','coordenadora'] },
     { path: '/app/alocacoes',   label: 'Alocações',          icon: 'assignment_ind',   roles: ['supervisor','coordenadora'] },
-    { path: '/app/locais',      label: 'Locais',             icon: 'business',         roles: ['supervisor','coordenadora'] },
     { path: '/app/rodizios',    label: 'Rodízios',           icon: 'calendar_today',   roles: ['supervisor','coordenadora'] },
     { path: '/app/usuarios',    label: 'Usuários',           icon: 'people',           roles: ['supervisor','coordenadora'] },
     { path: '/app/relatorios',  label: 'Relatórios',         icon: 'bar_chart',        roles: ['supervisor','coordenadora'] }

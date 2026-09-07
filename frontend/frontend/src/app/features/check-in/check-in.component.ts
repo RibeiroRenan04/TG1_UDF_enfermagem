@@ -12,7 +12,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AttendanceService } from '../../core/services/attendance.service';
-import { ActiveSchedule } from '../../core/models/models';
+import { ActiveSchedule, ShiftPointStatus } from '../../core/models/models';
 
 @Component({
   selector: 'app-check-in',
@@ -30,7 +30,8 @@ export class CheckInComponent implements OnInit, OnDestroy {
   @ViewChild('video') videoRef?: ElementRef<HTMLVideoElement>;
 
   activeSchedule = signal<ActiveSchedule | null>(null);
-  openCheckIn = signal<{ id: string; recorded_at: string } | null>(null);
+  /** Situação do ponto no turno corrente: 1 check-in e 1 check-out, no máximo. */
+  shiftStatus = signal<ShiftPointStatus | null>(null);
   busy = signal(false);
   gettingLocation = signal(false);
   lat = signal<number | null>(null);
@@ -66,6 +67,31 @@ export class CheckInComponent implements OnInit, OnDestroy {
    */
   podeRegistrar = computed(() => this.inRadius() === true);
 
+  /**
+   * Espelha a validade do campo de descrição em um sinal: `descricaoPendente` é
+   * um computed e só reage a sinais, não a um FormControl.
+   */
+  private descricaoPreenchida = signal(false);
+
+  /** Ação que a tela vai registrar agora — nada, se o turno já estiver fechado. */
+  proximaAcao = computed<'check_in' | 'check_out' | null>(() => {
+    const s = this.shiftStatus();
+    if (!s) return null;
+    if (s.canCheckIn) return 'check_in';
+    if (s.canCheckOut) return 'check_out';
+    return null;
+  });
+
+  /** O turno já tem entrada e saída: não há mais o que registrar hoje nele. */
+  turnoFechado = computed(() => this.shiftStatus()?.shiftClosed === true);
+
+  /**
+   * A descrição das atividades é obrigatória no check-out — a API recusa o
+   * fechamento sem ela, então o botão só libera com o campo preenchido.
+   */
+  descricaoPendente = computed(() =>
+    this.proximaAcao() === 'check_out' && !this.descricaoPreenchida());
+
   /** Quanto falta andar para entrar no raio da unidade. */
   metrosFaltando = computed<number | null>(() => {
     const d = this.distance();
@@ -76,7 +102,7 @@ export class CheckInComponent implements OnInit, OnDestroy {
   });
 
   descForm = this.fb.group({
-    activitiesDescription: ['', Validators.required]
+    activitiesDescription: ['', [Validators.required, Validators.minLength(10)]]
   });
 
   constructor(
@@ -86,6 +112,8 @@ export class CheckInComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.descForm.controls['activitiesDescription'].valueChanges.subscribe(() =>
+      this.descricaoPreenchida.set(this.descForm.controls['activitiesDescription'].valid));
     this.loadState();
   }
 
@@ -95,7 +123,7 @@ export class CheckInComponent implements OnInit, OnDestroy {
 
   loadState(): void {
     this.attendanceService.getActiveSchedule().subscribe({ next: (s) => this.activeSchedule.set(s), error: () => {} });
-    this.attendanceService.getOpenCheckIn().subscribe({ next: (r) => this.openCheckIn.set(r), error: () => {} });
+    this.attendanceService.getShiftStatus().subscribe({ next: (s) => this.shiftStatus.set(s), error: () => {} });
   }
 
   getLocation(): void {
@@ -184,7 +212,12 @@ export class CheckInComponent implements OnInit, OnDestroy {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  register(type: 'check_in' | 'check_out'): void {
+  register(type: 'check_in' | 'check_out' | null): void {
+    if (!type) {
+      this.snackBar.open(this.shiftStatus()?.blockedReason ?? 'Nada a registrar neste turno.', '',
+        { duration: 5000, panelClass: 'snack-error' });
+      return;
+    }
     if (this.lat() === null || this.lon() === null) { this.snackBar.open('Capture sua localização primeiro', '', { duration: 3000 }); return; }
     if (!this.activeSchedule()) { this.snackBar.open('Nenhuma escala ativa no momento', '', { duration: 3000 }); return; }
     if (!this.podeRegistrar()) {
@@ -195,6 +228,13 @@ export class CheckInComponent implements OnInit, OnDestroy {
       return;
     }
     if (!this.photoBase64()) { this.snackBar.open('Tire a foto do registro primeiro', '', { duration: 3000 }); return; }
+    // Sem descrição o check-out não é aceito: a API recusa e o registro se perderia.
+    if (type === 'check_out' && this.descForm.invalid) {
+      this.descForm.markAllAsTouched();
+      this.snackBar.open('Descreva as atividades realizadas no turno para finalizar o check-out.', '',
+        { duration: 5000, panelClass: 'snack-error' });
+      return;
+    }
     this.busy.set(true);
     this.attendanceService.create({
       scheduleId: this.activeSchedule()!.scheduleId,
@@ -209,6 +249,8 @@ export class CheckInComponent implements OnInit, OnDestroy {
       next: () => {
         this.snackBar.open(type === 'check_in' ? 'Check-in realizado!' : 'Check-out realizado!', '', { duration: 3000, panelClass: 'snack-success' });
         this.busy.set(false);
+        this.descForm.reset({ activitiesDescription: '' });
+        this.photoBase64.set(null);
         this.loadState();
       },
       error: (err) => {

@@ -81,11 +81,13 @@ export const routes: Routes = [
         canActivate: [roleGuard(['supervisor', 'coordenadora'])],
         loadComponent: () => import('./features/alocacoes/alocacoes.component').then(m => m.AlocacoesComponent)
       },
-      {
-        path: 'locais',
-        canActivate: [roleGuard(['supervisor', 'coordenadora'])],
-        loadComponent: () => import('./features/locais/locais.component').then(m => m.LocaisComponent)
-      },
+      // "Locais" e "Unidades de saúde" eram duas telas sobre a MESMA tabela
+      // (Locais), cada uma com seu próprio cadastro — a duplicação de tela
+      // apontada na reunião. Unidades passou a ser a tela única (a busca no CNES
+      // virou um diálogo lá dentro) e esta rota redireciona, preservando links
+      // e favoritos antigos.
+      { path: 'locais', redirectTo: 'unidades', pathMatch: 'full' },
+      { path: 'locais/:id', redirectTo: 'unidades/:id' },
       {
         path: 'rodizios',
         canActivate: [roleGuard(['supervisor', 'coordenadora'])],

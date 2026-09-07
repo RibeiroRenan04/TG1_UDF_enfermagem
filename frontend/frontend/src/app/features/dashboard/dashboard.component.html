@@ -21,16 +21,49 @@
       <div class="stat-value">{{ s.irregular }}</div>
       <div class="stat-label">Registros irregulares</div>
     </mat-card>
-    <mat-card class="stat-card" *ngIf="role() === 'supervisor'">
+    <!-- Contador de alunos: o valor vem do backend (totalStudents). -->
+    <mat-card class="stat-card" *ngIf="ehGestao()">
       <mat-icon class="stat-icon purple">people</mat-icon>
-      <div class="stat-value">{{ s.totalStudents ?? 0 }}</div>
-      <div class="stat-label">Alunos</div>
+      <div class="stat-value">{{ s.totalStudents }}</div>
+      <div class="stat-label">Alunos ativos</div>
     </mat-card>
   </div>
 
+  <!-- ══ Status Pendentes ═══════════════════════════════════════════════════
+       Centraliza os avisos do perfil: prazos, dias sem registro e o andamento
+       das irregularidades — para ninguém depender de abrir cada tela. -->
+  <mat-card class="status-card" *ngIf="temPendencias()">
+    <mat-card-header>
+      <mat-icon mat-card-avatar>notifications_active</mat-icon>
+      <mat-card-title>Status Pendentes</mat-card-title>
+      <mat-card-subtitle>{{ statusPendentes().length }} aviso(s) que precisam da sua atenção</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="status-item" *ngFor="let a of statusPendentes()" [ngClass]="'sev-' + a.severity">
+        <mat-icon class="status-icone">{{ iconeAviso(a.kind) }}</mat-icon>
+        <div class="status-texto">
+          <div class="status-titulo">{{ a.title }}</div>
+          <div class="status-detalhe">{{ a.detail }}</div>
+          <div class="status-data" *ngIf="a.referenceDate">
+            Referência: {{ a.referenceDate | date:'dd/MM/yyyy' }}
+          </div>
+        </div>
+        <a mat-stroked-button *ngIf="a.link" [routerLink]="a.link">{{ a.linkLabel || 'Abrir' }}</a>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <div class="empty-state" *ngIf="!temPendencias() && role() === 'aluno'">
+    <mat-icon>check_circle_outline</mat-icon>
+    <p>Sem pendências!</p>
+    <a mat-raised-button color="primary" routerLink="/app/check-in">Novo registro</a>
+  </div>
+
+  <!-- Detalhe dos dias sem registro, para o aluno saber exatamente quais são. -->
   <mat-card class="pendencies-card" *ngIf="s.pendencies?.length">
     <mat-card-header>
-      <mat-card-title>Pendências</mat-card-title>
+      <mat-card-title>Dias sem registro</mat-card-title>
+      <mat-card-subtitle>{{ s.pendencyHours | number:'1.0-1' }}h em aberto</mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       <div class="pendency-item" *ngFor="let p of s.pendencies">
@@ -40,12 +73,7 @@
     </mat-card-content>
     <mat-card-actions *ngIf="role() === 'aluno'">
       <a mat-button routerLink="/app/check-in">Registrar presença</a>
+      <a mat-button routerLink="/app/irregularidades">Registrar irregularidade</a>
     </mat-card-actions>
   </mat-card>
-
-  <div class="empty-state" *ngIf="!s.pendencies?.length && role() === 'aluno'">
-    <mat-icon>check_circle_outline</mat-icon>
-    <p>Sem pendências!</p>
-    <a mat-raised-button color="primary" routerLink="/app/check-in">Novo registro</a>
-  </div>
 </ng-container>

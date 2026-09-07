@@ -14,7 +14,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { AuthService } from '../../core/services/auth.service';
-import { Alocacao, UnidadeSaude } from '../../core/models/models';
+import { Alocacao, Turno, UnidadeSaude } from '../../core/models/models';
 
 /** Visão geral das alocações de estagiários, com o histórico completo. */
 @Component({
@@ -35,18 +35,25 @@ export class AlocacoesComponent implements OnInit {
   loading = signal(true);
 
   filtroUnidade = '';
-  filtroTexto = '';
+  /**
+   * Sinal, e não campo simples: o `filtradas` é um computed e só reage a sinais —
+   * como campo, digitar no filtro não redesenhava a tabela.
+   */
+  filtroTexto = signal('');
   filtroAtivo: boolean | null = true;
+  filtroTurno: Turno | '' = '';
   filtroDe = '';
   filtroAte = '';
 
-  colunas = ['estagiario', 'rgm', 'unidade', 'inicio', 'fim', 'situacao', 'acoes'];
+  colunas = ['estagiario', 'rgm', 'unidade', 'turno', 'inicio', 'fim', 'situacao', 'acoes'];
+
+  readonly turnos: Turno[] = ['manha', 'tarde', 'noite'];
 
   podeEditar = this.auth.ehProfessor;
 
   /** O filtro por nome/RGM é aplicado aqui: a API filtra por id, não por texto livre. */
   filtradas = computed(() => {
-    const termo = this.filtroTexto.trim().toLowerCase();
+    const termo = this.filtroTexto().trim().toLowerCase();
     if (!termo) return this.alocacoes();
     return this.alocacoes().filter(a =>
       a.estagiarioNome.toLowerCase().includes(termo) ||
@@ -71,6 +78,7 @@ export class AlocacoesComponent implements OnInit {
     this.service.getAlocacoes({
       unidadeId: this.filtroUnidade || undefined,
       ativo: this.filtroAtivo ?? undefined,
+      turno: this.filtroTurno || undefined,
       de: this.filtroDe || undefined,
       ate: this.filtroAte || undefined
     }).subscribe({
@@ -84,17 +92,25 @@ export class AlocacoesComponent implements OnInit {
 
   limparFiltros(): void {
     this.filtroUnidade = '';
-    this.filtroTexto = '';
+    this.filtroTexto.set('');
     this.filtroAtivo = true;
+    this.filtroTurno = '';
     this.filtroDe = '';
     this.filtroAte = '';
     this.carregar();
   }
 
-  encerrar(a: Alocacao): void {
-    if (!confirm(`Encerrar a alocação de ${a.estagiarioNome} em "${a.unidadeNome}"? O histórico é preservado.`)) return;
+  turnoLabel(t?: string): string {
+    return ({ manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' } as Record<string, string>)[t ?? ''] ?? '—';
+  }
 
-    this.service.encerrarAlocacao(a.unidadeId, a.estagiarioId).subscribe({
+  encerrar(a: Alocacao): void {
+    // Encerrar é por turno: as alocações do aluno em outros turnos continuam.
+    if (!confirm(`Encerrar a alocação de ${a.estagiarioNome} em "${a.unidadeNome}" no turno da ` +
+                 `${this.turnoLabel(a.turno).toLowerCase()}? O histórico é preservado e os outros ` +
+                 'turnos não são afetados.')) return;
+
+    this.service.encerrarAlocacao(a.unidadeId, a.estagiarioId, a.turno).subscribe({
       next: () => {
         this.snackBar.open('Alocação encerrada.', '', { duration: 3000, panelClass: 'snack-success' });
         this.carregar();

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AttendanceRecord, ActiveSchedule } from '../models/models';
+import { AttendanceRecord, ActiveSchedule, ShiftPointStatus } from '../models/models';
 
 @Injectable({ providedIn: 'root' })
 export class AttendanceService {
@@ -22,6 +22,14 @@ export class AttendanceService {
 
   getOpenCheckIn(): Observable<{ id: string; recorded_at: string } | null> {
     return this.http.get<{ id: string; recorded_at: string } | null>(`${this.api}/open-check-in`);
+  }
+
+  /**
+   * Situação do ponto no turno corrente. É o que libera (ou trava) o check-in e o
+   * check-out na tela: no máximo um de cada por turno.
+   */
+  getShiftStatus(): Observable<ShiftPointStatus> {
+    return this.http.get<ShiftPointStatus>(`${this.api}/shift-status`);
   }
 
   create(dto: {

@@ -5,7 +5,7 @@ import { environment } from '../../../environments/environment';
 import {
   UnidadeSaude, CriarUnidadeSaude, GeocodificacaoResposta,
   ImportPreview, ImportacaoResultado, ImportacaoProgresso,
-  Alocacao, EstagiarioDisponivel, StatusGeocodificacao
+  Alocacao, EstagiarioDisponivel, StatusGeocodificacao, Turno
 } from '../models/models';
 
 /**
@@ -113,38 +113,53 @@ export class UnidadesSaudeService {
       `${this.api}/${unidadeId}/estagiarios-disponiveis`, { params });
   }
 
+  /** A alocação é por turno: o mesmo aluno pode ter uma em cada turno. */
   alocar(unidadeId: string, estagiarioId: string, opcoes?: {
-    dataInicio?: string; observacao?: string; encerrarAlocacaoAtual?: boolean;
+    dataInicio?: string; observacao?: string; encerrarAlocacaoAtual?: boolean; turno?: Turno;
   }): Observable<Alocacao> {
     return this.http.post<Alocacao>(`${this.api}/${unidadeId}/estagiarios`, {
       estagiarioId,
       dataInicio: opcoes?.dataInicio,
       observacao: opcoes?.observacao,
-      encerrarAlocacaoAtual: opcoes?.encerrarAlocacaoAtual ?? false
+      encerrarAlocacaoAtual: opcoes?.encerrarAlocacaoAtual ?? false,
+      turno: opcoes?.turno
     });
   }
 
-  encerrarAlocacao(unidadeId: string, estagiarioId: string, observacao?: string): Observable<Alocacao> {
+  /** Encerra a alocação de um turno específico do estagiário nesta unidade. */
+  encerrarAlocacao(unidadeId: string, estagiarioId: string, turno?: Turno, observacao?: string)
+    : Observable<Alocacao> {
+    let params = new HttpParams();
+    if (turno) params = params.set('turno', turno);
     return this.http.request<Alocacao>('delete',
-      `${this.api}/${unidadeId}/estagiarios/${estagiarioId}`, { body: { observacao } });
+      `${this.api}/${unidadeId}/estagiarios/${estagiarioId}`, { body: { observacao }, params });
   }
 
   getAlocacoes(filtros?: {
-    unidadeId?: string; estagiarioId?: string; ativo?: boolean; de?: string; ate?: string;
+    unidadeId?: string; estagiarioId?: string; ativo?: boolean; turno?: Turno;
+    de?: string; ate?: string;
   }): Observable<Alocacao[]> {
     let params = new HttpParams();
     if (filtros?.unidadeId) params = params.set('unidadeId', filtros.unidadeId);
     if (filtros?.estagiarioId) params = params.set('estagiarioId', filtros.estagiarioId);
     if (filtros?.ativo !== undefined && filtros.ativo !== null)
       params = params.set('ativo', filtros.ativo);
+    if (filtros?.turno) params = params.set('turno', filtros.turno);
     if (filtros?.de) params = params.set('de', filtros.de);
     if (filtros?.ate) params = params.set('ate', filtros.ate);
     return this.http.get<Alocacao[]>(`${this.apiBase}/alocacoes`, { params });
   }
 
-  /** Unidade do estagiário. O aluno só consegue consultar a própria. */
-  getUnidadeDoEstagiario(estagiarioId: string): Observable<Alocacao> {
-    return this.http.get<Alocacao>(`${this.apiBase}/estagiarios/${estagiarioId}/unidade`);
+  /** Unidade do estagiário no turno pedido. O aluno só consulta a própria. */
+  getUnidadeDoEstagiario(estagiarioId: string, turno?: Turno): Observable<Alocacao> {
+    let params = new HttpParams();
+    if (turno) params = params.set('turno', turno);
+    return this.http.get<Alocacao>(`${this.apiBase}/estagiarios/${estagiarioId}/unidade`, { params });
+  }
+
+  /** Todas as alocações ativas do estagiário, uma por turno. */
+  getUnidadesDoEstagiario(estagiarioId: string): Observable<Alocacao[]> {
+    return this.http.get<Alocacao[]>(`${this.apiBase}/estagiarios/${estagiarioId}/unidades`);
   }
 
   getHistoricoDoEstagiario(estagiarioId: string): Observable<Alocacao[]> {

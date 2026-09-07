@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -52,9 +52,21 @@ import { UsersService } from '../../core/services/users.service';
             </mat-hint>
           </mat-form-field>
 
+          <!-- Lista suspensa, não texto livre: em campo aberto a mesma unidade
+               chegava escrita de várias formas e não dava para agrupar. -->
           <mat-form-field appearance="outline">
             <mat-label>Vínculo institucional</mat-label>
-            <input matInput formControlName="institution" placeholder="Ex.: UBS Asa Norte">
+            <mat-select formControlName="institution" [disabled]="carregandoVinculos()">
+              <mat-option [value]="''">Sem vínculo definido</mat-option>
+              <mat-option *ngFor="let v of vinculos()" [value]="v">{{ v }}</mat-option>
+            </mat-select>
+            <mat-hint *ngIf="carregandoVinculos()">Carregando as unidades…</mat-hint>
+            <mat-hint *ngIf="!carregandoVinculos() && !vinculos().length">
+              Nenhuma unidade ativa cadastrada.
+            </mat-hint>
+            <mat-hint *ngIf="!carregandoVinculos() && vinculos().length">
+              Unidade não listada? Cadastre-a em Unidades de saúde.
+            </mat-hint>
           </mat-form-field>
         </div>
 
@@ -104,9 +116,13 @@ import { UsersService } from '../../core/services/users.service';
     .erro { color: #b91c1c; font-size: 0.85rem; margin: 8px 0 0; }
   `]
 })
-export class CadastrarStaffDialogComponent {
+export class CadastrarStaffDialogComponent implements OnInit {
   busy = signal(false);
   erro = signal('');
+
+  /** Unidades ativas — as opções aceitas pela API no vínculo institucional. */
+  vinculos = signal<string[]>([]);
+  carregandoVinculos = signal(true);
 
   form = this.fb.group({
     fullName:    ['', [Validators.required, Validators.minLength(2)]],
@@ -122,6 +138,13 @@ export class CadastrarStaffDialogComponent {
     public dialogRef: MatDialogRef<CadastrarStaffDialogComponent>,
     private usersService: UsersService
   ) {}
+
+  ngOnInit(): void {
+    this.usersService.getVinculosInstitucionais().subscribe({
+      next: (v) => { this.vinculos.set(v); this.carregandoVinculos.set(false); },
+      error: () => this.carregandoVinculos.set(false)
+    });
+  }
 
   onSubmit(): void {
     if (this.form.invalid) return;

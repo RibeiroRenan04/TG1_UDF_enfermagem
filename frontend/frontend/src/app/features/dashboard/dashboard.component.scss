@@ -70,3 +70,61 @@
   }
 }
 
+
+/* ══ Status Pendentes ══════════════════════════════════════════════════════
+   Card de avisos do painel inicial. A cor da borda esquerda indica a urgência. */
+.status-card {
+  margin-bottom: 24px;
+}
+
+.status-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-left: 3px solid #d1d5db;
+  border-radius: 6px;
+  background: #f9fafb;
+  margin-bottom: 10px;
+
+  &:last-child { margin-bottom: 0; }
+
+  &.sev-info    { border-left-color: #00ADEE; background: #f0f9ff; }
+  &.sev-atencao { border-left-color: #d97706; background: #fffbeb; }
+  &.sev-critico { border-left-color: #dc2626; background: #fef2f2; }
+
+  .status-icone {
+    flex-shrink: 0;
+    color: #6B7280;
+  }
+
+  .status-texto { flex: 1; min-width: 0; }
+
+  .status-titulo {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #111827;
+  }
+
+  .status-detalhe {
+    font-size: 0.8rem;
+    color: #4b5563;
+    margin-top: 2px;
+    line-height: 1.45;
+  }
+
+  .status-data {
+    font-size: 0.72rem;
+    color: #6B7280;
+    margin-top: 4px;
+  }
+
+  a { flex-shrink: 0; align-self: center; }
+}
+
+@media (max-width: 600px) {
+  .status-item {
+    flex-wrap: wrap;
+    a { width: 100%; margin-top: 8px; }
+  }
+}
