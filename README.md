@@ -416,3 +416,5 @@ push (frontend/main) ──▶ workflow ──▶ rsync ──▶ TG1_UDF_enferm
 `PAT_TOKEN` — Personal Access Token com escopo `repo`
 
 Para o guia completo de configuração da sincronização, consulte [`docs/SYNC_SYSTEM_README.md`](docs/SYNC_SYSTEM_README.md). 
+
+Projeto desenvolvido no âmbito da disciplina TGI II - Curso: Ciência da Computação - Centro Universitário UDF
