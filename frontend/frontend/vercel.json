@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npm run build:prod",
+  "buildCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"release/default\" ]; then npm run build:homolog; else npm run build:prod; fi",
   "outputDirectory": "dist/estagio-check-web/browser",
   "installCommand": "npm install",
   "routes": [

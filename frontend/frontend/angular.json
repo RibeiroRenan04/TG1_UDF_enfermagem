@@ -44,6 +44,19 @@
               ],
               "outputHashing": "all"
             },
+            "homolog": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.homolog.ts"
+                }
+              ],
+              "budgets": [
+                { "type": "initial", "maximumWarning": "500kB", "maximumError": "1MB" },
+                { "type": "anyComponentStyle", "maximumWarning": "4kB", "maximumError": "8kB" }
+              ],
+              "outputHashing": "all"
+            },
             "development": {
               "optimization": false,
               "extractLicenses": false,
@@ -56,6 +69,7 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": { "buildTarget": "estagio-check-web:build:production" },
+            "homolog": { "buildTarget": "estagio-check-web:build:homolog" },
             "development": { "buildTarget": "estagio-check-web:build:development" }
           },
           "defaultConfiguration": "development"
