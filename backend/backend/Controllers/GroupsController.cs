@@ -1,6 +1,7 @@
 using EstagioCheck.API.Data;
 using EstagioCheck.API.DTOs;
 using EstagioCheck.API.Models;
+using EstagioCheck.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,16 @@ public class GroupsController(AppDbContext db) : ControllerBase
 {
     private static readonly string[] TurnosValidos = ["manha", "tarde", "noite"];
     private static readonly string[] AtividadesValidas = ["gestao", "pic", "assistencia", "outro"];
+
+    /// <summary>
+    /// Falha de validação amarrada ao campo do formulário, para a tela destacar
+    /// exatamente o que precisa ser corrigido.
+    /// </summary>
+    private sealed record ErroValidacao(
+        string Mensagem,
+        string? Campo = null,
+        int Status = StatusCodes.Status400BadRequest,
+        string? Codigo = null);
 
     [HttpGet]
     public async Task<ActionResult<List<GroupDto>>> GetAll()
@@ -36,7 +47,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
     {
         var code = dto.Code.Trim().ToUpper();
         if (await db.StudentGroups.AnyAsync(g => g.Code == code))
-            return Conflict(new { message = "Código já utilizado." });
+            return Conflict(ErrosApi.Corpo($"O código {code} já é usado por outra turma.", "code", "codigo_duplicado"));
 
         var group = new StudentGroup
         {
@@ -55,7 +66,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
     public async Task<IActionResult> Delete(Guid id)
     {
         var group = await db.StudentGroups.FindAsync(id);
-        if (group == null) return NotFound();
+        if (group == null) return NotFound(new { message = "Turma não encontrada." });
         db.StudentGroups.Remove(group);
         await db.SaveChangesAsync();
         return NoContent();
@@ -124,7 +135,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<ScheduleDto>> CreateSchedule([FromBody] CreateScheduleDto dto)
     {
         var erro = await ValidarAlocacaoAsync(dto);
-        if (erro != null) return BadRequest(new { message = erro });
+        if (erro != null) return Falha(erro);
 
         var schedule = new RotationSchedule
         {
@@ -154,10 +165,10 @@ public class GroupsController(AppDbContext db) : ControllerBase
         var schedule = await db.RotationSchedules
             .Include(s => s.Days)
             .FirstOrDefaultAsync(s => s.Id == id);
-        if (schedule == null) return NotFound();
+        if (schedule == null) return NotFound(new { message = "Rodízio não encontrado. Ele pode ter sido excluído." });
 
         var erro = await ValidarAlocacaoAsync(dto, id);
-        if (erro != null) return BadRequest(new { message = erro });
+        if (erro != null) return Falha(erro);
 
         schedule.GroupId = dto.GroupId;
         schedule.LocationId = dto.LocationId;
@@ -186,58 +197,61 @@ public class GroupsController(AppDbContext db) : ControllerBase
     public async Task<IActionResult> DeleteSchedule(Guid id)
     {
         var schedule = await db.RotationSchedules.FindAsync(id);
-        if (schedule == null) return NotFound();
+        if (schedule == null) return NotFound(new { message = "Rodízio não encontrado. Ele pode ter sido excluído." });
         db.RotationSchedules.Remove(schedule);
         await db.SaveChangesAsync();
         return NoContent();
     }
 
+    private ObjectResult Falha(ErroValidacao erro) =>
+        StatusCode(erro.Status, ErrosApi.Corpo(erro.Mensagem, erro.Campo, erro.Codigo));
+
     // ── Validação da alocação ─────────────────────────────────────────────────
     /// <summary>
     /// Confere os dados da alocação do rodízio: turma existente e com alunos
     /// vinculados, local, preceptor responsável, datas e carga horária.
-    /// Devolve a mensagem de erro ou <c>null</c> quando tudo está válido.
+    /// Devolve o erro (com o campo afetado) ou <c>null</c> quando tudo está válido.
     /// </summary>
-    private async Task<string?> ValidarAlocacaoAsync(CreateScheduleDto dto, Guid? scheduleIdAtual = null)
+    private async Task<ErroValidacao?> ValidarAlocacaoAsync(CreateScheduleDto dto, Guid? scheduleIdAtual = null)
     {
         var group = await db.StudentGroups
             .Include(g => g.Memberships)
             .FirstOrDefaultAsync(g => g.Id == dto.GroupId);
 
         if (group == null)
-            return "Turma não encontrada.";
+            return new("Turma não encontrada.", "groupId");
 
         // Os alunos precisam estar vinculados à turma antes da alocação.
         if (group.Memberships.Count == 0)
-            return $"A turma {group.Code} não possui alunos vinculados. "
-                 + "Vincule os alunos à turma antes de alocar o rodízio.";
+            return new($"A turma {group.Code} não possui alunos vinculados. "
+                     + "Vincule os alunos à turma antes de alocar o rodízio.", "groupId");
 
         if (!await db.Locations.AnyAsync(l => l.Id == dto.LocationId))
-            return "Local de estágio não encontrado.";
+            return new("Local de estágio não encontrado.", "locationId");
 
         // O responsável precisa ter perfil de preceptor: é ele quem realiza o
         // acompanhamento formativo dos alunos alocados neste rodízio.
         var preceptor = await db.Users.FirstOrDefaultAsync(u => u.Id == dto.PreceptorId);
         if (preceptor == null)
-            return "Preceptor não encontrado.";
+            return new("Preceptor não encontrado.", "preceptorId");
         if (preceptor.Role != "preceptor")
-            return "O responsável informado não possui perfil de preceptor.";
+            return new("O responsável informado não possui perfil de preceptor.", "preceptorId");
         if (!preceptor.IsActive)
-            return "O preceptor informado está inativo.";
+            return new("O preceptor informado está inativo.", "preceptorId");
 
         var turno = dto.Shift.Trim().ToLower();
         if (!TurnosValidos.Contains(turno))
-            return "Turno inválido. Use manhã, tarde ou noite.";
+            return new("Turno inválido. Use manhã, tarde ou noite.", "shift");
 
         var atividade = dto.ActivityType.Trim().ToLower();
         if (!AtividadesValidas.Contains(atividade))
-            return "Atividade inválida.";
+            return new("Atividade inválida.", "activityType");
 
-        if (dto.EndDate < dto.StartDate)
-            return "A data de término não pode ser anterior à data de início.";
+        var erroDatas = ValidarDatas(dto.StartDate, dto.EndDate);
+        if (erroDatas != null) return erroDatas;
 
         if (dto.RequiredHours <= 0)
-            return "Informe uma carga horária maior que zero.";
+            return new("Informe uma carga horária maior que zero.", "requiredHours");
 
         // Evita duas alocações simultâneas da mesma turma no mesmo turno.
         var conflito = await db.RotationSchedules
@@ -250,12 +264,38 @@ public class GroupsController(AppDbContext db) : ControllerBase
             .FirstOrDefaultAsync();
 
         if (conflito != null)
-            return $"A turma já possui rodízio no turno informado entre "
-                 + $"{conflito.StartDate:dd/MM/yyyy} e {conflito.EndDate:dd/MM/yyyy} "
-                 + $"({conflito.Location?.Name}).";
+            return new($"Conflito de agenda: a turma já possui rodízio no turno informado entre "
+                     + $"{conflito.StartDate:dd/MM/yyyy} e {conflito.EndDate:dd/MM/yyyy} "
+                     + $"({conflito.Location?.Name}).",
+                "startDate", StatusCodes.Status409Conflict, "conflito_agenda");
 
-        var erroDias = await ValidarDiasAsync(dto.Days);
-        if (erroDias != null) return erroDias;
+        return await ValidarDiasAsync(dto.Days);
+    }
+
+    /// <summary>
+    /// Datas do rodízio. Campo de data vazio chega como 01/01/0001 (o
+    /// <c>[Required]</c> não pega <c>DateOnly</c>), e um ano digitado errado
+    /// passava direto — foi assim que o painel do aluno chegou a contar milhares
+    /// de dias sem registro.
+    /// </summary>
+    private static ErroValidacao? ValidarDatas(DateOnly inicio, DateOnly fim)
+    {
+        if (inicio == default)
+            return new("Informe a data de início.", "startDate");
+        if (fim == default)
+            return new("Informe a data de término.", "endDate");
+
+        if (inicio < RotationSchedule.DataMinima || inicio > RotationSchedule.DataMaxima)
+            return new($"Data de início inválida ({inicio:dd/MM/yyyy}). Confira o ano informado.", "startDate");
+        if (fim < RotationSchedule.DataMinima || fim > RotationSchedule.DataMaxima)
+            return new($"Data de término inválida ({fim:dd/MM/yyyy}). Confira o ano informado.", "endDate");
+
+        if (fim < inicio)
+            return new("A data de término não pode ser anterior à data de início.", "endDate");
+
+        if (fim.DayNumber - inicio.DayNumber > RotationSchedule.DuracaoMaximaDias)
+            return new($"O rodízio não pode durar mais de {RotationSchedule.DuracaoMaximaDias} dias. "
+                     + "Confira as datas de início e término.", "endDate");
 
         return null;
     }
@@ -264,7 +304,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
     /// Confere a programação semanal: um dia da semana aparece uma vez só, o modo
     /// é conhecido e o local informado existe. Sem dias, o rodízio segue no padrão.
     /// </summary>
-    private async Task<string?> ValidarDiasAsync(List<CriarDiaRodizioDto>? dias)
+    private async Task<ErroValidacao?> ValidarDiasAsync(List<CriarDiaRodizioDto>? dias)
     {
         if (dias == null || dias.Count == 0) return null;
 
@@ -272,17 +312,17 @@ public class GroupsController(AppDbContext db) : ControllerBase
         foreach (var dia in dias)
         {
             if (!DiasSemana.Valido(dia.DayOfWeek))
-                return "Dia da semana inválido na programação.";
+                return new("Dia da semana inválido na programação.", "days");
             if (!vistos.Add(dia.DayOfWeek))
-                return $"{DiasSemana.Rotulo(dia.DayOfWeek)} aparece mais de uma vez na programação.";
+                return new($"{DiasSemana.Rotulo(dia.DayOfWeek)} aparece mais de uma vez na programação.", "days");
 
             var modo = ModoAtividade.Normalizar(dia.Mode);
             if (modo == null)
-                return $"Tipo de atividade inválido em {DiasSemana.Rotulo(dia.DayOfWeek)}.";
+                return new($"Tipo de atividade inválido em {DiasSemana.Rotulo(dia.DayOfWeek)}.", "days");
 
             if (modo == ModoAtividade.Presencial && dia.LocationId.HasValue
                 && !await db.Locations.AnyAsync(l => l.Id == dia.LocationId.Value))
-                return $"Local informado em {DiasSemana.Rotulo(dia.DayOfWeek)} não foi encontrado.";
+                return new($"Local informado em {DiasSemana.Rotulo(dia.DayOfWeek)} não foi encontrado.", "days");
         }
 
         return null;

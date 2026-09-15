@@ -28,7 +28,11 @@ public record AuthResponseDto(
     /// (não compartilhar a senha e responder pelas ações feitas com a conta)
     /// antes de usar o sistema.
     /// </summary>
-    bool MustAcceptTerms = false
+    bool MustAcceptTerms = false,
+    // Turma e turno do aluno: o menu lateral identifica a que turma ele pertence.
+    string? GroupCode = null,
+    string? GroupName = null,
+    string? Shift = null
 );
 
 // ── Termo de responsabilidade ─────────────────────────────────────────────────

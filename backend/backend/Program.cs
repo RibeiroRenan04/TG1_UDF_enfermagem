@@ -105,8 +105,18 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod()
               .AllowCredentials()));
 
+// Pendências de registro: fonte única do painel, dos relatórios e do preceptor.
+builder.Services.AddScoped<PendenciasService>();
+
+// ── Erros ─────────────────────────────────────────────────────────────────────
+// Toda resposta de erro sai como { message, errors? }: a tela mostra o motivo
+// real em vez de "Erro ao salvar". Ver ErrosApi.
+builder.Services.AddExceptionHandler<TratadorErrosApi>();
+builder.Services.AddProblemDetails();
+
 // ── Controllers + Swagger ─────────────────────────────────────────────────────
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(o => o.InvalidModelStateResponseFactory = ErrosApi.RespostaValidacao);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -129,6 +139,9 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+// Primeiro da pipeline: qualquer exceção vira { message, code } (TratadorErrosApi).
+app.UseExceptionHandler();
 
 // ── Auto-migrate on startup ───────────────────────────────────────────────────
 var connStr = app.Configuration.GetConnectionString("DefaultConnection");

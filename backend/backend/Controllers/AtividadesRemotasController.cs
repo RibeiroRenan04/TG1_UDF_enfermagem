@@ -66,7 +66,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<AtividadeRemotaDto>> Create([FromBody] CriarAtividadeRemotaDto dto)
     {
         var erro = await ValidarAsync(dto);
-        if (erro != null) return BadRequest(new { message = erro });
+        if (erro is { } e) return BadRequest(ErrosApi.Corpo(e.Mensagem, e.Campo));
 
         var atividade = new RemoteActivity
         {
@@ -114,7 +114,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
             });
 
         var erro = await ValidarAsync(dto);
-        if (erro != null) return BadRequest(new { message = erro });
+        if (erro is { } e) return BadRequest(ErrosApi.Corpo(e.Mensagem, e.Campo));
 
         atividade.Title = dto.Title.Trim();
         atividade.Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim();
@@ -414,39 +414,52 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         return (Registro("check_in", inicio), Registro("check_out", fim));
     }
 
-    private async Task<string?> ValidarAsync(CriarAtividadeRemotaDto dto)
+    /// <summary>
+    /// Confere a atividade antes de gravar. Devolve a mensagem e o campo do
+    /// formulário com problema — a tela destaca o campo — ou <c>null</c> se válida.
+    /// </summary>
+    private async Task<(string Mensagem, string Campo)?> ValidarAsync(CriarAtividadeRemotaDto dto)
     {
         var grupo = await db.StudentGroups
             .Include(g => g.Memberships)
             .FirstOrDefaultAsync(g => g.Id == dto.GroupId);
 
-        if (grupo == null) return "Turma ou grupo não encontrado.";
+        if (grupo == null) return ("Turma ou grupo não encontrado.", "groupId");
         if (grupo.Memberships.Count == 0)
-            return $"A turma {grupo.Code} não possui alunos vinculados. "
-                 + "Vincule os alunos antes de criar a atividade.";
+            return ($"A turma {grupo.Code} não possui alunos vinculados. "
+                  + "Vincule os alunos antes de criar a atividade.", "groupId");
 
         if (dto.ScheduleId.HasValue)
         {
             var escala = await db.RotationSchedules
                 .FirstOrDefaultAsync(s => s.Id == dto.ScheduleId.Value);
-            if (escala == null) return "Rodízio não encontrado.";
+            if (escala == null) return ("Rodízio não encontrado.", "scheduleId");
             if (escala.GroupId != dto.GroupId)
-                return "O rodízio informado é de outra turma.";
+                return ("O rodízio informado é de outra turma.", "scheduleId");
         }
 
+        // Campo de data vazio chega como 01/01/0001: o [Required] não pega DateOnly.
+        if (dto.ActivityDate == default)
+            return ("Informe a data da atividade.", "activityDate");
+
         if (dto.EndTime <= dto.StartTime)
-            return "O horário de término precisa ser posterior ao de início.";
+            return ("O horário de término precisa ser posterior ao de início.", "endTime");
 
         if (dto.EstimatedHours <= 0)
-            return "Informe a carga horária da atividade.";
+            return ("Informe a carga horária da atividade.", "estimatedHours");
 
         var janela = (dto.EndTime - dto.StartTime).TotalHours;
         if (dto.EstimatedHours > janela + 0.001)
-            return $"A carga horária ({dto.EstimatedHours:0.#} h) não pode ser maior que a "
-                 + $"janela da atividade ({janela:0.#} h).";
+            return ($"A carga horária ({dto.EstimatedHours:0.#} h) não pode ser maior que a "
+                  + $"janela da atividade ({janela:0.#} h).", "estimatedHours");
 
         if (dto.RequiresTask && !TipoTarefaRemota.Valido(dto.TaskType))
-            return "Selecione o tipo da tarefa complementar.";
+            return ("Selecione o tipo da tarefa complementar.", "taskType");
+
+        // Sem instruções o aluno não sabe o que entregar para comprovar a atividade.
+        if (dto.RequiresTask && string.IsNullOrWhiteSpace(dto.TaskInstructions))
+            return ("O campo 'Instruções da tarefa' é obrigatório quando a tarefa complementar está ativa.",
+                "taskInstructions");
 
         return null;
     }

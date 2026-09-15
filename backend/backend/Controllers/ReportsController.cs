@@ -11,13 +11,11 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = Roles.Gestao)]
-public class ReportsController(AppDbContext db) : ControllerBase
+public class ReportsController(AppDbContext db, PendenciasService pendenciasService) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<ReportRowDto>>> Get()
     {
-        var today = BrasiliaTime.Hoje;
-
         var members = await db.GroupMemberships
             .Include(m => m.Student)
             .Include(m => m.Group).ThenInclude(g => g.Schedules)
@@ -56,42 +54,11 @@ public class ReportsController(AppDbContext db) : ControllerBase
 
             hours = Math.Round(hours, 1);
 
-            // Pendências
-            var checkInDates = studentRecs
-                .Where(r => r.Type == "check_in")
-                .Select(r => (ScheduleId: (Guid?)null, Date: DateOnly.FromDateTime(r.RecordedAt)))
-                .ToHashSet();
-
-            int pendencyDays = 0;
-            double pendencyHours = 0;
-
-            foreach (var sch in member.Group.Schedules)
-            {
-                var loc = await db.Locations.FindAsync(sch.LocationId);
-                if (loc == null) continue;
-
-                var current = sch.StartDate;
-                var end = sch.EndDate < today ? sch.EndDate : today.AddDays(-1);
-                while (current <= end)
-                {
-                    if (current.DayOfWeek != DayOfWeek.Saturday && current.DayOfWeek != DayOfWeek.Sunday)
-                    {
-                        var hasCheckIn = await db.AttendanceRecords.AnyAsync(r =>
-                            r.StudentId == sid && r.Type == "check_in" &&
-                            r.ScheduleId == sch.Id &&
-                            DateOnly.FromDateTime(r.RecordedAt) == current);
-
-                        if (!hasCheckIn)
-                        {
-                            pendencyDays++;
-                            if (TimeSpan.TryParse(loc.ShiftStart, out var s) &&
-                                TimeSpan.TryParse(loc.ShiftEnd, out var e))
-                                pendencyHours += (e - s).TotalHours;
-                        }
-                    }
-                    current = current.AddDays(1);
-                }
-            }
+            // Pendências: mesma regra do painel do aluno — programação do dia (sábado
+            // programado conta, feriado não) dentro da vigência do rodízio e da turma.
+            var pendencias = await pendenciasService.CalcularAsync(sid);
+            var pendencyDays = pendencias.Count;
+            var pendencyHours = pendencias.Sum(p => p.ExpectedHours);
 
             var pct = required > 0 ? Math.Min(100, hours / required * 100) : 0;
 

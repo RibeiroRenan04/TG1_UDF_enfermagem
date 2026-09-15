@@ -13,7 +13,7 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = Roles.AcompanhamentoEGestao)]
-public class PreceptorController(AppDbContext db) : ControllerBase
+public class PreceptorController(AppDbContext db, PendenciasService pendenciasService) : ControllerBase
 {
     [HttpGet("students")]
     public async Task<ActionResult> GetStudents()
@@ -35,44 +35,17 @@ public class PreceptorController(AppDbContext db) : ControllerBase
             .Where(m => groupIds.Contains(m.GroupId))
             .ToListAsync();
 
-        var today = BrasiliaTime.Hoje;
-
         var result = new List<object>();
         foreach (var m in members)
         {
-            // Pendências simplificadas
-            var schedules = await db.RotationSchedules
-                .Include(s => s.Location)
+            var primeiraEscala = await db.RotationSchedules
                 .Where(s => s.GroupId == m.GroupId)
-                .ToListAsync();
+                .OrderBy(s => s.StartDate)
+                .Select(s => (Guid?)s.Id)
+                .FirstOrDefaultAsync();
 
-            int pendencyDays = 0;
-            double pendencyHours = 0;
-
-            foreach (var sch in schedules)
-            {
-                var current = sch.StartDate;
-                var end = sch.EndDate < today ? sch.EndDate : today.AddDays(-1);
-                while (current <= end)
-                {
-                    if (current.DayOfWeek != DayOfWeek.Saturday && current.DayOfWeek != DayOfWeek.Sunday)
-                    {
-                        var hasCheckIn = await db.AttendanceRecords.AnyAsync(r =>
-                            r.StudentId == m.StudentId && r.Type == "check_in" &&
-                            r.ScheduleId == sch.Id &&
-                            DateOnly.FromDateTime(r.RecordedAt) == current);
-
-                        if (!hasCheckIn)
-                        {
-                            pendencyDays++;
-                            if (TimeSpan.TryParse(sch.Location.ShiftStart, out var s) &&
-                                TimeSpan.TryParse(sch.Location.ShiftEnd, out var e))
-                                pendencyHours += (e - s).TotalHours;
-                        }
-                    }
-                    current = current.AddDays(1);
-                }
-            }
+            // Mesma regra do painel do aluno: programação do dia + vigência do rodízio.
+            var pendencias = await pendenciasService.CalcularAsync(m.StudentId);
 
             result.Add(new
             {
@@ -81,9 +54,9 @@ public class PreceptorController(AppDbContext db) : ControllerBase
                 email = m.Student.Email,
                 groupCode = m.Group.Code,
                 groupName = m.Group.Name,
-                pendencyDays,
-                pendencyHours = Math.Round(pendencyHours, 1),
-                scheduleId = schedules.FirstOrDefault()?.Id
+                pendencyDays = pendencias.Count,
+                pendencyHours = Math.Round(pendencias.Sum(p => p.ExpectedHours), 1),
+                scheduleId = primeiraEscala
             });
         }
 

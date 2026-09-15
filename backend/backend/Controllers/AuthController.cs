@@ -19,14 +19,23 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
     {
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
+        var user = await db.Users
+            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
         if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             return Unauthorized(new { message = "Credenciais inválidas." });
 
-        var token = tokenService.GenerateToken(user);
-        return Ok(new AuthResponseDto(token, user.Id.ToString(), user.Email, user.FullName, user.Role,
-            user.MustChangePassword, user.MustSetEmail, DeveAceitarTermo(user)));
+        return Ok(Resposta(user));
     }
+
+    /// <summary>
+    /// Resposta de autenticação. Para o aluno leva também a turma e o turno, que o
+    /// menu lateral exibe sem precisar de outra consulta.
+    /// </summary>
+    private AuthResponseDto Resposta(ApplicationUser user) => new(
+        tokenService.GenerateToken(user), user.Id.ToString(), user.Email, user.FullName, user.Role,
+        user.MustChangePassword, user.MustSetEmail, DeveAceitarTermo(user),
+        user.GroupMembership?.Group?.Code, user.GroupMembership?.Group?.Name, user.Shift);
 
     // ── Termo de responsabilidade de acesso ───────────────────────────────────
     /// <summary>
@@ -84,7 +93,9 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         if (userId == null || !Guid.TryParse(userId, out var id))
             return Unauthorized();
 
-        var user = await db.Users.FindAsync(id);
+        var user = await db.Users
+            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .FirstOrDefaultAsync(u => u.Id == id);
         if (user == null) return NotFound();
 
         if (!user.MustChangePassword && !user.MustSetEmail)
@@ -107,9 +118,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
 
         await db.SaveChangesAsync();
 
-        var token = tokenService.GenerateToken(user);
-        return Ok(new AuthResponseDto(token, user.Id.ToString(), user.Email, user.FullName, user.Role,
-            MustAcceptTerms: DeveAceitarTermo(user)));
+        return Ok(Resposta(user));
     }
 
     // ── Esqueci a senha ───────────────────────────────────────────────────────

@@ -28,6 +28,14 @@ public class DashboardStatsDto
     /// o andamento das irregularidades, em um único lugar.
     /// </summary>
     public List<PendingStatusDto> PendingStatuses { get; init; } = [];
+
+    // ── Identificação do aluno ────────────────────────────────────────────────
+    /// <summary>Código da turma de matrícula (ex.: "T02"). Nulo sem vínculo ou fora do perfil aluno.</summary>
+    public string? GroupCode { get; init; }
+    public string? GroupName { get; init; }
+
+    /// <summary>Turno do aluno: "manha" | "tarde" | "noite".</summary>
+    public string? Shift { get; init; }
 }
 
 public class IrregularityCountsDto

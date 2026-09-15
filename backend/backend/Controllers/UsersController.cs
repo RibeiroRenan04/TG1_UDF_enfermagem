@@ -479,6 +479,77 @@ public class UsersController(AppDbContext db) : ControllerBase
         return Ok(new AdvanceSemesterResponseDto(semester7.Count, semester8.Count));
     }
 
+    // ── Conclusão de estágio (individual) ─────────────────────────────────────
+    /// <summary>
+    /// Marca o aluno como concluinte/formado: sai de "Alunos ativos" e vai para
+    /// "Alunos inativos". Nada é apagado — pontos, rodízios e acompanhamentos
+    /// continuam, e a carga horária do momento fica gravada no histórico de
+    /// semestres. Uma marcação por engano se desfaz em <see cref="Reativar"/>.
+    /// </summary>
+    [HttpPost("{id}/concluir")]
+    [Authorize(Roles = Roles.Supervisor)]
+    public async Task<ActionResult<UserDto>> Concluir(Guid id)
+    {
+        var user = await db.Users
+            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .FirstOrDefaultAsync(u => u.Id == id);
+
+        if (user == null) return NotFound(new { message = "Aluno não encontrado." });
+        if (user.Role != Roles.Aluno)
+            return BadRequest(new { message = "Apenas alunos podem ser marcados como concluintes." });
+        if (!user.IsActive)
+            return Conflict(new
+            {
+                message = $"{user.FullName} já está entre os alunos inativos.",
+                code = "aluno_ja_inativo"
+            });
+
+        var horas = await BuildTotalHoursMap([user.Id]);
+        db.StudentSemesterHistories.Add(new StudentSemesterHistory
+        {
+            StudentId = user.Id,
+            // Aluno sem semestre cadastrado conclui pelo último semestre do estágio.
+            Semester = user.Semester ?? 8,
+            TotalHours = horas.GetValueOrDefault(user.Id, 0)
+        });
+
+        user.IsActive = false;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok(MapToDto(user));
+    }
+
+    /// <summary>
+    /// Desfaz a conclusão marcada por engano: o aluno volta para "Alunos ativos"
+    /// com o mesmo semestre, turno e turma. O registro no histórico de semestres
+    /// fica, como trilha do que aconteceu.
+    /// </summary>
+    [HttpPost("{id}/reativar")]
+    [Authorize(Roles = Roles.Supervisor)]
+    public async Task<ActionResult<UserDto>> Reativar(Guid id)
+    {
+        var user = await db.Users
+            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .FirstOrDefaultAsync(u => u.Id == id);
+
+        if (user == null) return NotFound(new { message = "Aluno não encontrado." });
+        if (user.Role != Roles.Aluno)
+            return BadRequest(new { message = "Apenas alunos podem ser reativados por esta ação." });
+        if (user.IsActive)
+            return Conflict(new
+            {
+                message = $"{user.FullName} já está entre os alunos ativos.",
+                code = "aluno_ja_ativo"
+            });
+
+        user.IsActive = true;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        return Ok(MapToDto(user));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
     private async Task<Dictionary<Guid, decimal>> BuildTotalHoursMap(List<Guid> studentIds)
     {
