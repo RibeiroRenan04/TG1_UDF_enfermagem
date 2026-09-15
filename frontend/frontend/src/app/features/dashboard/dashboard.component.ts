@@ -9,6 +9,7 @@ import { RouterLink } from '@angular/router';
 import { DashboardService } from '../../core/services/dashboard.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DashboardStats, PendingStatus } from '../../core/models/models';
+import { rotuloTurma } from '../../core/utils/turma';
 
 @Component({
   selector: 'app-dashboard',
@@ -35,11 +36,25 @@ export class DashboardComponent implements OnInit {
   /** O card só some quando não há nenhum aviso a mostrar. */
   temPendencias = computed(() => this.statusPendentes().length > 0);
 
+  /** Turma de matrícula do aluno: "T02 - Teste (Manhã)". */
+  turma = computed(() => {
+    const s = this.stats();
+    return s ? rotuloTurma(s.groupCode, s.groupName, s.shift) : '';
+  });
+
   constructor(private dashService: DashboardService, private auth: AuthService) {}
 
   ngOnInit(): void {
     this.dashService.getStats().subscribe({
-      next: (s) => { this.stats.set(s); this.loading.set(false); },
+      next: (s) => {
+        this.stats.set(s);
+        this.loading.set(false);
+        // Mantém o menu lateral em dia com a turma atual, inclusive em sessões
+        // abertas antes de a turma vir no login ou após uma troca de turma.
+        if (this.role() === 'aluno') {
+          this.auth.atualizarPerfil({ groupCode: s.groupCode, groupName: s.groupName, shift: s.shift });
+        }
+      },
       error: () => this.loading.set(false)
     });
   }

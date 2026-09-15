@@ -22,6 +22,7 @@ import {
   AbrangenciaExcecao, ExcecaoCalendario, Location, RotationSchedule,
   StudentGroup, TipoExcecao, UserDto
 } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Calendário de exceções.
@@ -230,7 +231,7 @@ export class ExcecoesComponent implements OnInit {
       },
       error: (err) => {
         this.saving.set(false);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao salvar a exceção.', 'OK',
+        this.snackBar.open(mensagemErro(err, 'Erro ao salvar a exceção.'), 'OK',
           { duration: 6000, panelClass: 'snack-error' });
       }
     });
@@ -254,7 +255,7 @@ export class ExcecoesComponent implements OnInit {
     if (!confirm(`Excluir a exceção "${e.description}"?`)) return;
     this.service.delete(e.id).subscribe({
       next: () => { this.snackBar.open('Exceção removida.', '', { duration: 3000 }); this.load(); },
-      error: () => this.snackBar.open('Erro ao excluir a exceção.', '',
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao excluir a exceção.'), '',
         { duration: 4000, panelClass: 'snack-error' })
     });
   }

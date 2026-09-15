@@ -25,6 +25,7 @@ import {
   VincularAlunosDialogComponent,
   VincularAlunosResult
 } from '../usuarios/vincular-alunos-dialog.component';
+import { aplicarErrosServidor, mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Linha da programação semanal na tela. `ativo` separa o dia que faz parte do
@@ -211,7 +212,7 @@ export class RodiziosComponent implements OnInit {
         this.groupForm.reset({ code: '', name: '', description: '' });
         this.load();
       },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao criar turma', '', { duration: 3000, panelClass: 'snack-error' })
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao criar turma'), '', { duration: 3000, panelClass: 'snack-error' })
     });
   }
 
@@ -219,7 +220,7 @@ export class RodiziosComponent implements OnInit {
     if (!confirm('Excluir turma? As escalas de rodízio vinculadas também serão removidas.')) return;
     this.groupsService.delete(id).subscribe({
       next: () => this.load(),
-      error: () => this.snackBar.open('Erro ao excluir', '', { duration: 3000, panelClass: 'snack-error' })
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao excluir'), '', { duration: 3000, panelClass: 'snack-error' })
     });
   }
 
@@ -246,9 +247,12 @@ export class RodiziosComponent implements OnInit {
   }
 
   // ── Alocação de rodízio ───────────────────────────────────────────────────
-  /** Linhas de segunda a sexta — os dias em que o estágio acontece. */
+  /**
+   * Linhas de segunda a sábado. O sábado atende cursos com plantões, práticas
+   * supervisionadas e aulas de campo; como os demais dias, só vale se marcado.
+   */
   private linhasPadrao(): LinhaDia[] {
-    const rotulos = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+    const rotulos = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
     return rotulos.map((label, i) => ({
       dayOfWeek: i + 1, label, ativo: false, mode: 'presencial' as ModoAtividade, locationId: ''
     }));
@@ -275,14 +279,35 @@ export class RodiziosComponent implements OnInit {
       d.dayOfWeek === dayOfWeek ? { ...d, ...mudanca } : d));
   }
 
-  /** Marca segunda a sexta como presencial no local principal — o caso mais comum. */
+  /**
+   * Marca segunda a sexta como presencial no local principal — o caso mais comum.
+   * O sábado fica de fora: ele é a exceção e precisa ser marcado a propósito.
+   */
   marcarTodosPresenciais(): void {
-    this.dias.update(atual => atual.map(d =>
-      ({ ...d, ativo: true, mode: 'presencial' as ModoAtividade })));
+    this.dias.update(atual => atual.map(d => d.dayOfWeek <= 5
+      ? { ...d, ativo: true, mode: 'presencial' as ModoAtividade }
+      : d));
   }
 
   limparProgramacao(): void {
     this.dias.set(this.linhasPadrao());
+  }
+
+  /** Erro do servidor que não corresponde a um campo (ex.: programação semanal). */
+  erroGeral = signal<string | null>(null);
+
+  /** Mensagem do servidor para o campo, exibida logo abaixo dele. */
+  erroServidor(campo: string): string | null {
+    return this.scheduleForm.get(campo)?.getError('servidor') ?? null;
+  }
+
+  /** Destaca o campo com o motivo e avisa, em vez de só mostrar um toast genérico. */
+  private marcarErro(campo: string, mensagem: string): void {
+    const controle = this.scheduleForm.get(campo);
+    controle?.setErrors({ ...(controle.errors ?? {}), servidor: mensagem });
+    controle?.markAsTouched();
+    this.snackBar.open(`Erro ao salvar alocação: ${mensagem}`, 'OK',
+      { duration: 6000, panelClass: 'snack-error' });
   }
 
   abrirAlocacao(group: StudentGroup): void {
@@ -330,6 +355,8 @@ export class RodiziosComponent implements OnInit {
   }
 
   salvarAlocacao(): void {
+    this.erroGeral.set(null);
+
     if (this.scheduleForm.invalid) {
       this.scheduleForm.markAllAsTouched();
       this.snackBar.open('Preencha todos os campos obrigatórios da alocação.', '', { duration: 3000, panelClass: 'snack-error' });
@@ -338,7 +365,22 @@ export class RodiziosComponent implements OnInit {
 
     const v = this.scheduleForm.value;
     if (v.endDate! < v.startDate!) {
-      this.snackBar.open('A data de término não pode ser anterior à data de início.', '', { duration: 4000, panelClass: 'snack-error' });
+      this.marcarErro('endDate', 'A data de término não pode ser anterior à data de início.');
+      return;
+    }
+
+    // Ano digitado errado (2004 no lugar de 2026) passava direto e o painel do
+    // aluno acabava contando anos inteiros de "dias sem registro".
+    const anoInvalido = (data: string) => {
+      const ano = Number(data.substring(0, 4));
+      return !ano || ano < 2020 || ano > 2100;
+    };
+    if (anoInvalido(v.startDate!)) {
+      this.marcarErro('startDate', 'Data de início inválida. Confira o ano informado.');
+      return;
+    }
+    if (anoInvalido(v.endDate!)) {
+      this.marcarErro('endDate', 'Data de término inválida. Confira o ano informado.');
       return;
     }
 
@@ -380,7 +422,11 @@ export class RodiziosComponent implements OnInit {
       },
       error: (err) => {
         this.savingSchedule.set(false);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao salvar alocação', 'OK', { duration: 6000, panelClass: 'snack-error' });
+        const motivo = mensagemErro(err, 'Erro ao salvar alocação');
+        // Campo recusado ganha borda vermelha e o motivo abaixo dele; o que não
+        // tem campo correspondente (programação semanal) vai para o aviso do topo.
+        if (!aplicarErrosServidor(this.scheduleForm, err)) this.erroGeral.set(motivo);
+        this.snackBar.open(motivo, 'OK', { duration: 8000, panelClass: 'snack-error' });
       }
     });
   }
@@ -393,7 +439,7 @@ export class RodiziosComponent implements OnInit {
         this.loadSchedules(groupId);
         this.loadAllSchedules();
       },
-      error: () => this.snackBar.open('Erro ao excluir alocação', '', { duration: 3000, panelClass: 'snack-error' })
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao excluir alocação'), '', { duration: 3000, panelClass: 'snack-error' })
     });
   }
 

@@ -14,6 +14,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { IrregularitiesService } from '../../core/services/irregularities.service';
 import { AttendanceService } from '../../core/services/attendance.service';
 import { AttendanceRecord, IrregularityType } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /** Ponto já escolhido pela tela de origem (histórico), quando houver. */
 export interface RegistrarIrregularidadeData {
@@ -313,7 +314,7 @@ export class RegistrarIrregularidadeDialogComponent implements OnInit {
       next: () => { this.busy.set(false); this.dialogRef.close(true); },
       error: (err) => {
         this.busy.set(false);
-        this.erro.set(err?.error?.message ?? 'Erro ao registrar a irregularidade.');
+        this.erro.set(mensagemErro(err, 'Erro ao registrar a irregularidade.'));
       }
     });
   }

@@ -11,6 +11,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { UnidadeSaude, GeocodificacaoResposta } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Cadastro e edição da unidade de saúde.
@@ -98,7 +99,7 @@ export class UnidadeFormDialogComponent {
       next: (r) => { this.buscandoLocal.set(false); this.previa.set(r); },
       error: (err) => {
         this.buscandoLocal.set(false);
-        this.erro.set(err?.error?.message ?? 'Não foi possível consultar a localização agora.');
+        this.erro.set(mensagemErro(err, 'Não foi possível consultar a localização agora.'));
       }
     });
   }
@@ -152,7 +153,7 @@ export class UnidadeFormDialogComponent {
       next: (u) => { this.busy.set(false); this.dialogRef.close(u); },
       error: (err) => {
         this.busy.set(false);
-        this.erro.set(err?.error?.message ?? 'Erro ao salvar a unidade.');
+        this.erro.set(mensagemErro(err, 'Erro ao salvar a unidade.'));
       }
     });
   }

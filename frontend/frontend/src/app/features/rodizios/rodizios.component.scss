@@ -261,3 +261,12 @@ h4 {
 
   &.remoto { background: #ede9fe; color: #5b21b6; }
 }
+
+// Erro devolvido pelo servidor que não corresponde a um campo do formulário.
+.warning-box.erro-servidor {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+
+  mat-icon { color: #dc2626; }
+}

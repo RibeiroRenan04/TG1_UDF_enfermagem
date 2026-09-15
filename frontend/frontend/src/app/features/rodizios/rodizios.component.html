@@ -55,6 +55,7 @@
           <mat-label>Período</mat-label>
           <input matInput formControlName="periodLabel" placeholder="Ex.: 2026.1 – 1º rodízio">
           <mat-error *ngIf="scheduleForm.get('periodLabel')?.hasError('required')">Informe o período</mat-error>
+          <mat-error *ngIf="erroServidor('periodLabel') as e">{{ e }}</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -63,6 +64,7 @@
             <mat-option *ngFor="let l of locations()" [value]="l.id">{{ l.name }}</mat-option>
           </mat-select>
           <mat-error *ngIf="scheduleForm.get('locationId')?.hasError('required')">Selecione o local</mat-error>
+          <mat-error *ngIf="erroServidor('locationId') as e">{{ e }}</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -73,18 +75,21 @@
             </mat-option>
           </mat-select>
           <mat-error *ngIf="scheduleForm.get('preceptorId')?.hasError('required')">Informe o preceptor</mat-error>
+          <mat-error *ngIf="erroServidor('preceptorId') as e">{{ e }}</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Data de início</mat-label>
           <input matInput type="date" formControlName="startDate">
           <mat-error *ngIf="scheduleForm.get('startDate')?.hasError('required')">Informe a data de início</mat-error>
+          <mat-error *ngIf="erroServidor('startDate') as e">{{ e }}</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Data de término</mat-label>
           <input matInput type="date" formControlName="endDate">
           <mat-error *ngIf="scheduleForm.get('endDate')?.hasError('required')">Informe a data de término</mat-error>
+          <mat-error *ngIf="erroServidor('endDate') as e">{{ e }}</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -92,13 +97,21 @@
           <mat-select formControlName="activityType">
             <mat-option *ngFor="let a of atividades" [value]="a.valor">{{ a.rotulo }}</mat-option>
           </mat-select>
+          <mat-error *ngIf="erroServidor('activityType') as e">{{ e }}</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Carga horária (horas)</mat-label>
           <input matInput type="number" min="1" max="2000" formControlName="requiredHours">
-          <mat-error *ngIf="scheduleForm.get('requiredHours')?.invalid">Informe de 1 a 2000 horas</mat-error>
+          <mat-error *ngIf="scheduleForm.get('requiredHours')?.errors && !erroServidor('requiredHours')">Informe de 1 a 2000 horas</mat-error>
+          <mat-error *ngIf="erroServidor('requiredHours') as e">{{ e }}</mat-error>
         </mat-form-field>
+      </div>
+
+      <!-- Erro do servidor sem campo correspondente (ex.: programação semanal). -->
+      <div class="warning-box erro-servidor" *ngIf="erroGeral() as e">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ e }}</span>
       </div>
 
       <!-- Preceptor ja escalado em outro local no mesmo turno/periodo. -->
@@ -119,8 +132,10 @@
             <h4>Programação semanal (opcional)</h4>
             <p>
               Marque os dias e o sistema gera sozinho a programação de cada data do
-              período. Sem nenhum dia marcado, todo dia útil vale como presencial no
-              local principal.
+              período. Sem nenhum dia marcado, todo dia útil (segunda a sexta) vale
+              como presencial no local principal. O <strong>sábado</strong> só entra
+              quando marcado — use para plantões, práticas supervisionadas e aulas de
+              campo; as horas registradas nele somam na carga do aluno.
             </p>
           </div>
           <div class="dias-atalhos">

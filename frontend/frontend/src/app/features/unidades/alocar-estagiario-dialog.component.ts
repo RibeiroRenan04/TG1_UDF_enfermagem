@@ -11,6 +11,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSelectModule } from '@angular/material/select';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { EstagiarioDisponivel, Turno, UnidadeSaude } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Busca e alocação de um estagiário. Só aparecem usuários com perfil de aluno —
@@ -192,7 +193,7 @@ export class AlocarEstagiarioDialogComponent implements OnInit {
         this.turnosSelecionados = {};
         this.carregando.set(false);
       },
-      error: () => { this.carregando.set(false); this.erro.set('Erro ao buscar os alunos.'); }
+      error: (err) => { this.carregando.set(false); this.erro.set(mensagemErro(err, 'Erro ao buscar os alunos.')); }
     });
   }
 
@@ -280,7 +281,7 @@ export class AlocarEstagiarioDialogComponent implements OnInit {
       },
       error: (err) => {
         this.salvandoId.set(null);
-        this.erro.set(err?.error?.message ?? 'Erro ao alocar o estagiário.');
+        this.erro.set(mensagemErro(err, 'Erro ao alocar o estagiário.'));
       }
     });
   }

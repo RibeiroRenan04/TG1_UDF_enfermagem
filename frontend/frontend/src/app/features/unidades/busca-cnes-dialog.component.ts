@@ -10,6 +10,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { LocationsService } from '../../core/services/locations.service';
 import { BuscaSaudeEstabelecimento } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Busca de unidades de saúde do DF no CNES/OpenDataSUS e importação delas como
@@ -139,10 +140,10 @@ export class BuscaCnesDialogComponent {
     this.erro.set('');
     this.locationsService.buscaSaude(this.termo).subscribe({
       next: (r) => { this.resultados.set(r); this.buscando.set(false); this.buscou.set(true); },
-      error: () => {
+      error: (err) => {
         this.buscando.set(false);
         this.buscou.set(true);
-        this.erro.set('Erro ao consultar o CNES. Tente novamente em instantes.');
+        this.erro.set(mensagemErro(err, 'Erro ao consultar o CNES. Tente novamente em instantes.'));
       }
     });
   }
@@ -167,7 +168,7 @@ export class BuscaCnesDialogComponent {
           this.jaCadastrados.update(s => new Set(s).add(e.codigoCnes));
           return;
         }
-        this.erro.set(err?.error?.message ?? 'Erro ao importar a unidade.');
+        this.erro.set(mensagemErro(err, 'Erro ao importar a unidade.'));
       }
     });
   }

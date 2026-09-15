@@ -24,6 +24,8 @@ import { AuthService } from '../../core/services/auth.service';
 import { ImportarAlunosDialogComponent } from './importar-alunos-dialog.component';
 import { PermissaoAtrasoDialogComponent } from './permissao-atraso-dialog.component';
 import { CadastrarStaffDialogComponent } from './cadastrar-staff-dialog.component';
+import { ConfirmarDialogComponent, ConfirmarDialogData } from '../../shared/confirmar-dialog.component';
+import { mensagemErro } from '../../core/utils/api-error';
 
 type Shift = 'manha' | 'tarde' | 'noite';
 type Sem   = 7 | 8;
@@ -153,7 +155,83 @@ export class UsuariosComponent implements OnInit {
         this.snackBar.open(`${res.advanced} aluno(s) avançaram. ${res.graduated} formado(s).`, 'OK', { duration: 6000, panelClass: 'snack-success' });
         this.loadUsers();
       },
-      error: () => { this.advancingBusy.set(false); this.snackBar.open('Erro ao avançar semestre', '', { duration: 4000, panelClass: 'snack-error' }); }
+      error: (err) => { this.advancingBusy.set(false); this.snackBar.open(mensagemErro(err, 'Erro ao avançar semestre'), '', { duration: 4000, panelClass: 'snack-error' }); }
+    });
+  }
+
+  // ── Conclusão de estágio (botão de capelo) ────────────────────────────────
+  /** Aluno cuja conclusão — ou reversão — está sendo gravada. */
+  alterandoCicloId = signal<string | null>(null);
+
+  /**
+   * Marca o aluno como concluinte/formado: ele sai de "Alunos ativos" e vai para
+   * "Alunos inativos", com o histórico preservado. Mudança de ciclo de vida exige
+   * confirmação explícita em modal — um clique acidental tiraria o aluno da
+   * operação — e pode ser desfeita pelo próprio aviso ou pela lista de inativos.
+   */
+  concluirAluno(student: UserDto): void {
+    const data: ConfirmarDialogData = {
+      titulo: 'Concluir estágio',
+      icone: 'school',
+      mensagem: `Confirmar conclusão de estágio para ${student.fullName}?`,
+      detalhe: 'O aluno será movido para inativos com histórico preservado (registros de ponto, '
+             + 'rodízios e carga horária). Se for engano, a ação pode ser revertida na lista de alunos inativos.',
+      textoConfirmar: 'Confirmar conclusão'
+    };
+
+    this.dialog.open(ConfirmarDialogComponent, { width: '480px', data })
+      .afterClosed().subscribe((confirmado: boolean) => {
+        if (!confirmado) return;
+
+        this.alterandoCicloId.set(student.id);
+        this.usersService.concluir(student.id).subscribe({
+          next: () => {
+            this.alterandoCicloId.set(null);
+            this.snackBar.open(`${student.fullName} marcado(a) como concluinte.`, 'Desfazer',
+              { duration: 8000, panelClass: 'snack-success' })
+              .onAction().subscribe(() => this.executarReativacao(student));
+            this.loadUsers();
+          },
+          error: (err) => {
+            this.alterandoCicloId.set(null);
+            this.snackBar.open(mensagemErro(err, 'Erro ao concluir o estágio do aluno'), 'OK',
+              { duration: 6000, panelClass: 'snack-error' });
+          }
+        });
+      });
+  }
+
+  /** Reverte uma conclusão marcada por engano. */
+  reativarAluno(student: UserDto): void {
+    const data: ConfirmarDialogData = {
+      titulo: 'Reverter conclusão',
+      icone: 'undo',
+      mensagem: `Reverter a conclusão de estágio de ${student.fullName}?`,
+      detalhe: 'O aluno volta para "Alunos ativos" com o mesmo semestre, turno e turma.',
+      textoConfirmar: 'Reverter conclusão',
+      cor: 'warn'
+    };
+
+    this.dialog.open(ConfirmarDialogComponent, { width: '480px', data })
+      .afterClosed().subscribe((confirmado: boolean) => {
+        if (confirmado) this.executarReativacao(student);
+      });
+  }
+
+  private executarReativacao(student: UserDto): void {
+    this.alterandoCicloId.set(student.id);
+    this.usersService.reativar(student.id).subscribe({
+      next: () => {
+        this.alterandoCicloId.set(null);
+        this.snackBar.open(`${student.fullName} voltou para os alunos ativos.`, '',
+          { duration: 4000, panelClass: 'snack-success' });
+        this.loadUsers();
+      },
+      error: (err) => {
+        this.alterandoCicloId.set(null);
+        this.snackBar.open(mensagemErro(err, 'Erro ao reverter a conclusão do aluno'), 'OK',
+          { duration: 6000, panelClass: 'snack-error' });
+      }
     });
   }
 
@@ -183,7 +261,7 @@ export class UsuariosComponent implements OnInit {
       },
       error: (err) => {
         this.assigningId.set(null);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao vincular o aluno à turma', '',
+        this.snackBar.open(mensagemErro(err, 'Erro ao vincular o aluno à turma'), '',
           { duration: 4000, panelClass: 'snack-error' });
       }
     });
@@ -208,7 +286,7 @@ export class UsuariosComponent implements OnInit {
       },
       error: (err) => {
         this.savingShiftId.set(null);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao alterar o turno do aluno', '',
+        this.snackBar.open(mensagemErro(err, 'Erro ao alterar o turno do aluno'), '',
           { duration: 4000, panelClass: 'snack-error' });
       }
     });
@@ -243,7 +321,7 @@ export class UsuariosComponent implements OnInit {
         this.loadUsers();
       },
       error: (err) => this.snackBar.open(
-        err?.error?.message ?? 'Erro ao definir o curso do aluno', '',
+        mensagemErro(err, 'Erro ao definir o curso do aluno'), '',
         { duration: 4000, panelClass: 'snack-error' })
     });
   }

@@ -13,6 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { UnidadeSaude } from '../../core/models/models';
 import { STATUS_GEO } from './status-geocodificacao';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Conferência das unidades cuja localização não ficou confirmada.
@@ -58,9 +59,9 @@ export class RevisaoLocalizacaoComponent implements OnInit {
           };
         this.loading.set(false);
       },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
-        this.snackBar.open('Erro ao carregar as unidades', '', { duration: 4000 });
+        this.snackBar.open(mensagemErro(err, 'Erro ao carregar as unidades'), '', { duration: 4000 });
       }
     });
   }
@@ -95,7 +96,7 @@ export class RevisaoLocalizacaoComponent implements OnInit {
       },
       error: (err) => {
         this.ocupadaId.set(null);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao salvar', '',
+        this.snackBar.open(mensagemErro(err, 'Erro ao salvar'), '',
           { duration: 4000, panelClass: 'snack-error' });
       }
     });
@@ -114,7 +115,7 @@ export class RevisaoLocalizacaoComponent implements OnInit {
       },
       error: (err) => {
         this.ocupadaId.set(null);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao geocodificar', '',
+        this.snackBar.open(mensagemErro(err, 'Erro ao geocodificar'), '',
           { duration: 4000, panelClass: 'snack-error' });
       }
     });

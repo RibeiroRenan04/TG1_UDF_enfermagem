@@ -16,6 +16,7 @@ import { AttendanceService } from '../../core/services/attendance.service';
 import { ProgramacaoService } from '../../core/services/programacao.service';
 import { AtividadesRemotasService } from '../../core/services/atividades-remotas.service';
 import { AtividadeRemotaAluno, ProgramacaoDia, ShiftPointStatus } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Registro de presença guiado pela programação do dia.
@@ -304,7 +305,7 @@ export class CheckInComponent implements OnInit, OnDestroy {
         this.loadState();
       },
       error: (err) => {
-        this.snackBar.open(err?.error?.message ?? 'Erro ao registrar', '', { duration: 5000, panelClass: 'snack-error' });
+        this.snackBar.open(mensagemErro(err, 'Erro ao registrar'), '', { duration: 5000, panelClass: 'snack-error' });
         this.busy.set(false);
       }
     });
@@ -336,7 +337,7 @@ export class CheckInComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.busy.set(false);
-        this.snackBar.open(err?.error?.message ?? 'Não foi possível registrar a participação.', 'OK',
+        this.snackBar.open(mensagemErro(err, 'Não foi possível registrar a participação.'), 'OK',
           { duration: 7000, panelClass: 'snack-error' });
       }
     });

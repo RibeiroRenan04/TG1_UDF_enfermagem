@@ -19,6 +19,7 @@ import { UnidadeSaude, StatusGeocodificacao } from '../../core/models/models';
 import { UnidadeFormDialogComponent } from './unidade-form-dialog.component';
 import { BuscaCnesDialogComponent } from './busca-cnes-dialog.component';
 import { STATUS_GEO } from './status-geocodificacao';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /** Lista das unidades de saúde, com os filtros da tela. */
 @Component({
@@ -88,9 +89,9 @@ export class UnidadesComponent implements OnInit {
       statusGeocodificacao: this.filtroStatus || undefined
     }).subscribe({
       next: (u) => { this.unidades.set(u); this.loading.set(false); },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
-        this.snackBar.open('Erro ao carregar as unidades', '', { duration: 4000 });
+        this.snackBar.open(mensagemErro(err, 'Erro ao carregar as unidades'), '', { duration: 4000 });
       }
     });
   }
@@ -153,7 +154,7 @@ export class UnidadesComponent implements OnInit {
           '', { duration: 5000, panelClass: r.sucesso ? 'snack-success' : 'snack-error' });
         this.carregar();
       },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao geocodificar', '',
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao geocodificar'), '',
         { duration: 4000, panelClass: 'snack-error' })
     });
   }
@@ -165,7 +166,7 @@ export class UnidadesComponent implements OnInit {
         this.snackBar.open('Unidade desativada.', '', { duration: 3000, panelClass: 'snack-success' });
         this.carregar();
       },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao desativar', '',
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao desativar'), '',
         { duration: 5000, panelClass: 'snack-error' })
     });
   }

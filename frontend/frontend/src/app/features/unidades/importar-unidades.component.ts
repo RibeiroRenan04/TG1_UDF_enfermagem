@@ -14,6 +14,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subscription, interval, switchMap } from 'rxjs';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { ImportPreview, ImportacaoProgresso, ImportacaoResultado } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Importação de unidades por planilha.
@@ -105,7 +106,7 @@ export class ImportarUnidadesComponent implements OnDestroy {
       },
       error: (err) => {
         this.confirmando.set(false);
-        this.erro.set(err?.error?.message ?? 'Erro ao confirmar a importação.');
+        this.erro.set(mensagemErro(err, 'Erro ao confirmar a importação.'));
       }
     });
   }

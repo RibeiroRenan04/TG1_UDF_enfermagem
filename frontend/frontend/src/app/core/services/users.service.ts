@@ -82,4 +82,14 @@ export class UsersService {
   advanceSemester(): Observable<AdvanceSemesterResult> {
     return this.http.post<AdvanceSemesterResult>(`${this.api}/advance-semester`, {});
   }
+
+  /** Marca o aluno como concluinte/formado: vai para "Alunos inativos", com histórico preservado. */
+  concluir(userId: string): Observable<UserDto> {
+    return this.http.post<UserDto>(`${this.api}/${userId}/concluir`, {});
+  }
+
+  /** Desfaz uma conclusão marcada por engano: o aluno volta para "Alunos ativos". */
+  reativar(userId: string): Observable<UserDto> {
+    return this.http.post<UserDto>(`${this.api}/${userId}/reativar`, {});
+  }
 }

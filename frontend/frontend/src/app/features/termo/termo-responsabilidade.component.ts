@@ -10,6 +10,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { AuthService } from '../../core/services/auth.service';
 import { ResponsibilityTerms } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Termo de responsabilidade de acesso, exigido de preceptores, professores e
@@ -58,7 +59,7 @@ export class TermoResponsabilidadeComponent implements OnInit {
       },
       error: (err) => {
         this.busy.set(false);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao registrar o aceite', '',
+        this.snackBar.open(mensagemErro(err, 'Erro ao registrar o aceite'), '',
           { duration: 4000, panelClass: 'snack-error' });
       }
     });

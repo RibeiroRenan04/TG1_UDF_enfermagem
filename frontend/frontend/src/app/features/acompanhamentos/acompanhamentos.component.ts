@@ -16,6 +16,7 @@ import { FollowupsService } from '../../core/services/followups.service';
 import { AuthService } from '../../core/services/auth.service';
 import { FormativeFollowup, StudentLookup } from '../../core/models/models';
 import { SelecionarAlunoDialogComponent } from './selecionar-aluno-dialog.component';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /** Escala de frequência usada nas dimensões comportamentais. */
 const ESCALA = ['nao_observado', 'raramente', 'as_vezes', 'frequentemente', 'sempre'];
@@ -150,7 +151,7 @@ export class AcompanhamentosComponent implements OnInit {
     this.loading.set(true);
     this.followupsService.getAll().subscribe({
       next: (f) => { this.followups.set(f); this.loading.set(false); },
-      error: () => { this.loading.set(false); this.snackBar.open('Erro ao carregar acompanhamentos', '', { duration: 3000 }); }
+      error: (err) => { this.loading.set(false); this.snackBar.open(mensagemErro(err, 'Erro ao carregar acompanhamentos'), '', { duration: 3000 }); }
     });
   }
 
@@ -175,7 +176,7 @@ export class AcompanhamentosComponent implements OnInit {
       },
       error: (err) => {
         this.lookingUp.set(false);
-        this.lookupError.set(err?.error?.message ?? 'Aluno não encontrado para esse RGM.');
+        this.lookupError.set(mensagemErro(err, 'Aluno não encontrado para esse RGM.'));
       }
     });
   }
@@ -247,7 +248,7 @@ export class AcompanhamentosComponent implements OnInit {
       },
       error: (err) => {
         this.saving.set(false);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao salvar', '', { duration: 4000, panelClass: 'snack-error' });
+        this.snackBar.open(mensagemErro(err, 'Erro ao salvar'), '', { duration: 4000, panelClass: 'snack-error' });
       }
     });
   }
@@ -308,7 +309,7 @@ export class AcompanhamentosComponent implements OnInit {
 
     this.followupsService.finalizePreceptor(f.id, nome).subscribe({
       next: () => { this.snackBar.open('Acompanhamento finalizado. Aguardando ciência do aluno.', '', { duration: 3000, panelClass: 'snack-success' }); this.load(); },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao finalizar', '', { duration: 4000, panelClass: 'snack-error' })
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao finalizar'), '', { duration: 4000, panelClass: 'snack-error' })
     });
   }
 
@@ -319,7 +320,7 @@ export class AcompanhamentosComponent implements OnInit {
 
     this.followupsService.finalizeStudent(f.id, nome).subscribe({
       next: () => { this.snackBar.open('Ciência registrada!', '', { duration: 2500, panelClass: 'snack-success' }); this.load(); },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao registrar ciência', '', { duration: 4000, panelClass: 'snack-error' })
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao registrar ciência'), '', { duration: 4000, panelClass: 'snack-error' })
     });
   }
 

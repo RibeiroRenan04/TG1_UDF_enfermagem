@@ -9,6 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../../core/services/auth.service';
+import { rotuloTurma } from '../../core/utils/turma';
 
 interface NavItem {
   path: string;
@@ -61,6 +62,14 @@ export class AppLayoutComponent {
   rotuloPerfil = computed(() => {
     const role = this.auth.role();
     return role ? (this.rotulosPerfil[role] ?? role) : '';
+  });
+
+  /** Turma de matrícula do aluno, no cartão do usuário: "Turma: T02 - Teste (Manhã)". */
+  turmaAluno = computed(() => {
+    const u = this.auth.user();
+    if (u?.role !== 'aluno') return '';
+    const turma = rotuloTurma(u.groupCode, u.groupName, u.shift);
+    return turma ? `Turma: ${turma}` : 'Sem turma vinculada';
   });
 
   /** A coordenadora navega igual ao professor, mas sem alterar nada. */

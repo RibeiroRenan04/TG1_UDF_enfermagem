@@ -10,6 +10,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { AuthService } from '../../core/services/auth.service';
+import { mensagemErro } from '../../core/utils/api-error';
 
 function passwordMatchValidator(): ValidatorFn {
   return (group: AbstractControl): ValidationErrors | null => {
@@ -82,7 +83,7 @@ export class AuthComponent {
       },
       error: (err) => {
         this.busy.set(false);
-        this.snackBar.open(err?.error?.message ?? 'E-mail/senha incorretos', '', { duration: 4000, panelClass: 'snack-error' });
+        this.snackBar.open(mensagemErro(err, 'E-mail/senha incorretos'), '', { duration: 4000, panelClass: 'snack-error' });
       }
     });
   }
@@ -93,7 +94,7 @@ export class AuthComponent {
     this.busy.set(true);
     this.auth.forgotPassword(email).subscribe({
       next: () => { this.busy.set(false); this.view.set(2); },
-      error: (err) => { this.busy.set(false); this.snackBar.open(err?.error?.message ?? 'Erro ao enviar código', '', { duration: 4000, panelClass: 'snack-error' }); }
+      error: (err) => { this.busy.set(false); this.snackBar.open(mensagemErro(err, 'Erro ao enviar código'), '', { duration: 4000, panelClass: 'snack-error' }); }
     });
   }
 
@@ -104,7 +105,7 @@ export class AuthComponent {
     this.busy.set(true);
     this.auth.verifyResetCode(email, code).subscribe({
       next: () => { this.busy.set(false); this.view.set(3); },
-      error: (err) => { this.busy.set(false); this.snackBar.open(err?.error?.message ?? 'Código inválido ou expirado', '', { duration: 4000, panelClass: 'snack-error' }); }
+      error: (err) => { this.busy.set(false); this.snackBar.open(mensagemErro(err, 'Código inválido ou expirado'), '', { duration: 4000, panelClass: 'snack-error' }); }
     });
   }
 
@@ -120,7 +121,7 @@ export class AuthComponent {
         this.snackBar.open('Senha redefinida com sucesso!', '', { duration: 3000, panelClass: 'snack-success' });
         this.goToLogin();
       },
-      error: (err) => { this.busy.set(false); this.snackBar.open(err?.error?.message ?? 'Erro ao redefinir senha', '', { duration: 4000, panelClass: 'snack-error' }); }
+      error: (err) => { this.busy.set(false); this.snackBar.open(mensagemErro(err, 'Erro ao redefinir senha'), '', { duration: 4000, panelClass: 'snack-error' }); }
     });
   }
 }

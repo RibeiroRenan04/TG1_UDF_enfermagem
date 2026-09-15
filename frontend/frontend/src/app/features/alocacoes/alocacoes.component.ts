@@ -15,6 +15,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Alocacao, Turno, UnidadeSaude } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /** Visão geral das alocações de estagiários, com o histórico completo. */
 @Component({
@@ -83,9 +84,9 @@ export class AlocacoesComponent implements OnInit {
       ate: this.filtroAte || undefined
     }).subscribe({
       next: (a) => { this.alocacoes.set(a); this.loading.set(false); },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
-        this.snackBar.open('Erro ao carregar as alocações', '', { duration: 4000 });
+        this.snackBar.open(mensagemErro(err, 'Erro ao carregar as alocações'), '', { duration: 4000 });
       }
     });
   }
@@ -115,7 +116,7 @@ export class AlocacoesComponent implements OnInit {
         this.snackBar.open('Alocação encerrada.', '', { duration: 3000, panelClass: 'snack-success' });
         this.carregar();
       },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao encerrar', '',
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao encerrar'), '',
         { duration: 4000, panelClass: 'snack-error' })
     });
   }

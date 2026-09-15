@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { UsersService } from '../../core/services/users.service';
+import { mensagemErro } from '../../core/utils/api-error';
 
 @Component({
   selector: 'app-cadastrar-staff-dialog',
@@ -160,7 +161,7 @@ export class CadastrarStaffDialogComponent implements OnInit {
       phone:       v.phone || undefined
     }).subscribe({
       next: () => { this.busy.set(false); this.dialogRef.close(true); },
-      error: (err) => { this.busy.set(false); this.erro.set(err?.error?.message ?? 'Erro ao cadastrar usuário.'); }
+      error: (err) => { this.busy.set(false); this.erro.set(mensagemErro(err, 'Erro ao cadastrar usuário.')); }
     });
   }
 }

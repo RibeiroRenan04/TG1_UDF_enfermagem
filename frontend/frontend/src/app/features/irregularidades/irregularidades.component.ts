@@ -19,6 +19,7 @@ import {
   Irregularity, IrregularityStatus, IrregularityType, IrregularitySummary
 } from '../../core/models/models';
 import { RegistrarIrregularidadeDialogComponent } from './registrar-irregularidade-dialog.component';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Painel único das irregularidades de ponto, com a visão de cada perfil:
@@ -92,7 +93,7 @@ export class IrregularidadesComponent implements OnInit {
     this.loading.set(true);
     this.service.getAll().subscribe({
       next: (r) => { this.itens.set(r); this.loading.set(false); },
-      error: () => { this.loading.set(false); this.snackBar.open('Erro ao carregar as ocorrências', '', { duration: 4000 }); }
+      error: (err) => { this.loading.set(false); this.snackBar.open(mensagemErro(err, 'Erro ao carregar as ocorrências'), '', { duration: 4000 }); }
     });
     this.service.getSummary().subscribe({ next: (s) => this.resumo.set(s), error: () => {} });
   }
@@ -128,7 +129,7 @@ export class IrregularidadesComponent implements OnInit {
       },
       error: (err) => {
         this.salvandoId.set(null);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao registrar a ciência', '',
+        this.snackBar.open(mensagemErro(err, 'Erro ao registrar a ciência'), '',
           { duration: 4000, panelClass: 'snack-error' });
       }
     });
@@ -147,7 +148,7 @@ export class IrregularidadesComponent implements OnInit {
       },
       error: (err) => {
         this.salvandoId.set(null);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao registrar a decisão', '',
+        this.snackBar.open(mensagemErro(err, 'Erro ao registrar a decisão'), '',
           { duration: 4000, panelClass: 'snack-error' });
       }
     });

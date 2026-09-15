@@ -10,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AuthService } from '../../core/services/auth.service';
+import { mensagemErro } from '../../core/utils/api-error';
 
 const UDF_EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@cs\.udf\.edu\.br$/;
 
@@ -77,7 +78,7 @@ export class PrimeiroAcessoComponent {
       },
       error: (err) => {
         this.busy.set(false);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao concluir cadastro', '', { duration: 4000, panelClass: 'snack-error' });
+        this.snackBar.open(mensagemErro(err, 'Erro ao concluir cadastro'), '', { duration: 4000, panelClass: 'snack-error' });
       }
     });
   }

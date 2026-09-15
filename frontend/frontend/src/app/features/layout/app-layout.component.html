@@ -26,6 +26,7 @@
         <div class="user-name">{{ user()?.fullName }}</div>
         <div class="user-email">{{ user()?.email }}</div>
         <div class="user-role">{{ rotuloPerfil() }}</div>
+        <div class="user-turma" *ngIf="turmaAluno() as t" [matTooltip]="t">{{ t }}</div>
       </div>
       <button mat-icon-button (click)="logout()" class="logout-btn" matTooltip="Sair">
         <mat-icon>logout</mat-icon>

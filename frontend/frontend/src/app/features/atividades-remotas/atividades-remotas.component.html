@@ -29,13 +29,15 @@
       <mat-form-field appearance="outline" class="col-2">
         <mat-label>Título</mat-label>
         <input matInput formControlName="title" placeholder="Estudo dirigido sobre segurança do paciente">
-        <mat-error>Informe o título da atividade</mat-error>
+        <mat-error *ngIf="form.get('title')?.hasError('required')">Informe o título da atividade</mat-error>
+        <mat-error *ngIf="erroServidor('title') as e">{{ e }}</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="col-2">
         <mat-label>Descrição</mat-label>
         <textarea matInput rows="2" formControlName="description"
                   placeholder="Leitura do material e resposta ao questionário."></textarea>
+        <mat-error *ngIf="erroServidor('description') as e">{{ e }}</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
@@ -46,7 +48,8 @@
           </mat-option>
         </mat-select>
         <mat-hint>Só os alunos deste grupo conseguem usar o código.</mat-hint>
-        <mat-error>Selecione a turma</mat-error>
+        <mat-error *ngIf="form.get('groupId')?.hasError('required')">Selecione a turma</mat-error>
+        <mat-error *ngIf="erroServidor('groupId') as e">{{ e }}</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
@@ -58,29 +61,37 @@
           </mat-option>
         </mat-select>
         <mat-hint>Vincule quando a atividade substitui um dia do rodízio.</mat-hint>
+        <mat-error *ngIf="erroServidor('scheduleId') as e">{{ e }}</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Data</mat-label>
         <input matInput type="date" formControlName="activityDate">
-        <mat-error>Informe a data</mat-error>
+        <mat-error *ngIf="form.get('activityDate')?.hasError('required')">Informe a data</mat-error>
+        <mat-error *ngIf="erroServidor('activityDate') as e">{{ e }}</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Carga horária (h)</mat-label>
         <input matInput type="number" step="0.5" min="0.5" max="24" formControlName="estimatedHours">
         <mat-hint>Horas creditadas a quem concluir.</mat-hint>
+        <mat-error *ngIf="form.get('estimatedHours')?.errors && !erroServidor('estimatedHours')">Informe de 0,5 a 24 horas</mat-error>
+        <mat-error *ngIf="erroServidor('estimatedHours') as e">{{ e }}</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Início</mat-label>
         <input matInput type="time" formControlName="startTime">
+        <mat-error *ngIf="form.get('startTime')?.hasError('required')">Informe o horário de início</mat-error>
+        <mat-error *ngIf="erroServidor('startTime') as e">{{ e }}</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Término</mat-label>
         <input matInput type="time" formControlName="endTime">
         <mat-hint>Passado esse horário o código deixa de valer.</mat-hint>
+        <mat-error *ngIf="form.get('endTime')?.hasError('required')">Informe o horário de término</mat-error>
+        <mat-error *ngIf="erroServidor('endTime') as e">{{ e }}</mat-error>
       </mat-form-field>
 
       <div class="col-2 checkbox-linha">
@@ -95,12 +106,18 @@
           <mat-select formControlName="taskType">
             <mat-option *ngFor="let t of tiposTarefa" [value]="t.valor">{{ t.rotulo }}</mat-option>
           </mat-select>
+          <mat-error *ngIf="form.get('taskType')?.hasError('required')">Selecione o tipo da tarefa complementar</mat-error>
+          <mat-error *ngIf="erroServidor('taskType') as e">{{ e }}</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Instruções da tarefa</mat-label>
           <input matInput formControlName="taskInstructions"
                  placeholder="Responda ao questionário do material da aula 4.">
+          <mat-error *ngIf="form.get('taskInstructions')?.hasError('required')">
+            Obrigatório quando a tarefa complementar está ativa
+          </mat-error>
+          <mat-error *ngIf="erroServidor('taskInstructions') as e">{{ e }}</mat-error>
         </mat-form-field>
       </ng-container>
     </form>

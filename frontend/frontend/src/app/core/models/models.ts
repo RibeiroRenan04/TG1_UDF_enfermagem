@@ -11,6 +11,10 @@ export interface AuthResponse {
   mustSetEmail?: boolean;
   /** Perfis não-aluno precisam aceitar o termo de responsabilidade de acesso. */
   mustAcceptTerms?: boolean;
+  /** Turma de matrícula e turno do aluno, exibidos no menu lateral. */
+  groupCode?: string | null;
+  groupName?: string | null;
+  shift?: string | null;
 }
 
 /** Termo de responsabilidade exibido a preceptores, professores e coordenadoras. */
@@ -335,6 +339,11 @@ export interface DashboardStats {
   irregularities: IrregularityCounts;
   /** Avisos centralizados do card "Status Pendentes". */
   pendingStatuses: PendingStatus[];
+  /** Turma de matrícula do aluno (ex.: "T02"); nulo sem vínculo. */
+  groupCode?: string | null;
+  groupName?: string | null;
+  /** Turno do aluno: "manha" | "tarde" | "noite". */
+  shift?: string | null;
 }
 
 export interface IrregularityCounts {

@@ -16,6 +16,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { UnidadeSaude, Alocacao } from '../../core/models/models';
 import { AlocarEstagiarioDialogComponent } from './alocar-estagiario-dialog.component';
 import { STATUS_GEO, ORIGEM_COORDENADAS } from './status-geocodificacao';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /** Detalhes da unidade e os estagiários alocados nela. */
 @Component({
@@ -103,7 +104,7 @@ export class UnidadeDetalheComponent implements OnInit {
         this.snackBar.open('Alocação encerrada.', '', { duration: 3000, panelClass: 'snack-success' });
         this.carregar();
       },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao encerrar', '',
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao encerrar'), '',
         { duration: 4000, panelClass: 'snack-error' })
     });
   }
@@ -116,7 +117,7 @@ export class UnidadeDetalheComponent implements OnInit {
           '', { duration: 5000, panelClass: r.sucesso ? 'snack-success' : 'snack-error' });
         this.carregar();
       },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao geocodificar', '',
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao geocodificar'), '',
         { duration: 4000, panelClass: 'snack-error' })
     });
   }

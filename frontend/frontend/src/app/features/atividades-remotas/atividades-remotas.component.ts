@@ -23,6 +23,7 @@ import {
   AtividadeRemota, AtividadeRemotaAluno, ParticipacaoAtividade,
   RotationSchedule, StudentGroup, TipoTarefaRemota
 } from '../../core/models/models';
+import { aplicarErrosServidor, mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Atividades remotas.
@@ -160,23 +161,39 @@ export class AtividadesRemotasComponent implements OnInit {
     this.showForm.set(true);
   }
 
+  /** Nome dos campos como aparecem na tela, para o aviso dizer o que corrigir. */
+  private readonly rotulosCampos: Record<string, string> = {
+    title: 'Título',
+    groupId: 'Turma ou grupo autorizado',
+    activityDate: 'Data',
+    startTime: 'Início',
+    endTime: 'Término',
+    estimatedHours: 'Carga horária',
+    taskType: 'Tipo da tarefa',
+    taskInstructions: 'Instruções da tarefa'
+  };
+
+  /** Mensagem do servidor para o campo, exibida logo abaixo dele. */
+  erroServidor(campo: string): string | null {
+    return this.form.get(campo)?.getError('servidor') ?? null;
+  }
+
   salvar(): void {
+    // Com a tarefa complementar ativa, tipo e instruções passam a ser obrigatórios.
+    const exigeTarefa = this.form.value.requiresTask === true;
+    this.exigirSe('taskType', exigeTarefa);
+    this.exigirSe('taskInstructions', exigeTarefa);
+
     if (this.form.invalid) {
       this.form.markAllAsTouched();
-      this.snackBar.open('Preencha os campos obrigatórios da atividade.', '',
-        { duration: 3000, panelClass: 'snack-error' });
+      this.snackBar.open(this.resumoCamposInvalidos(), 'OK',
+        { duration: 6000, panelClass: 'snack-error' });
       return;
     }
 
     const v = this.form.value;
     if (v.endTime! <= v.startTime!) {
-      this.snackBar.open('O horário de término precisa ser posterior ao de início.', '',
-        { duration: 4000, panelClass: 'snack-error' });
-      return;
-    }
-    if (v.requiresTask && !v.taskType) {
-      this.snackBar.open('Selecione o tipo da tarefa complementar.', '',
-        { duration: 4000, panelClass: 'snack-error' });
+      this.marcarErro('endTime', 'O horário de término precisa ser posterior ao de início.');
       return;
     }
 
@@ -209,10 +226,46 @@ export class AtividadesRemotasComponent implements OnInit {
       },
       error: (err) => {
         this.saving.set(false);
-        this.snackBar.open(err?.error?.message ?? 'Erro ao salvar a atividade.', 'OK',
-          { duration: 6000, panelClass: 'snack-error' });
+        // O campo recusado pelo servidor ganha borda vermelha e o motivo abaixo dele.
+        aplicarErrosServidor(this.form, err);
+        this.snackBar.open(mensagemErro(err, 'Erro ao salvar a atividade.'), 'OK',
+          { duration: 8000, panelClass: 'snack-error' });
       }
     });
+  }
+
+  /** Liga ou desliga a obrigatoriedade de um campo conforme o resto do formulário. */
+  private exigirSe(campo: string, obrigatorio: boolean): void {
+    const controle = this.form.get(campo)!;
+    controle.setValidators(obrigatorio
+      ? [c => (c.value ?? '').toString().trim() ? null : { required: true }]
+      : null);
+    controle.updateValueAndValidity({ emitEvent: false });
+  }
+
+  /** Destaca o campo com o motivo e avisa, em vez de só mostrar um toast genérico. */
+  private marcarErro(campo: string, mensagem: string): void {
+    const controle = this.form.get(campo);
+    controle?.setErrors({ ...(controle.errors ?? {}), servidor: mensagem });
+    controle?.markAsTouched();
+    this.snackBar.open(`Erro ao salvar: ${mensagem}`, 'OK',
+      { duration: 6000, panelClass: 'snack-error' });
+  }
+
+  /** Diz quais campos impedem o salvamento, em vez de "preencha os obrigatórios". */
+  private resumoCamposInvalidos(): string {
+    const motivos = Object.entries(this.form.controls)
+      .filter(([, c]) => c.invalid)
+      .map(([nome, c]) => {
+        const rotulo = this.rotulosCampos[nome] ?? nome;
+        if (nome === 'taskInstructions')
+          return "O campo 'Instruções da tarefa' é obrigatório quando a tarefa complementar está ativa.";
+        return c.hasError('required')
+          ? `O campo '${rotulo}' é obrigatório.`
+          : `O campo '${rotulo}' está com um valor inválido.`;
+      });
+
+    return `Erro ao salvar: ${motivos.slice(0, 2).join(' ')}`;
   }
 
   // ── Ações do professor ────────────────────────────────────────────────────
@@ -220,7 +273,7 @@ export class AtividadesRemotasComponent implements OnInit {
     if (!confirm(`Encerrar "${a.title}"? O código deixa de valer imediatamente; as participações já registradas permanecem.`)) return;
     this.service.encerrar(a.id).subscribe({
       next: () => { this.snackBar.open('Atividade encerrada.', '', { duration: 3000 }); this.load(); },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao encerrar.', '',
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao encerrar.'), '',
         { duration: 4000, panelClass: 'snack-error' })
     });
   }
@@ -233,7 +286,7 @@ export class AtividadesRemotasComponent implements OnInit {
           { duration: 8000, panelClass: 'snack-success' });
         this.load();
       },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao gerar o código.', '',
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao gerar o código.'), '',
         { duration: 4000, panelClass: 'snack-error' })
     });
   }
@@ -242,7 +295,7 @@ export class AtividadesRemotasComponent implements OnInit {
     if (!confirm(`Excluir "${a.title}"?`)) return;
     this.service.delete(a.id).subscribe({
       next: () => { this.snackBar.open('Atividade excluída.', '', { duration: 3000 }); this.load(); },
-      error: (err) => this.snackBar.open(err?.error?.message ?? 'Erro ao excluir.', 'OK',
+      error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao excluir.'), 'OK',
         { duration: 6000, panelClass: 'snack-error' })
     });
   }

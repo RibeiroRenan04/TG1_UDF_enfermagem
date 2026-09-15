@@ -10,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { UsersService } from '../../core/services/users.service';
 import { UserDto } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Autorização prévia de atraso para um aluno. O professor concede a permissão e
@@ -123,7 +124,7 @@ export class PermissaoAtrasoDialogComponent {
       next: (atualizado) => { this.busy.set(false); this.dialogRef.close(atualizado); },
       error: (err) => {
         this.busy.set(false);
-        this.erro.set(err?.error?.message ?? 'Erro ao salvar a permissão de atraso.');
+        this.erro.set(mensagemErro(err, 'Erro ao salvar a permissão de atraso.'));
       }
     });
   }

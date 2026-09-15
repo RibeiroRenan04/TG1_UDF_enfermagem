@@ -120,6 +120,14 @@
             <div class="student-meta">RGM: {{ s.rgm || '—' }}</div>
           </div>
           <div class="student-email">{{ s.email || '—' }}</div>
+          <!-- Reverte uma conclusão marcada por engano. -->
+          <button mat-icon-button *ngIf="!somenteLeitura()"
+                  matTooltip="Reverter conclusão — voltar para alunos ativos"
+                  aria-label="Reverter conclusão do aluno"
+                  [disabled]="alterandoCicloId() === s.id"
+                  (click)="reativarAluno(s)">
+            <mat-icon>undo</mat-icon>
+          </button>
         </div>
       </div>
       <ng-template #emptyInactive>
@@ -186,13 +194,23 @@
           (click)="abrirPermissaoAtraso(s)">
     <mat-icon>{{ s.allowLateArrival ? 'alarm_on' : 'alarm_add' }}</mat-icon>
   </button>
-  <!-- O curso define quais exceções do calendário alcançam o aluno. -->
+  <!-- O curso define quais exceções do calendário alcançam o aluno. O ícone é um
+       livro: o capelo ficou reservado para a conclusão, que é o que ele sugere. -->
   <button mat-icon-button *ngIf="!somenteLeitura()"
           [color]="s.course ? 'primary' : undefined"
           [matTooltip]="s.course
             ? 'Curso: ' + s.course + ' — clique para alterar'
             : 'Definir o curso do aluno'"
+          [attr.aria-label]="s.course ? 'Alterar curso do aluno' : 'Definir o curso do aluno'"
           (click)="definirCurso(s)">
+    <mat-icon>menu_book</mat-icon>
+  </button>
+  <!-- Conclusão de estágio: move o aluno para "Alunos inativos" (reversível). -->
+  <button mat-icon-button *ngIf="!somenteLeitura()"
+          matTooltip="Marcar discente como Concluinte / Formado"
+          aria-label="Marcar discente como Concluinte / Formado"
+          [disabled]="alterandoCicloId() === s.id"
+          (click)="concluirAluno(s)">
     <mat-icon>school</mat-icon>
   </button>
 </ng-template>

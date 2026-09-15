@@ -12,6 +12,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { AttendanceService } from '../../core/services/attendance.service';
 import { IrregularitiesService } from '../../core/services/irregularities.service';
 import { AttendanceRecord, Irregularity } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Painel do preceptor. Ele acompanha os registros de ponto dos alunos e as
@@ -51,9 +52,9 @@ export class PreceptorComponent implements OnInit {
         this.pending.set(r.filter(x => x.status === 'pendente' || x.status === 'irregular'));
         this.loading.set(false);
       },
-      error: () => {
+      error: (err) => {
         this.loading.set(false);
-        this.snackBar.open('Erro ao carregar os registros', '', { duration: 4000 });
+        this.snackBar.open(mensagemErro(err, 'Erro ao carregar os registros'), '', { duration: 4000 });
       }
     });
 

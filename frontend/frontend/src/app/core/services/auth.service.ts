@@ -83,6 +83,18 @@ export class AuthService {
     );
   }
 
+  /**
+   * Atualiza dados de exibição do usuário logado (turma, turno) sem trocar o
+   * token: o painel traz a turma atual e o menu lateral reflete na hora.
+   */
+  atualizarPerfil(dados: Pick<AuthResponse, 'groupCode' | 'groupName' | 'shift'>): void {
+    const atual = this._user();
+    if (!atual) return;
+    if (atual.groupCode === dados.groupCode && atual.groupName === dados.groupName
+        && atual.shift === dados.shift) return;
+    this.persist({ ...atual, ...dados });
+  }
+
   logout(): void {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
