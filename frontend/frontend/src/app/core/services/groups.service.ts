@@ -4,6 +4,19 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { StudentGroup, RotationSchedule, GroupMember, ModoAtividade } from '../models/models';
 
+/** Aluno que a API não vinculou, com o motivo (agenda incompatível, perfil errado). */
+export interface VinculoRecusado {
+  studentId: string;
+  nome?: string;
+  motivo: string;
+}
+
+export interface VinculoLoteResultado {
+  vinculados: number;
+  desvinculados: number;
+  recusados: VinculoRecusado[];
+}
+
 /** Regra de um dia da semana enviada junto com o rodízio. */
 export interface DiaRodizioInput {
   dayOfWeek: number;
@@ -55,16 +68,12 @@ export class GroupsService {
   }
 
   /**
-   * Vincula o aluno a esta turma sem desfazer as outras turmas dele — é assim
-   * que o mesmo discente cursa dois módulos de estágio no mesmo período.
+   * Vincula e desvincula vários alunos desta turma numa chamada só, sem mexer
+   * nas outras turmas deles. O que é válido é gravado; cada aluno recusado
+   * (agenda incompatível, perfil errado) volta com o motivo.
    */
-  vincularAluno(groupId: string, studentId: string): Observable<void> {
-    return this.http.post<void>(`${this.api}/${groupId}/members/${studentId}`, {});
-  }
-
-  /** Desvincula o aluno apenas desta turma; as demais seguem intactas. */
-  desvincularAluno(groupId: string, studentId: string): Observable<void> {
-    return this.http.delete<void>(`${this.api}/${groupId}/members/${studentId}`);
+  atualizarMembros(groupId: string, adicionar: string[], remover: string[]): Observable<VinculoLoteResultado> {
+    return this.http.put<VinculoLoteResultado>(`${this.api}/${groupId}/members`, { adicionar, remover });
   }
 
   getSchedules(groupId?: string): Observable<RotationSchedule[]> {

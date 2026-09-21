@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { DashboardStats, Pendency, PendingStatus } from '../models/models';
+import { PainelGestao } from '../models/painel-gestao';
 
 @Injectable({ providedIn: 'root' })
 export class DashboardService {
@@ -24,5 +25,10 @@ export class DashboardService {
    */
   getPendingStatuses(): Observable<PendingStatus[]> {
     return this.http.get<PendingStatus[]>(`${this.api}/status-pendentes`);
+  }
+
+  /** Indicadores do professor e da coordenadora (presença, carga horária, configuração). */
+  getPainelGestao(): Observable<PainelGestao> {
+    return this.http.get<PainelGestao>(`${this.api}/gestao`);
   }
 }

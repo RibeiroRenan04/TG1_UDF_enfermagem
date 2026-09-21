@@ -10,11 +10,13 @@ import { DashboardService } from '../../core/services/dashboard.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DashboardStats, PendingStatus } from '../../core/models/models';
 import { rotuloTurma } from '../../core/utils/turma';
+import { PainelGestaoComponent } from './painel-gestao.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, MatCardModule, MatIconModule, MatButtonModule, MatChipsModule, MatProgressSpinnerModule, RouterLink],
+  imports: [CommonModule, MatCardModule, MatIconModule, MatButtonModule, MatChipsModule, MatProgressSpinnerModule, RouterLink,
+    PainelGestaoComponent],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss']
 })

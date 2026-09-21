@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, signal } from '@angular/core';
+import { Component, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -19,6 +19,7 @@ import {
   Irregularity, IrregularityStatus, IrregularityType, IrregularitySummary
 } from '../../core/models/models';
 import { RegistrarIrregularidadeDialogComponent } from './registrar-irregularidade-dialog.component';
+import { IrregularidadesPainelComponent, PRAZO_ATENCAO_DIAS } from './irregularidades-painel.component';
 import { mensagemErro } from '../../core/utils/api-error';
 
 /**
@@ -35,12 +36,16 @@ import { mensagemErro } from '../../core/utils/api-error';
     CommonModule, FormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatChipsModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatTabsModule,
-    MatTooltipModule, MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule
+    MatTooltipModule, MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule,
+    IrregularidadesPainelComponent
   ],
   templateUrl: './irregularidades.component.html',
   styleUrls: ['./irregularidades.component.scss']
 })
 export class IrregularidadesComponent implements OnInit {
+  /** Indicadores da gestão: recarregados junto com a lista após cada decisão. */
+  @ViewChild(IrregularidadesPainelComponent) painel?: IrregularidadesPainelComponent;
+
   itens = signal<Irregularity[]>([]);
   resumo = signal<IrregularitySummary | null>(null);
   loading = signal(true);
@@ -48,13 +53,22 @@ export class IrregularidadesComponent implements OnInit {
   salvandoId = signal<string | null>(null);
   /** Observação/parecer digitado, por ocorrência. */
   notas: Record<string, string> = {};
-  filtroStatus: IrregularityStatus | 'todas' = 'todas';
+
+  // Filtros como signals: com um campo comum, o computed da lista não percebia a
+  // troca e clicar num contador de situação não filtrava nada.
+  filtroStatus = signal<IrregularityStatus | 'todas'>('todas');
+  busca = signal('');
+  filtroTipo = signal<IrregularityType | 'todos'>('todos');
 
   role = this.auth.role;
   ehAluno = computed(() => this.auth.role() === 'aluno');
   ehPreceptor = computed(() => this.auth.role() === 'preceptor');
   ehProfessor = this.auth.ehProfessor;
+  /** Professor e coordenadora: veem os indicadores acima da lista. */
+  ehGestao = this.auth.ehGestao;
   somenteLeitura = this.auth.somenteLeitura;
+
+  readonly prazoAtencao = PRAZO_ATENCAO_DIAS;
 
   readonly tiposLabel: Record<IrregularityType, string> = {
     atraso: 'Atraso',
@@ -73,12 +87,30 @@ export class IrregularidadesComponent implements OnInit {
     negada: 'Negada'
   };
 
+  /**
+   * Lista filtrada. Nas situações em aberto, a mais antiga vem primeiro — é a
+   * ordem em que a fila deve ser trabalhada; nas demais, a mais recente.
+   */
   itensFiltrados = computed(() => {
-    const todos = this.itens();
-    return this.filtroStatus === 'todas'
-      ? todos
-      : todos.filter(i => i.status === this.filtroStatus);
+    const status = this.filtroStatus();
+    const termo = this.normalizar(this.busca());
+    const tipo = this.filtroTipo();
+
+    const filtrados = this.itens().filter(i =>
+      (status === 'todas' || i.status === status)
+      && (tipo === 'todos' || i.type === tipo)
+      && (!termo || this.normalizar(i.studentName).includes(termo) || (i.studentRgm ?? '').includes(termo)));
+
+    const emAberto = status === 'aguardando_preceptor' || status === 'aguardando_professor';
+    return [...filtrados].sort((a, b) => emAberto
+      ? this.inicioDaEspera(a) - this.inicioDaEspera(b)
+      : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   });
+
+  temFiltroExtra = computed(() => !!this.busca().trim() || this.filtroTipo() !== 'todos');
+
+  tiposDisponiveis = computed(() =>
+    (Object.keys(this.tiposLabel) as IrregularityType[]).map(t => ({ valor: t, rotulo: this.tiposLabel[t] })));
 
   constructor(
     private service: IrregularitiesService,
@@ -96,10 +128,36 @@ export class IrregularidadesComponent implements OnInit {
       error: (err) => { this.loading.set(false); this.snackBar.open(mensagemErro(err, 'Erro ao carregar as ocorrências'), '', { duration: 4000 }); }
     });
     this.service.getSummary().subscribe({ next: (s) => this.resumo.set(s), error: () => {} });
+    // Na abertura o painel ainda não existe e carrega sozinho; depois de uma
+    // ciência ou decisão, a fila mudou e os indicadores precisam acompanhar.
+    this.painel?.carregar();
   }
 
   aplicarFiltro(status: IrregularityStatus | 'todas'): void {
-    this.filtroStatus = status;
+    this.filtroStatus.set(status);
+  }
+
+  /** Vindo dos indicadores: filtra e leva a lista para a vista. */
+  filtrarPorStatus(status: IrregularityStatus): void {
+    this.filtroStatus.set(status);
+    this.rolarParaLista();
+  }
+
+  filtrarPorAluno(nome: string): void {
+    this.filtroStatus.set('todas');
+    this.busca.set(nome);
+    this.rolarParaLista();
+  }
+
+  limparFiltros(): void {
+    this.busca.set('');
+    this.filtroTipo.set('todos');
+    this.filtroStatus.set('todas');
+  }
+
+  private rolarParaLista(): void {
+    setTimeout(() => document.getElementById('lista-ocorrencias')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
 
   // ── Aluno: registra a ocorrência ──────────────────────────────────────────
@@ -180,6 +238,26 @@ export class IrregularidadesComponent implements OnInit {
       case 'aguardando_professor': return 'school';
       default: return 'hourglass_empty';
     }
+  }
+
+  /**
+   * Desde quando a ocorrência espera a etapa atual: com o professor, desde a
+   * ciência do preceptor; com o preceptor, desde a abertura.
+   */
+  private inicioDaEspera(item: Irregularity): number {
+    const desde = item.status === 'aguardando_professor' && item.preceptorAcknowledgedAt
+      ? item.preceptorAcknowledgedAt : item.createdAt;
+    return new Date(desde).getTime();
+  }
+
+  /** Dias parada na etapa atual; nulo quando já foi decidida. */
+  diasEsperando(item: Irregularity): number | null {
+    if (item.status === 'aprovada' || item.status === 'negada') return null;
+    return Math.max(0, Math.floor((Date.now() - this.inicioDaEspera(item)) / 86_400_000));
+  }
+
+  private normalizar(texto: string | null | undefined): string {
+    return (texto ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
   }
 
   /** Etapa atual do fluxo (1 a 3), para a trilha exibida no cartão. */

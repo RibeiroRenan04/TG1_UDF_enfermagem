@@ -1,0 +1,247 @@
+<div *ngIf="carregando() && !painel()" class="carregando"><mat-spinner diameter="40"></mat-spinner></div>
+
+<div class="erro" *ngIf="erro()">
+  <mat-icon>error_outline</mat-icon>
+  <span>{{ erro() }}</span>
+  <button mat-button (click)="carregar()">Tentar de novo</button>
+</div>
+
+<!-- Recarregando: mantém o quadro anterior esmaecido, sem piscar a tela. -->
+<div class="painel" *ngIf="painel() as p" [class.recarregando]="carregando()">
+
+  <!-- ══ 1. Indicadores do dia ═══════════════════════════════════════════════ -->
+  <div class="kpis">
+    <div class="kpi kpi-hero">
+      <div class="kpi-rotulo">Presença hoje</div>
+      <ng-container *ngIf="percentualHoje() != null; else semEstagioHoje">
+        <div class="hero">{{ percentualHoje() }}%</div>
+        <div class="medidor" role="img"
+             [attr.aria-label]="p.hoje.registrados + ' de ' + p.hoje.esperados + ' turnos registrados hoje'">
+          <div class="medidor-fill" [style.width.%]="percentualHoje()"></div>
+        </div>
+        <div class="kpi-detalhe">
+          {{ p.hoje.registrados }} de {{ p.hoje.esperados }} turnos registrados ·
+          <strong>{{ p.hoje.semRegistro }}</strong> ainda sem check-in
+        </div>
+      </ng-container>
+      <ng-template #semEstagioHoje>
+        <div class="kpi-valor muted">—</div>
+        <div class="kpi-detalhe">Nenhum estágio programado para hoje.</div>
+      </ng-template>
+    </div>
+
+    <div class="kpi">
+      <div class="kpi-rotulo">Presença média · 14 dias</div>
+      <div class="kpi-valor">{{ mediaPeriodo() != null ? mediaPeriodo() + '%' : '—' }}</div>
+      <div class="kpi-detalhe">dos turnos programados até ontem</div>
+    </div>
+
+    <a class="kpi kpi-link" routerLink="/app/irregularidades">
+      <div class="kpi-rotulo">Irregularidades para você decidir</div>
+      <div class="kpi-valor">{{ p.irregularidadesAguardandoProfessor }}</div>
+      <div class="kpi-detalhe">
+        {{ p.irregularidadesAguardandoPreceptor }} ainda com o preceptor
+        <mat-icon class="seta">chevron_right</mat-icon>
+      </div>
+    </a>
+
+    <a class="kpi kpi-link" routerLink="/app/certificados">
+      <div class="kpi-rotulo">Aptos ao certificado</div>
+      <div class="kpi-valor">{{ p.progressoCarga.elegiveis }}</div>
+      <div class="kpi-detalhe">
+        carga horária cumprida
+        <mat-icon class="seta">chevron_right</mat-icon>
+      </div>
+    </a>
+  </div>
+
+  <!-- ══ 2. Tendência e presença por turno ═══════════════════════════════════ -->
+  <div class="linha-2">
+    <mat-card class="bloco grafico-bloco">
+      <div class="bloco-cabecalho">
+        <div>
+          <h3>Presença nos últimos 14 dias</h3>
+          <p class="sub">% dos turnos programados com check-in · até ontem</p>
+        </div>
+      </div>
+
+      <div class="colunas-wrap">
+        <!-- Eixo: três marcas redondas bastam; o valor exato fica na dica e na tabela. -->
+        <div class="eixo-y" aria-hidden="true">
+          <span style="bottom: 100%">100%</span>
+          <span style="bottom: 50%">50%</span>
+          <span style="bottom: 0">0%</span>
+        </div>
+        <div class="plot" (mouseleave)="diaEmFoco.set(null)">
+          <div class="grade" style="bottom: 100%"></div>
+          <div class="grade" style="bottom: 50%"></div>
+          <div class="grade base" style="bottom: 0"></div>
+
+          <!-- A dica abre para dentro do gráfico: coluna da metade esquerda para
+               a direita, e vice-versa — senão sai do card em tela estreita. -->
+          <div class="coluna" *ngFor="let d of p.ultimosDias; let i = index"
+               tabindex="0" role="img" [attr.aria-label]="descricaoDia(d)"
+               [class.foco]="diaEmFoco() === d"
+               [class.dica-a-esquerda]="i >= p.ultimosDias.length / 2"
+               (mouseenter)="diaEmFoco.set(d)" (focus)="diaEmFoco.set(d)" (blur)="diaEmFoco.set(null)">
+            <div class="barra" *ngIf="d.percentual != null; else semEstagio"
+                 [style.height.%]="d.percentual"></div>
+            <ng-template #semEstagio><div class="sem-estagio" title="Sem estágio programado"></div></ng-template>
+
+            <!-- Rótulo direto só no último dia com estágio: o resto fica na dica. -->
+            <span class="rotulo-ponta" *ngIf="d === ultimoDiaComEstagio()"
+                  [style.bottom.%]="d.percentual">{{ d.percentual | number:'1.0-0' }}%</span>
+
+            <div class="dica" *ngIf="diaEmFoco() === d" role="tooltip">
+              <strong>{{ d.percentual != null ? (d.percentual | number:'1.0-0') + '%' : 'Sem estágio' }}</strong>
+              <span>{{ diaDaSemana(d.data) }}, {{ rotuloDia(d.data) }}</span>
+              <span *ngIf="d.percentual != null">{{ d.registrados }} de {{ d.esperados }} turnos</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="eixo-x" aria-hidden="true">
+        <span *ngFor="let d of p.ultimosDias">{{ rotuloDia(d.data).substring(0, 2) }}</span>
+      </div>
+
+      <details class="tabela-view">
+        <summary>Ver em tabela</summary>
+        <table>
+          <thead><tr><th>Dia</th><th>Turnos programados</th><th>Com check-in</th><th>Presença</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let d of p.ultimosDias">
+              <td>{{ diaDaSemana(d.data) }}, {{ rotuloDia(d.data) }}</td>
+              <td>{{ d.esperados }}</td>
+              <td>{{ d.registrados }}</td>
+              <td>{{ d.percentual != null ? (d.percentual | number:'1.0-0') + '%' : '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </details>
+    </mat-card>
+
+    <mat-card class="bloco">
+      <div class="bloco-cabecalho"><h3>Hoje por turno</h3></div>
+      <ng-container *ngIf="p.hoje.porTurno.length; else nenhumTurno">
+        <div class="turno" *ngFor="let t of p.hoje.porTurno">
+          <div class="turno-topo">
+            <span>{{ t.rotulo }}</span>
+            <span class="num">{{ t.registrados }} / {{ t.esperados }}</span>
+          </div>
+          <div class="medidor" role="img"
+               [attr.aria-label]="t.rotulo + ': ' + t.registrados + ' de ' + t.esperados + ' registrados'">
+            <div class="medidor-fill" [style.width.%]="100 * t.registrados / t.esperados"></div>
+          </div>
+        </div>
+        <p class="nota">Turno que ainda não começou aparece sem registro — não é falta.</p>
+      </ng-container>
+      <ng-template #nenhumTurno><p class="vazio">Nenhum turno programado hoje.</p></ng-template>
+    </mat-card>
+  </div>
+
+  <!-- ══ 3. Quem precisa de atenção ═════════════════════════════════════════ -->
+  <div class="linha-3">
+    <mat-card class="bloco">
+      <div class="bloco-cabecalho">
+        <div>
+          <h3>Ainda sem check-in hoje</h3>
+          <p class="sub" *ngIf="p.hoje.semRegistro > p.hoje.alunosSemRegistro.length">
+            Mostrando {{ p.hoje.alunosSemRegistro.length }} de {{ p.hoje.semRegistro }}
+          </p>
+        </div>
+      </div>
+      <ul class="lista-alunos" *ngIf="p.hoje.alunosSemRegistro.length; else todosRegistraram">
+        <li *ngFor="let a of p.hoje.alunosSemRegistro">
+          <div class="aluno-nome">{{ a.nome }}</div>
+          <div class="aluno-meta">
+            {{ a.turno }}<ng-container *ngIf="a.unidade"> · {{ a.unidade }}</ng-container>
+            <ng-container *ngIf="a.turma"> · {{ a.turma }}</ng-container>
+          </div>
+        </li>
+      </ul>
+      <ng-template #todosRegistraram>
+        <p class="vazio">
+          <mat-icon class="ok">check_circle</mat-icon>
+          {{ p.hoje.esperados ? 'Todos os alunos programados já registraram.' : 'Nenhum estágio programado para hoje.' }}
+        </p>
+      </ng-template>
+    </mat-card>
+
+    <mat-card class="bloco">
+      <div class="bloco-cabecalho">
+        <div>
+          <h3>Mais turnos sem registro</h3>
+          <p class="sub">Últimos 14 dias, até ontem</p>
+        </div>
+      </div>
+      <div class="barras-h" *ngIf="p.maisTurnosSemRegistro.length; else semFaltas">
+        <div class="barra-h-linha" *ngFor="let a of p.maisTurnosSemRegistro"
+             role="img" [attr.aria-label]="a.nome + ': ' + a.quantidade + ' turnos sem registro'">
+          <div class="barra-h-rotulo">
+            <span class="aluno-nome">{{ a.nome }}</span>
+            <span class="aluno-meta" *ngIf="a.turma">{{ a.turma }}</span>
+          </div>
+          <div class="barra-h-trilho">
+            <div class="barra-h" [style.width.%]="largura(a.quantidade, maiorRanking())"></div>
+            <span class="barra-h-valor">{{ a.quantidade }}</span>
+          </div>
+        </div>
+      </div>
+      <ng-template #semFaltas>
+        <p class="vazio"><mat-icon class="ok">check_circle</mat-icon> Nenhum turno sem registro no período.</p>
+      </ng-template>
+    </mat-card>
+
+    <mat-card class="bloco">
+      <div class="bloco-cabecalho">
+        <div>
+          <h3>Carga horária cumprida</h3>
+          <p class="sub">{{ alunosComCarga() }} aluno(s) com rodízio · horas aprovadas</p>
+        </div>
+      </div>
+      <div class="barras-h">
+        <div class="barra-h-linha" *ngFor="let f of p.progressoCarga.faixas; let i = index"
+             role="img" [attr.aria-label]="f.rotulo + ': ' + f.alunos + ' aluno(s)'">
+          <div class="barra-h-rotulo"><span>{{ f.rotulo }}</span></div>
+          <div class="barra-h-trilho">
+            <div class="barra-h" [style.width.%]="f.alunos ? largura(f.alunos, maiorFaixa()) : 0"
+                 [style.background]="corFaixa[i]"></div>
+            <span class="barra-h-valor">{{ f.alunos }}</span>
+          </div>
+        </div>
+      </div>
+      <p class="nota" *ngIf="p.progressoCarga.semCargaDefinida">
+        {{ p.progressoCarga.semCargaDefinida }} aluno(s) ativo(s) sem rodízio — sem carga a comparar.
+      </p>
+    </mat-card>
+  </div>
+
+  <!-- ══ 4. Configuração ═════════════════════════════════════════════════════ -->
+  <mat-card class="bloco">
+    <div class="bloco-cabecalho">
+      <div>
+        <h3>Configuração do estágio</h3>
+        <p class="sub">
+          {{ pendenciasConfiguracao() ? pendenciasConfiguracao() + ' ponto(s) para acertar' : 'Tudo configurado' }}
+        </p>
+      </div>
+    </div>
+    <ul class="checklist">
+      <li *ngFor="let a of p.configuracao" [class.ok]="a.quantidade === 0">
+        <!-- Estado sempre com ícone e texto: a cor nunca é o único sinal. -->
+        <mat-icon class="estado" [ngClass]="a.quantidade === 0 ? 'bom' : a.severidade">
+          {{ a.quantidade === 0 ? 'check_circle' : (a.severidade === 'critico' ? 'error' : 'warning') }}
+        </mat-icon>
+        <div class="check-texto">
+          <div class="check-titulo">
+            {{ a.titulo }}
+            <span class="check-qtd" *ngIf="a.quantidade">{{ a.quantidade }}</span>
+            <span class="check-tag" *ngIf="a.quantidade && a.severidade === 'critico'">bloqueia o ponto</span>
+          </div>
+          <div class="check-detalhe" *ngIf="a.quantidade">{{ a.detalhe }}</div>
+        </div>
+        <a mat-button *ngIf="a.quantidade" [routerLink]="a.link">{{ a.linkRotulo }}</a>
+      </li>
+    </ul>
+  </mat-card>
+</div>

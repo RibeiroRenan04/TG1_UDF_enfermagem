@@ -9,24 +9,30 @@
   <p *ngIf="somenteLeitura()">Acompanhamento das ocorrências (perfil de consulta).</p>
 </div>
 
+<!-- ══ Indicadores (professor e coordenadora) ══════════════════════════════
+     Clicar num indicador filtra a lista abaixo. -->
+<app-irregularidades-painel *ngIf="ehGestao()"
+                            (filtrarStatus)="filtrarPorStatus($event)"
+                            (filtrarAluno)="filtrarPorAluno($event)"></app-irregularidades-painel>
+
 <!-- ══ Resumo + ações ═══════════════════════════════════════════════════════ -->
 <div class="resumo-bar" *ngIf="resumo() as r">
-  <button class="resumo-card" [class.ativo]="filtroStatus === 'todas'" (click)="aplicarFiltro('todas')">
+  <button class="resumo-card" [class.ativo]="filtroStatus() === 'todas'" (click)="aplicarFiltro('todas')">
     <span class="valor">{{ r.total }}</span><span class="rotulo">Todas</span>
   </button>
-  <button class="resumo-card aguardando" [class.ativo]="filtroStatus === 'aguardando_preceptor'"
+  <button class="resumo-card aguardando" [class.ativo]="filtroStatus() === 'aguardando_preceptor'"
           (click)="aplicarFiltro('aguardando_preceptor')">
     <span class="valor">{{ r.aguardandoPreceptor }}</span><span class="rotulo">Com o preceptor</span>
   </button>
-  <button class="resumo-card professor" [class.ativo]="filtroStatus === 'aguardando_professor'"
+  <button class="resumo-card professor" [class.ativo]="filtroStatus() === 'aguardando_professor'"
           (click)="aplicarFiltro('aguardando_professor')">
     <span class="valor">{{ r.aguardandoProfessor }}</span><span class="rotulo">Com o professor</span>
   </button>
-  <button class="resumo-card aprovada" [class.ativo]="filtroStatus === 'aprovada'"
+  <button class="resumo-card aprovada" [class.ativo]="filtroStatus() === 'aprovada'"
           (click)="aplicarFiltro('aprovada')">
     <span class="valor">{{ r.aprovadas }}</span><span class="rotulo">Aprovadas</span>
   </button>
-  <button class="resumo-card negada" [class.ativo]="filtroStatus === 'negada'"
+  <button class="resumo-card negada" [class.ativo]="filtroStatus() === 'negada'"
           (click)="aplicarFiltro('negada')">
     <span class="valor">{{ r.negadas }}</span><span class="rotulo">Negadas</span>
   </button>
@@ -50,6 +56,30 @@
 
 <div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
 
+<!-- ══ Filtros da lista ═══════════════════════════════════════════════════
+     Quem vê ocorrências de vários alunos busca por aluno e filtra por tipo. -->
+<div class="filtros-lista" id="lista-ocorrencias" *ngIf="!ehAluno()">
+  <mat-form-field appearance="outline" class="busca" subscriptSizing="dynamic">
+    <mat-icon matPrefix>search</mat-icon>
+    <mat-label>Buscar por aluno ou RGM</mat-label>
+    <input matInput [ngModel]="busca()" (ngModelChange)="busca.set($event)">
+  </mat-form-field>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Tipo</mat-label>
+    <mat-select [ngModel]="filtroTipo()" (ngModelChange)="filtroTipo.set($event)">
+      <mat-option value="todos">Todos</mat-option>
+      <mat-option *ngFor="let t of tiposDisponiveis()" [value]="t.valor">{{ t.rotulo }}</mat-option>
+    </mat-select>
+  </mat-form-field>
+  <span class="contagem-lista">{{ itensFiltrados().length }} ocorrência(s)</span>
+  <button mat-button *ngIf="temFiltroExtra() || filtroStatus() !== 'todas'" (click)="limparFiltros()">
+    <mat-icon>filter_alt_off</mat-icon> Limpar filtros
+  </button>
+</div>
+<p class="ordem-nota" *ngIf="filtroStatus() === 'aguardando_professor' || filtroStatus() === 'aguardando_preceptor'">
+  <mat-icon>sort</mat-icon> Mais antigas primeiro — a ordem em que a fila deve ser trabalhada.
+</p>
+
 <!-- ══ Lista ════════════════════════════════════════════════════════════════ -->
 <ng-container *ngIf="!loading()">
   <div class="lista" *ngIf="itensFiltrados().length; else vazio">
@@ -61,9 +91,18 @@
           <span class="tipo">{{ tipoLabel(item.type) }}</span>
           <span class="data">{{ item.occurredOn | date:'dd/MM/yyyy' }}</span>
         </div>
-        <span class="status status-{{ item.status }}">
-          <mat-icon>{{ iconeStatus(item.status) }}</mat-icon>
-          {{ labelStatus(item.status) }}
+        <span class="status-grupo">
+          <!-- Tempo parado na etapa atual: ícone + texto; a cor só reforça o atraso. -->
+          <span class="espera" *ngIf="diasEsperando(item) != null"
+                [class.atrasada]="diasEsperando(item)! > prazoAtencao"
+                [matTooltip]="diasEsperando(item)! > prazoAtencao ? 'Parada há mais de ' + prazoAtencao + ' dias nesta etapa' : ''">
+            <mat-icon>schedule</mat-icon>
+            {{ diasEsperando(item) === 0 ? 'hoje' : 'há ' + diasEsperando(item) + ' dia(s)' }}
+          </span>
+          <span class="status status-{{ item.status }}">
+            <mat-icon>{{ iconeStatus(item.status) }}</mat-icon>
+            {{ labelStatus(item.status) }}
+          </span>
         </span>
       </div>
 
@@ -194,7 +233,7 @@
     <mat-card>
       <div class="empty-state">
         <mat-icon>fact_check</mat-icon>
-        <p>Nenhuma ocorrência {{ filtroStatus === 'todas' ? '' : 'nesta situação' }}.</p>
+        <p>Nenhuma ocorrência {{ filtroStatus() === 'todas' ? '' : 'nesta situação' }}.</p>
         <button mat-stroked-button *ngIf="ehAluno()" (click)="abrirRegistro()">
           Registrar irregularidade
         </button>

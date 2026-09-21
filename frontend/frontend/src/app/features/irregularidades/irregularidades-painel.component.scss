@@ -1,0 +1,82 @@
+@use '../../shared/estilos/painel-indicadores';
+
+// Indicador clicável que é um <button>: herda a aparência do card, não a do botão.
+button.kpi {
+  font: inherit; text-align: left; cursor: pointer; width: 100%;
+}
+
+// ── Período ───────────────────────────────────────────────────────────────
+// Um filtro, uma linha, acima de tudo que ele afeta. Seleção marcada com ✓.
+.periodo {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;
+
+  .periodo-rotulo { font-size: 0.78rem; color: var(--tinta-2); margin-right: 4px; }
+
+  button {
+    display: inline-flex; align-items: center; gap: 4px;
+    font: inherit; font-size: 0.8rem; color: var(--tinta);
+    background: var(--superficie); border: 1px solid rgba(11, 11, 11, 0.12);
+    border-radius: 999px; padding: 5px 12px; cursor: pointer;
+
+    &:hover { background: #f3f4f6; }
+    &:focus-visible { outline: 2px solid var(--serie); outline-offset: 1px; }
+    &.ativo { border-color: var(--serie); font-weight: 600; }
+    mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  }
+}
+
+// ── Indicadores ───────────────────────────────────────────────────────────
+.kpi-detalhe .estado { font-size: 16px; width: 16px; height: 16px; margin-right: 2px; }
+
+// Variação contra o período anterior: seta + número dizem a direção; a cor
+// reforça (aumento de ocorrências é piora).
+.delta {
+  display: inline-flex; align-items: center; font-weight: 600; margin-right: 4px; color: var(--tinta);
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  &.piora { color: var(--critico); }
+  &.melhora { color: #006300; }
+}
+
+.tempos {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 4px;
+  div { display: flex; flex-direction: column; }
+  .tempo-valor { font-size: 1.1rem; font-weight: 600; color: var(--tinta); }
+  .tempo-rotulo { font-size: 0.72rem; color: var(--tinta-3); }
+}
+
+// ── Listas ────────────────────────────────────────────────────────────────
+.unidade-link {
+  color: var(--tinta); text-decoration: none; font-size: 0.8rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  &:hover { text-decoration: underline; }
+}
+// O aviso pode quebrar linha: é o texto mais útil do bloco, não pode sumir nas
+// reticências. O seletor mais específico vence o corte em uma linha do rótulo.
+.barra-h-rotulo .suspeita {
+  display: inline-flex; align-items: flex-start; gap: 3px;
+  white-space: normal; overflow: visible; text-overflow: clip;
+  .estado { font-size: 14px; width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
+}
+
+.dados { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+
+.contagem {
+  flex-shrink: 0; font-weight: 700; font-size: 0.8rem; font-variant-numeric: tabular-nums;
+  color: var(--tinta); background: #f3f4f6; border-radius: 999px; padding: 1px 10px;
+}
+
+// Aluno recorrente: a linha inteira é o alvo do clique que filtra a lista.
+.lista-alunos.clicavel li { padding: 0; }
+.lista-alunos.clicavel button {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  font: inherit; text-align: left; background: none; border: 0; cursor: pointer;
+  padding: 7px 4px; border-radius: 6px;
+  &:hover { background: #f9fafb; }
+  &:focus-visible { outline: 2px solid var(--serie); outline-offset: -2px; }
+}
+
+.fila-linha {
+  display: flex; align-items: center; gap: 10px;
+  .aluno-meta { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+  .estado { font-size: 14px; width: 14px; height: 14px; }
+}

@@ -14,10 +14,15 @@
   </ng-container>
 </div>
 
-<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+<!-- Professor e coordenadora: indicadores de gestão (presença de hoje, tendência,
+     quem está ficando para trás, configuração). Substituem os contadores
+     genéricos, que somavam registros e horas de todos os alunos. -->
+<app-painel-gestao *ngIf="ehGestao()"></app-painel-gestao>
+
+<div *ngIf="loading() && !ehGestao()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
 
 <ng-container *ngIf="stats() as s">
-  <div class="stats-grid">
+  <div class="stats-grid" *ngIf="!ehGestao()">
     <mat-card class="stat-card">
       <div class="icon-wrapper blue"><mat-icon>check_circle</mat-icon></div>
       <div class="stat-value">{{ s.total }}</div>
@@ -32,12 +37,6 @@
       <div class="icon-wrapper orange"><mat-icon>warning</mat-icon></div>
       <div class="stat-value">{{ s.irregular }}</div>
       <div class="stat-label">Registros irregulares</div>
-    </mat-card>
-    <!-- Contador de alunos: o valor vem do backend (totalStudents). -->
-    <mat-card class="stat-card" *ngIf="ehGestao()">
-      <div class="icon-wrapper purple"><mat-icon>people</mat-icon></div>
-      <div class="stat-value">{{ s.totalStudents }}</div>
-      <div class="stat-label">Alunos ativos</div>
     </mat-card>
   </div>
 

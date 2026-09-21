@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import * as XLSX from 'xlsx';
 import { UsersService } from '../../core/services/users.service';
 import { BulkImportStudent, BulkImportResult, ImportedStudentLogin } from '../../core/models/models';
@@ -18,7 +19,8 @@ import { BulkImportStudent, BulkImportResult, ImportedStudentLogin } from '../..
   imports: [
     CommonModule, FormsModule,
     MatDialogModule, MatButtonModule, MatSelectModule,
-    MatFormFieldModule, MatIconModule, MatProgressSpinnerModule, MatDividerModule
+    MatFormFieldModule, MatIconModule, MatProgressSpinnerModule, MatDividerModule,
+    MatPaginatorModule
   ],
   template: `
     <h2 mat-dialog-title>{{ resultado() ? 'Importação concluída' : 'Importar lista de alunos' }}</h2>
@@ -128,15 +130,23 @@ import { BulkImportStudent, BulkImportResult, ImportedStudentLogin } from '../..
         <table>
           <thead><tr><th>RGM</th><th>Nome</th><th>Semestre</th><th>Turno</th></tr></thead>
           <tbody>
-            <tr *ngFor="let r of preview.slice(0,5)">
+            <tr *ngFor="let r of paginaAtual()">
               <td>{{ r.rgm }}</td>
               <td>{{ r.fullName }}</td>
               <td>{{ r.semester }}°</td>
-              <td>{{ r.shift }}</td>
+              <td>{{ turnoLabel(r.shift) }}</td>
             </tr>
-            <tr *ngIf="preview.length > 5"><td colspan="4" style="text-align:center;color:#6B7280">...e mais {{ preview.length - 5 }} registro(s)</td></tr>
           </tbody>
         </table>
+        <!-- A planilha inteira é conferível antes de importar, não só as primeiras linhas. -->
+        <mat-paginator *ngIf="preview.length > 10"
+                       [length]="preview.length"
+                       [pageIndex]="indicePagina"
+                       [pageSize]="tamanhoPagina"
+                       [pageSizeOptions]="[10, 25, 50]"
+                       (page)="mudarPagina($event)"
+                       aria-label="Páginas da pré-visualização">
+        </mat-paginator>
       </div>
     </mat-dialog-content>
 
@@ -203,6 +213,32 @@ export class ImportarAlunosDialogComponent {
   fileName = '';
   preview: BulkImportStudent[] = [];
   busy = signal(false);
+
+  // ── Paginação da pré-visualização ─────────────────────────────────────────
+  // Antes só as 5 primeiras linhas apareciam; com a paginação o professor
+  // confere a planilha inteira antes de importar.
+  indicePagina = 0;
+  tamanhoPagina = 10;
+
+  paginaAtual(): BulkImportStudent[] {
+    const inicio = this.indicePagina * this.tamanhoPagina;
+    return this.preview.slice(inicio, inicio + this.tamanhoPagina);
+  }
+
+  mudarPagina(evento: PageEvent): void {
+    this.indicePagina = evento.pageIndex;
+    this.tamanhoPagina = evento.pageSize;
+  }
+
+  /** Arquivo novo recomeça da primeira página — a anterior pode nem existir nele. */
+  private definirPreview(linhas: BulkImportStudent[]): void {
+    this.preview = linhas;
+    this.indicePagina = 0;
+  }
+
+  turnoLabel(shift: string): string {
+    return ({ manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' } as Record<string, string>)[shift] ?? shift;
+  }
   /** Resultado da importação: exibe os logins gerados antes de fechar. */
   resultado = signal<BulkImportResult | null>(null);
 
@@ -221,7 +257,7 @@ export class ImportarAlunosDialogComponent {
     if (file.name.endsWith('.csv')) {
       reader.onload = (e) => {
         const text = e.target?.result as string;
-        this.preview = this.parseCsv(text);
+        this.definirPreview(this.parseCsv(text));
       };
       reader.readAsText(file, 'UTF-8');
     } else {
@@ -230,7 +266,7 @@ export class ImportarAlunosDialogComponent {
         const wb   = XLSX.read(data, { type: 'array' });
         const ws   = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: '' });
-        this.preview = this.mapRows(rows);
+        this.definirPreview(this.mapRows(rows));
       };
       reader.readAsArrayBuffer(file);
     }

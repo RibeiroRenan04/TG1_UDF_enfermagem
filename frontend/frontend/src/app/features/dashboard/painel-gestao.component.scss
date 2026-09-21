@@ -1,0 +1,36 @@
+@use '../../shared/estilos/painel-indicadores';
+
+// ── Hoje por turno ─────────────────────────────────────────────────────────
+.turno + .turno { margin-top: 14px; }
+.turno-topo {
+  display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--tinta);
+  .num { color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+}
+
+
+// ── 4. Configuração ───────────────────────────────────────────────────────
+.checklist {
+  list-style: none; margin: 0; padding: 0;
+  li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid #f3f4f6;
+  }
+  li:last-child { border-bottom: 0; }
+  li.ok { padding: 5px 0; }
+}
+
+.check-texto { flex: 1; min-width: 0; }
+.check-titulo {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 0.84rem; color: var(--tinta);
+  li.ok & { color: var(--tinta-3); }
+}
+.check-qtd {
+  font-weight: 700; font-variant-numeric: tabular-nums;
+  background: #f3f4f6; border-radius: 999px; padding: 0 8px; font-size: 0.75rem;
+}
+.check-tag {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #991b1b; background: #fef2f2; border-radius: 999px; padding: 1px 8px;
+}
+.check-detalhe { font-size: 0.74rem; color: var(--tinta-3); margin-top: 1px; }

@@ -9,24 +9,12 @@ export class LocationsService {
   private readonly api = `${environment.apiUrl}/locations`;
   constructor(private http: HttpClient) {}
 
+  /**
+   * Lista das unidades para os seletores de rodízio e exceções. Cadastro e
+   * edição ficam no UnidadesSaudeService, onde as coordenadas são validadas.
+   */
   getAll(): Observable<Location[]> {
     return this.http.get<Location[]>(this.api);
-  }
-
-  create(dto: Omit<Location, 'id'>): Observable<Location> {
-    return this.http.post<Location>(this.api, dto);
-  }
-
-  batchCreate(dtos: Omit<Location, 'id'>[]): Observable<{ inserted: number }> {
-    return this.http.post<{ inserted: number }>(`${this.api}/batch`, dtos);
-  }
-
-  update(id: string, dto: Omit<Location, 'id'>): Observable<Location> {
-    return this.http.put<Location>(`${this.api}/${id}`, dto);
-  }
-
-  delete(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.api}/${id}`);
   }
 
   /** Pesquisa unidades de saúde do DF na API pública do CNES (default: UBS / tipo 2). */

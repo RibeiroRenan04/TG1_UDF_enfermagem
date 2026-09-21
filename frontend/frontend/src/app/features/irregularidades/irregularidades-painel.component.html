@@ -1,0 +1,248 @@
+<!-- Período: um filtro só, acima de tudo que ele afeta. A fila (o que espera
+     decisão) é sempre a atual; o período muda os padrões e os tempos. -->
+<div class="periodo" role="radiogroup" aria-label="Período analisado">
+  <span class="periodo-rotulo">Período</span>
+  <button type="button" *ngFor="let p of periodos" role="radio"
+          [attr.aria-checked]="periodo() === p.dias"
+          [class.ativo]="periodo() === p.dias" (click)="escolherPeriodo(p.dias)">
+    <mat-icon *ngIf="periodo() === p.dias">check</mat-icon>{{ p.rotulo }}
+  </button>
+</div>
+
+<div *ngIf="carregando() && !painel()" class="carregando"><mat-spinner diameter="40"></mat-spinner></div>
+
+<div class="erro" *ngIf="erro()">
+  <mat-icon>error_outline</mat-icon>
+  <span>{{ erro() }}</span>
+  <button mat-button (click)="carregar()">Tentar de novo</button>
+</div>
+
+<div class="painel" *ngIf="painel() as p" [class.recarregando]="carregando()">
+
+  <!-- ══ 1. A fila e o ritmo ═════════════════════════════════════════════════ -->
+  <div class="kpis">
+    <button type="button" class="kpi kpi-link" (click)="filtrarStatus.emit('aguardando_professor')">
+      <div class="kpi-rotulo">Aguardando sua decisão</div>
+      <div class="kpi-valor">{{ p.aguardandoProfessor }}</div>
+      <div class="kpi-detalhe" *ngIf="p.aguardandoProfessor; else nadaParaDecidir">
+        <mat-icon class="estado" [ngClass]="atrasada(p.maisAntigaAguardandoProfessorDias) ? 'atencao' : 'bom'">
+          {{ atrasada(p.maisAntigaAguardandoProfessorDias) ? 'schedule' : 'check_circle' }}
+        </mat-icon>
+        mais antiga {{ diasTexto(p.maisAntigaAguardandoProfessorDias) }}
+        <mat-icon class="seta">chevron_right</mat-icon>
+      </div>
+      <ng-template #nadaParaDecidir><div class="kpi-detalhe">fila em dia</div></ng-template>
+    </button>
+
+    <button type="button" class="kpi kpi-link" (click)="filtrarStatus.emit('aguardando_preceptor')">
+      <div class="kpi-rotulo">Com o preceptor</div>
+      <div class="kpi-valor">{{ p.aguardandoPreceptor }}</div>
+      <div class="kpi-detalhe" *ngIf="p.aguardandoPreceptor; else nadaComPreceptor">
+        <mat-icon class="estado" [ngClass]="atrasada(p.maisAntigaAguardandoPreceptorDias) ? 'atencao' : 'bom'">
+          {{ atrasada(p.maisAntigaAguardandoPreceptorDias) ? 'schedule' : 'check_circle' }}
+        </mat-icon>
+        mais antiga {{ diasTexto(p.maisAntigaAguardandoPreceptorDias) }}
+        <mat-icon class="seta">chevron_right</mat-icon>
+      </div>
+      <ng-template #nadaComPreceptor><div class="kpi-detalhe">nenhuma aguardando ciência</div></ng-template>
+    </button>
+
+    <div class="kpi">
+      <div class="kpi-rotulo">Abertas · {{ rotuloPeriodo() }}</div>
+      <div class="kpi-valor">{{ p.abertasNoPeriodo }}</div>
+      <!-- Variação: seta e palavra dizem a direção; a cor só reforça (subir é ruim). -->
+      <div class="kpi-detalhe" *ngIf="variacao() as v; else semComparacao">
+        <span class="delta" [class.piora]="v > 0" [class.melhora]="v < 0">
+          <mat-icon>{{ v > 0 ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+          {{ v > 0 ? '+' + v : v }}
+        </span>
+        vs. {{ p.abertasPeriodoAnterior }} no período anterior
+      </div>
+      <ng-template #semComparacao>
+        <div class="kpi-detalhe">
+          {{ variacao() === 0 ? 'igual ao período anterior' : 'todo o histórico' }}
+        </div>
+      </ng-template>
+    </div>
+
+    <div class="kpi">
+      <div class="kpi-rotulo">Aprovação · {{ rotuloPeriodo() }}</div>
+      <div class="kpi-valor">{{ p.taxaAprovacao != null ? (p.taxaAprovacao | number:'1.0-0') + '%' : '—' }}</div>
+      <div class="kpi-detalhe">
+        {{ p.decididasNoPeriodo ? 'de ' + p.decididasNoPeriodo + ' decidida(s)' : 'nenhuma decisão no período' }}
+      </div>
+    </div>
+
+    <div class="kpi">
+      <div class="kpi-rotulo">Tempo médio de análise</div>
+      <div class="tempos">
+        <div><span class="tempo-valor">{{ mediaTexto(p.mediaDiasPreceptor) }}</span><span class="tempo-rotulo">até a ciência do preceptor</span></div>
+        <div><span class="tempo-valor">{{ mediaTexto(p.mediaDiasProfessor) }}</span><span class="tempo-rotulo">até a sua decisão</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 2. Evolução e causas ════════════════════════════════════════════════ -->
+  <div class="linha-2">
+    <mat-card class="bloco">
+      <div class="bloco-cabecalho">
+        <div>
+          <h3>Ocorrências abertas</h3>
+          <p class="sub">Por {{ p.agrupamento === 'semana' ? 'semana' : 'mês' }} · {{ rotuloPeriodo() }}</p>
+        </div>
+      </div>
+
+      <ng-container *ngIf="p.abertasNoPeriodo; else semOcorrencias">
+        <div class="colunas-wrap">
+          <div class="eixo-y" aria-hidden="true">
+            <span style="bottom: 100%">{{ topoEvolucao() }}</span>
+            <span style="bottom: 50%">{{ topoEvolucao() / 2 }}</span>
+            <span style="bottom: 0">0</span>
+          </div>
+          <div class="plot" (mouseleave)="baldeEmFoco.set(null)">
+            <div class="grade" style="bottom: 100%"></div>
+            <div class="grade" style="bottom: 50%"></div>
+            <div class="grade base" style="bottom: 0"></div>
+
+            <div class="coluna" *ngFor="let b of p.evolucao; let i = index"
+                 tabindex="0" role="img" [attr.aria-label]="b.rotulo + ': ' + b.abertas + ' ocorrência(s)'"
+                 [class.foco]="baldeEmFoco() === b"
+                 [class.dica-a-esquerda]="i >= p.evolucao.length / 2"
+                 (mouseenter)="baldeEmFoco.set(b)" (focus)="baldeEmFoco.set(b)" (blur)="baldeEmFoco.set(null)">
+              <div class="barra" *ngIf="b.abertas; else vazioBalde" [style.height.%]="altura(b.abertas)"></div>
+              <ng-template #vazioBalde><div class="sem-estagio"></div></ng-template>
+              <span class="rotulo-ponta" *ngIf="b === ultimoBaldeComDado()"
+                    [style.bottom.%]="altura(b.abertas)">{{ b.abertas }}</span>
+              <div class="dica" *ngIf="baldeEmFoco() === b" role="tooltip">
+                <strong>{{ b.abertas }} ocorrência(s)</strong>
+                <span>{{ p.agrupamento === 'semana' ? 'Semana de ' : '' }}{{ b.rotulo }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="eixo-x" aria-hidden="true">
+          <span *ngFor="let b of p.evolucao; let i = index">
+            {{ p.evolucao.length <= 8 || i % 2 === 0 ? b.rotulo : '' }}
+          </span>
+        </div>
+        <details class="tabela-view">
+          <summary>Ver em tabela</summary>
+          <table>
+            <thead><tr><th>Período</th><th>Ocorrências abertas</th></tr></thead>
+            <tbody><tr *ngFor="let b of p.evolucao"><td>{{ b.rotulo }}</td><td>{{ b.abertas }}</td></tr></tbody>
+          </table>
+        </details>
+      </ng-container>
+      <ng-template #semOcorrencias>
+        <p class="vazio"><mat-icon class="ok">check_circle</mat-icon> Nenhuma ocorrência aberta no período.</p>
+      </ng-template>
+    </mat-card>
+
+    <mat-card class="bloco">
+      <div class="bloco-cabecalho">
+        <div>
+          <h3>Por tipo</h3>
+          <p class="sub">Abertas no período e como foram decididas</p>
+        </div>
+      </div>
+      <div class="barras-h" *ngIf="p.porTipo.length; else semTipos">
+        <div class="barra-h-linha" *ngFor="let t of p.porTipo"
+             role="img" [attr.aria-label]="t.rotulo + ': ' + t.total + ', ' + t.aprovadas + ' aprovadas e ' + t.negadas + ' negadas'">
+          <div class="barra-h-rotulo">
+            <span>{{ t.rotulo }}</span>
+            <span class="aluno-meta">{{ t.aprovadas }} aprovada(s) · {{ t.negadas }} negada(s)</span>
+          </div>
+          <div class="barra-h-trilho">
+            <div class="barra-h" [style.width.%]="largura(t.total, maiorTipo())"></div>
+            <span class="barra-h-valor">{{ t.total }}</span>
+          </div>
+        </div>
+      </div>
+      <ng-template #semTipos><p class="vazio">Sem ocorrências no período.</p></ng-template>
+    </mat-card>
+  </div>
+
+  <!-- ══ 3. Onde e com quem ══════════════════════════════════════════════════ -->
+  <div class="linha-3">
+    <mat-card class="bloco">
+      <div class="bloco-cabecalho">
+        <div>
+          <h3>Unidades com mais ocorrências</h3>
+          <p class="sub">Muito "fora do local" numa unidade costuma ser coordenada ou raio errado</p>
+        </div>
+      </div>
+      <div class="barras-h" *ngIf="p.porUnidade.length; else semUnidades">
+        <div class="barra-h-linha" *ngFor="let u of p.porUnidade"
+             role="img" [attr.aria-label]="u.nome + ': ' + u.total + ' ocorrência(s), ' + u.foraDoLocal + ' fora do local'">
+          <div class="barra-h-rotulo">
+            <a class="unidade-link" [routerLink]="['/app/unidades', u.unidadeId]" [matTooltip]="u.nome">{{ u.nome }}</a>
+            <span class="aluno-meta suspeita" *ngIf="suspeitaDeLocalizacao(u); else detalheUnidade">
+              <mat-icon class="estado atencao">my_location</mat-icon>
+              {{ u.foraDoLocal }} fora do local — confira a localização
+            </span>
+            <ng-template #detalheUnidade>
+              <span class="aluno-meta">{{ u.foraDoLocal }} fora do local</span>
+            </ng-template>
+          </div>
+          <div class="barra-h-trilho">
+            <div class="barra-h" [style.width.%]="largura(u.total, maiorUnidade())"></div>
+            <span class="barra-h-valor">{{ u.total }}</span>
+          </div>
+        </div>
+      </div>
+      <ng-template #semUnidades><p class="vazio">Nenhuma ocorrência ligada a unidade no período.</p></ng-template>
+    </mat-card>
+
+    <mat-card class="bloco">
+      <div class="bloco-cabecalho">
+        <div>
+          <h3>Alunos recorrentes</h3>
+          <p class="sub">2 ou mais ocorrências no período · clique para ver</p>
+        </div>
+      </div>
+      <ul class="lista-alunos clicavel" *ngIf="p.porAluno.length; else semRecorrentes">
+        <li *ngFor="let a of p.porAluno">
+          <button type="button" (click)="filtrarAluno.emit(a.nome)">
+            <span class="dados">
+              <span class="aluno-nome">{{ a.nome }}</span>
+              <span class="aluno-meta">
+                RGM {{ a.rgm || '—' }}<ng-container *ngIf="a.negadas"> · {{ a.negadas }} negada(s)</ng-container>
+              </span>
+            </span>
+            <span class="contagem">{{ a.total }}</span>
+          </button>
+        </li>
+      </ul>
+      <ng-template #semRecorrentes>
+        <p class="vazio"><mat-icon class="ok">check_circle</mat-icon> Nenhum aluno com ocorrência repetida.</p>
+      </ng-template>
+    </mat-card>
+
+    <mat-card class="bloco">
+      <div class="bloco-cabecalho">
+        <div>
+          <h3>Ciência pendente por preceptor</h3>
+          <p class="sub">Onde a fila emperra antes de chegar a você</p>
+        </div>
+      </div>
+      <ul class="lista-alunos" *ngIf="p.filaPreceptores.length; else semFila">
+        <li class="fila-linha" *ngFor="let f of p.filaPreceptores">
+          <span class="dados">
+            <span class="aluno-nome">{{ f.nome }}</span>
+            <span class="aluno-meta">
+              <mat-icon class="estado" [ngClass]="atrasada(f.maisAntigaDias) ? 'atencao' : 'bom'">
+                {{ atrasada(f.maisAntigaDias) ? 'schedule' : 'check_circle' }}
+              </mat-icon>
+              mais antiga {{ diasTexto(f.maisAntigaDias) }}
+              <ng-container *ngIf="atrasada(f.maisAntigaDias)"> · acima de {{ prazoAtencao }} dias</ng-container>
+            </span>
+          </span>
+          <span class="contagem">{{ f.pendentes }}</span>
+        </li>
+      </ul>
+      <ng-template #semFila>
+        <p class="vazio"><mat-icon class="ok">check_circle</mat-icon> Nenhuma ocorrência aguardando ciência.</p>
+      </ng-template>
+    </mat-card>
+  </div>
+</div>

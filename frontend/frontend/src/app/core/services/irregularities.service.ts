@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import {
   Irregularity, IrregularitySummary, CreateIrregularity, IrregularityStatus
 } from '../models/models';
+import { IrregularidadesPainel } from '../models/irregularidades-painel';
 
 /**
  * Irregularidades de ponto. O preceptor apenas registra ciência e observação;
@@ -29,6 +30,15 @@ export class IrregularitiesService {
 
   getSummary(): Observable<IrregularitySummary> {
     return this.http.get<IrregularitySummary>(`${this.api}/summary`);
+  }
+
+  /**
+   * Indicadores do professor e da coordenadora. `dias` é a janela analisada;
+   * nulo considera todo o histórico. A fila de decisão é sempre a atual.
+   */
+  getPainel(dias: number | null): Observable<IrregularidadesPainel> {
+    const params = dias ? new HttpParams().set('dias', dias) : new HttpParams();
+    return this.http.get<IrregularidadesPainel>(`${this.api}/painel`, { params });
   }
 
   /** Registro feito pelo aluno. */

@@ -1,0 +1,191 @@
+// Estilos dos painéis de indicadores (início e irregularidades). Série única em
+// azul e rampa ordinal validadas com o validador da skill de dataviz; estados
+// com as cores de status reservadas, sempre acompanhadas de ícone e texto.
+:host {
+  --tinta: #0b0b0b;
+  --tinta-2: #52514e;
+  --tinta-3: #6b6a66;
+  --grade: #e1e0d9;
+  --base: #c3c2b7;
+  --serie: #2a78d6;
+  --serie-trilho: #cde2fb;
+  --bom: #0ca30c;
+  --atencao: #b27c00;   // ícone sobre fundo claro: o amarelo puro some
+  --critico: #d03b3b;
+  --superficie: #ffffff;
+
+  display: block;
+  margin-bottom: 24px;
+}
+
+.carregando { display: flex; justify-content: center; padding: 48px; }
+
+.erro {
+  display: flex; align-items: center; gap: 8px;
+  background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 0.85rem;
+  button { margin-left: auto; }
+}
+
+.painel { display: flex; flex-direction: column; gap: 16px; transition: opacity 0.2s; }
+.painel.recarregando { opacity: 0.6; }
+
+h3 { margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--tinta); }
+.sub { margin: 2px 0 0; font-size: 0.75rem; color: var(--tinta-3); }
+.nota { margin: 12px 0 0; font-size: 0.72rem; color: var(--tinta-3); }
+.vazio {
+  display: flex; align-items: center; gap: 6px;
+  margin: 8px 0 0; font-size: 0.82rem; color: var(--tinta-2);
+}
+mat-icon.ok { color: var(--bom); font-size: 20px; width: 20px; height: 20px; }
+
+// ── 1. Indicadores ─────────────────────────────────────────────────────────
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.kpi {
+  background: var(--superficie);
+  border: 1px solid rgba(11, 11, 11, 0.08);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 4px;
+  color: inherit; text-decoration: none;
+}
+.kpi-link { transition: box-shadow 0.2s, transform 0.2s; }
+.kpi-link:hover, .kpi-link:focus-visible {
+  box-shadow: 0 10px 24px -10px rgb(0 173 238 / 0.35);
+  transform: translateY(-1px);
+}
+.kpi-rotulo { font-size: 0.78rem; color: var(--tinta-2); }
+.kpi-valor { font-size: 1.9rem; font-weight: 600; color: var(--tinta); line-height: 1.15; }
+.kpi-valor.muted { color: var(--tinta-3); }
+.kpi-detalhe {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  font-size: 0.75rem; color: var(--tinta-3);
+  strong { color: var(--tinta); margin: 0 3px; }
+  .seta { font-size: 18px; width: 18px; height: 18px; margin-left: auto; }
+}
+// A única figura de destaque da tela: a presença de hoje.
+.hero { font-size: 3rem; font-weight: 600; color: var(--tinta); line-height: 1.05; letter-spacing: -0.02em; }
+
+// Medidor: trilho num tom claro do mesmo azul, preenchimento no azul da série.
+.medidor {
+  height: 8px; border-radius: 999px; background: var(--serie-trilho);
+  overflow: hidden; margin: 6px 0 2px;
+}
+.medidor-fill { height: 100%; border-radius: 999px; background: var(--serie); min-width: 2px; }
+
+// ── Blocos ─────────────────────────────────────────────────────────────────
+.bloco { padding: 16px 18px; border-radius: 12px; }
+.bloco-cabecalho { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+
+.linha-2 {
+  display: grid; gap: 16px;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  @media (max-width: 900px) { grid-template-columns: 1fr; }
+}
+.linha-3 {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+// ── 2. Colunas da presença diária ─────────────────────────────────────────
+.colunas-wrap { display: flex; gap: 8px; height: 170px; padding-top: 18px; }
+
+.eixo-y {
+  position: relative; width: 34px; flex-shrink: 0;
+  span {
+    position: absolute; right: 0; transform: translateY(50%);
+    font-size: 0.68rem; color: var(--tinta-3); font-variant-numeric: tabular-nums;
+  }
+}
+
+// min-width: 0 em plot e colunas: sem ele o item flex não encolhe abaixo do
+// conteúdo e, em tela estreita, parte das colunas ficava com largura zero.
+.plot { position: relative; flex: 1; min-width: 0; display: flex; align-items: stretch; gap: 2px; }
+
+// Grade em linha fina e contínua, discreta; a base um tom mais forte.
+.grade { position: absolute; left: 0; right: 0; height: 1px; background: var(--grade); }
+.grade.base { background: var(--base); }
+
+.coluna {
+  position: relative; flex: 1; min-width: 0; display: flex; align-items: flex-end; justify-content: center;
+  cursor: default; outline: none; border-radius: 4px;
+  // A coluna inteira é o alvo do ponteiro, não só a barra pintada.
+  &.foco { background: rgba(42, 120, 214, 0.06); }
+  &:focus-visible { box-shadow: inset 0 0 0 2px var(--serie); }
+}
+
+.barra {
+  width: 100%; max-width: 24px; min-height: 2px;
+  background: var(--serie);
+  border-radius: 4px 4px 0 0;   // ponta arredondada, base reta
+  position: relative; z-index: 1;
+}
+.coluna.foco .barra { background: #1c5cab; }
+
+// Dia sem estágio: marca neutra no chão, para não parecer "0%".
+.sem-estagio { width: 10px; height: 2px; background: var(--base); border-radius: 1px; margin-bottom: -1px; }
+
+.rotulo-ponta {
+  position: absolute; left: 50%; transform: translate(-50%, -4px);
+  font-size: 0.72rem; font-weight: 600; color: var(--tinta); white-space: nowrap; z-index: 2;
+}
+
+// A dica abre para dentro do gráfico a partir da coluna: nunca sai do card.
+.dica {
+  position: absolute; bottom: calc(100% + 6px); left: 0;
+  z-index: 5; pointer-events: none; white-space: nowrap;
+  background: var(--tinta); color: #fff; border-radius: 6px; padding: 6px 9px;
+  display: flex; flex-direction: column; gap: 1px; font-size: 0.72rem;
+  strong { font-size: 0.9rem; }
+  span { color: #c3c2b7; }
+}
+.coluna.dica-a-esquerda .dica { left: auto; right: 0; }
+
+.eixo-x {
+  display: flex; gap: 2px; margin-left: 42px; margin-top: 4px;
+  span { flex: 1; text-align: center; font-size: 0.66rem; color: var(--tinta-3); font-variant-numeric: tabular-nums; }
+}
+
+.tabela-view {
+  margin-top: 12px; font-size: 0.78rem; color: var(--tinta-2);
+  summary { cursor: pointer; color: var(--tinta-3); font-size: 0.75rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--grade); }
+  th { color: var(--tinta-3); font-weight: 500; }
+}
+
+
+// ── 3. Listas e barras horizontais ─────────────────────────────────────────
+.lista-alunos {
+  list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto;
+  li { padding: 7px 0; border-bottom: 1px solid #f3f4f6; }
+  li:last-child { border-bottom: 0; }
+}
+.aluno-nome { font-size: 0.84rem; font-weight: 500; color: var(--tinta); }
+.aluno-meta { font-size: 0.72rem; color: var(--tinta-3); }
+
+.barras-h { display: flex; flex-direction: column; gap: 10px; }
+.barra-h-linha { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 10px; align-items: center; }
+.barra-h-rotulo {
+  display: flex; flex-direction: column; min-width: 0; font-size: 0.8rem; color: var(--tinta);
+  span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+.barra-h-trilho { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.barra-h {
+  height: 14px; max-width: calc(100% - 28px);
+  background: var(--serie);
+  border-radius: 0 4px 4px 0;   // ponta arredondada, base reta
+}
+// Valor na ponta da barra, em cor de texto.
+.barra-h-valor { font-size: 0.78rem; font-weight: 600; color: var(--tinta); font-variant-numeric: tabular-nums; }
+
+// ── Estados (ícone + cor de status) ───────────────────────────────────────
+.estado { flex-shrink: 0; font-size: 22px; width: 22px; height: 22px; }
+.estado.bom { color: var(--bom); }
+.estado.atencao { color: var(--atencao); }
+.estado.critico { color: var(--critico); }

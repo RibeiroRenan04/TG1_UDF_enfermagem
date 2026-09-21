@@ -231,7 +231,7 @@ export class RodiziosComponent implements OnInit {
    */
   vincularAlunos(group: StudentGroup): void {
     const ref = this.dialog.open(VincularAlunosDialogComponent, {
-      width: '560px',
+      width: 'min(720px, 94vw)',
       data: { group }
     });
 
