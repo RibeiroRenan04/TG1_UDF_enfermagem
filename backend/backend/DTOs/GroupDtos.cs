@@ -17,6 +17,14 @@ public record CreateGroupDto(
     string? Description
 );
 
+/// <summary>Alunos a vincular e a desvincular de uma turma, numa chamada só.</summary>
+public record VinculoLoteDto(List<Guid>? Adicionar, List<Guid>? Remover);
+
+/// <summary>Aluno que não pôde ser vinculado, com o motivo para a tela mostrar.</summary>
+public record VinculoRecusadoDto(Guid StudentId, string? Nome, string Motivo);
+
+public record VinculoLoteResultadoDto(int Vinculados, int Desvinculados, List<VinculoRecusadoDto> Recusados);
+
 /// <summary>Aluno vinculado a uma turma.</summary>
 public class GroupMemberDto
 {

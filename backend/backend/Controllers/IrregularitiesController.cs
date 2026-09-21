@@ -24,7 +24,7 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class IrregularitiesController(AppDbContext db) : ControllerBase
+public class IrregularitiesController(AppDbContext db, IrregularidadesPainelService painel) : ControllerBase
 {
     // ── Listagem ──────────────────────────────────────────────────────────────
     /// <summary>
@@ -234,6 +234,23 @@ public class IrregularitiesController(AppDbContext db) : ControllerBase
 
         await db.Entry(irregularidade).Reference(i => i.Professor).LoadAsync();
         return Ok(Map(irregularidade));
+    }
+
+    // ── Indicadores da gestão ─────────────────────────────────────────────────
+    /// <summary>
+    /// Indicadores para o professor e a coordenadora: a fila que espera decisão,
+    /// onde ela emperra (preceptor ou professor) e os padrões por tipo, unidade e
+    /// aluno. <paramref name="dias"/> define a janela analisada (7 a 365); vazio
+    /// considera todo o histórico. A fila é sempre a atual.
+    /// </summary>
+    [HttpGet("painel")]
+    [Authorize(Roles = Roles.Gestao)]
+    public async Task<ActionResult<IrregularidadesPainelDto>> GetPainel([FromQuery] int? dias, CancellationToken ct)
+    {
+        if (dias is < 7 or > 365)
+            return BadRequest(ErrosApi.Corpo("O período deve ter entre 7 e 365 dias.", "dias", "periodo_invalido"));
+
+        return Ok(await painel.MontarAsync(dias, ct));
     }
 
     // ── Contadores para os painéis ────────────────────────────────────────────

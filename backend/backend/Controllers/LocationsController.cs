@@ -27,81 +27,11 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
         return loc == null ? NotFound() : Ok(Map(loc));
     }
 
-    [HttpPost]
-    [Authorize(Roles = Roles.Supervisor)]
-    public async Task<ActionResult<LocationDto>> Create([FromBody] CreateLocationDto dto)
-    {
-        var loc = new Location
-        {
-            Name = dto.Name.Trim(),
-            Address = dto.Address?.Trim(),
-            Latitude = dto.Latitude,
-            Longitude = dto.Longitude,
-            RadiusMeters = dto.RadiusMeters > 0 ? dto.RadiusMeters : 100,
-            IsInstitution = dto.IsInstitution,
-            ShiftStart = string.IsNullOrEmpty(dto.ShiftStart) ? "07:00" : dto.ShiftStart,
-            ShiftEnd = string.IsNullOrEmpty(dto.ShiftEnd) ? "13:00" : dto.ShiftEnd
-        };
-
-        db.Locations.Add(loc);
-        await db.SaveChangesAsync();
-        return CreatedAtAction(nameof(Get), new { id = loc.Id }, Map(loc));
-    }
-
-    [HttpPost("batch")]
-    [Authorize(Roles = Roles.Supervisor)]
-    public async Task<ActionResult> BatchCreate([FromBody] List<CreateLocationDto> dtos)
-    {
-        if (dtos.Count == 0)
-            return BadRequest(new { message = "Lista vazia." });
-
-        var locs = dtos.Select(dto => new Location
-        {
-            Name = dto.Name.Trim(),
-            Address = dto.Address?.Trim(),
-            Latitude = dto.Latitude,
-            Longitude = dto.Longitude,
-            RadiusMeters = dto.RadiusMeters > 0 ? dto.RadiusMeters : 100,
-            IsInstitution = dto.IsInstitution,
-            ShiftStart = string.IsNullOrEmpty(dto.ShiftStart) ? "07:00" : dto.ShiftStart,
-            ShiftEnd = string.IsNullOrEmpty(dto.ShiftEnd) ? "13:00" : dto.ShiftEnd
-        }).ToList();
-
-        db.Locations.AddRange(locs);
-        await db.SaveChangesAsync();
-        return Ok(new { inserted = locs.Count });
-    }
-
-    [HttpPut("{id}")]
-    [Authorize(Roles = Roles.Supervisor)]
-    public async Task<ActionResult<LocationDto>> Update(Guid id, [FromBody] UpdateLocationDto dto)
-    {
-        var loc = await db.Locations.FindAsync(id);
-        if (loc == null) return NotFound();
-
-        loc.Name = dto.Name.Trim();
-        loc.Address = dto.Address?.Trim();
-        loc.Latitude = dto.Latitude;
-        loc.Longitude = dto.Longitude;
-        loc.RadiusMeters = dto.RadiusMeters > 0 ? dto.RadiusMeters : 100;
-        loc.IsInstitution = dto.IsInstitution;
-        loc.ShiftStart = string.IsNullOrEmpty(dto.ShiftStart) ? "07:00" : dto.ShiftStart;
-        loc.ShiftEnd = string.IsNullOrEmpty(dto.ShiftEnd) ? "13:00" : dto.ShiftEnd;
-
-        await db.SaveChangesAsync();
-        return Ok(Map(loc));
-    }
-
-    [HttpDelete("{id}")]
-    [Authorize(Roles = Roles.Supervisor)]
-    public async Task<IActionResult> Delete(Guid id)
-    {
-        var loc = await db.Locations.FindAsync(id);
-        if (loc == null) return NotFound();
-        db.Locations.Remove(loc);
-        await db.SaveChangesAsync();
-        return NoContent();
-    }
+    // Cadastro e edição de unidades ficam só em /api/unidades-saude (formulário,
+    // importação e revisão de localização), onde as coordenadas são validadas e
+    // ganham status de geocodificação. Os antigos POST/PUT/DELETE daqui gravavam
+    // coordenadas sem conferência nenhuma e já não eram usados por tela alguma —
+    // eram uma porta aberta para uma unidade com raio num lugar qualquer.
 
     // ── Busca Saúde DF (CNES / OpenDataSUS) ──────────────────────────────────
     /// <summary>Pesquisa unidades de saúde do DF via API pública do CNES (default: UBS).</summary>
@@ -122,26 +52,34 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
     public async Task<ActionResult<LocationDto>> ImportFromBuscaSaude(
         [FromBody] ImportBuscaSaudeDto dto)
     {
-        var alreadyExists = await db.Locations.AnyAsync(l => l.CodigoCnes == dto.CodigoCnes);
+        var cnes = Cnes.Normalizar(dto.CodigoCnes);
+        if (cnes == null)
+            return BadRequest(new { message = "Código CNES inválido." });
+
+        // Procura nas duas grafias: cadastros antigos gravaram o código sem os zeros.
+        var variantes = Cnes.Variantes(cnes);
+        var alreadyExists = await db.Locations.AnyAsync(l => l.CodigoCnes != null && variantes.Contains(l.CodigoCnes));
         if (alreadyExists)
             return Conflict(new { message = "Estabelecimento já importado." });
 
         // O estabelecimento entra como unidade de saúde comum: "instituição" é a
         // instituição de ensino, marcada só nela — é o que a regra de sexta-feira
         // do ponto verifica. Marcar toda UBS como instituição anulava a regra.
-        var temCoordenadas = dto.Latitude != 0 || dto.Longitude != 0;
+        // Coordenada do CNES fora do intervalo (ou 0, 0) não conta: a unidade entra
+        // pendente e vai para a revisão, em vez de nascer "confirmada" num lugar errado.
+        var temCoordenadas = Coordenadas.Validar(dto.Latitude, dto.Longitude) == null;
 
         var loc = new Location
         {
             Name = dto.Nome.Trim(),
             Address = dto.Endereco?.Trim(),
-            Latitude = dto.Latitude,
-            Longitude = dto.Longitude,
+            Latitude = temCoordenadas ? dto.Latitude : 0,
+            Longitude = temCoordenadas ? dto.Longitude : 0,
             RadiusMeters = 150,
             IsInstitution = false,
             ShiftStart = "07:00",
             ShiftEnd = "19:00",
-            CodigoCnes = dto.CodigoCnes,
+            CodigoCnes = cnes,
             Tipo = "UBS",
             Uf = "DF",
             Ativo = true,

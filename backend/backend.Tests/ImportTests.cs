@@ -434,3 +434,151 @@ public class UnidadeImportServiceTests
         Assert.Null(service.RecuperarPrevia(Guid.NewGuid()));
     }
 }
+
+/// <summary>
+/// Coordenadas e código CNES vindos na planilha. É o caminho da carga oficial do
+/// CNES: a unidade já entra localizada, sem esperar o geocodificador — que
+/// processa uma unidade por segundo e erra com endereços de Brasília.
+/// </summary>
+public class ImportacaoComCoordenadasTests
+{
+    private static PlanilhaUnidadesReader Reader() =>
+        new(new AddressNormalizer(), TestSupport.Logger<PlanilhaUnidadesReader>());
+
+    private static UnidadeImportService Montar(EstagioCheck.API.Data.AppDbContext db, GeocodingQueue fila) =>
+        new(db, Reader(), new AddressNormalizer(), fila,
+            new MemoryCache(new MemoryCacheOptions()), TestSupport.Logger<UnidadeImportService>());
+
+    private static Stream Csv(string conteudo) => new MemoryStream(Encoding.UTF8.GetBytes(conteudo));
+
+    private const string Cabecalho = "Nome;Tipo;Endereco;Numero;Bairro;Cidade;UF;CEP;Latitude;Longitude;CodigoCnes\n";
+
+    [Fact]
+    public void Latitude_negativa_e_lida_como_numero_e_nao_como_formula()
+    {
+        // O sanitizador prefixa com apóstrofo o que começa com "-"; a coordenada
+        // precisa escapar disso, senão toda latitude do Brasil viraria texto.
+        using var arquivo = Csv(Cabecalho +
+            "UBS 1 Asa Norte;UBS;SGAN 906;S/N;Asa Norte;Brasília;DF;70790-060;-15.7401;-47.8829;0010456\n");
+
+        var linha = Reader().Ler(arquivo, "u.csv").Linhas.Single();
+
+        Assert.True(linha.Valida);
+        Assert.Equal(-15.7401, linha.Latitude);
+        Assert.Equal(-47.8829, linha.Longitude);
+        Assert.Equal("0010456", linha.CodigoCnes);
+    }
+
+    [Fact]
+    public void Virgula_decimal_do_excel_em_portugues_e_aceita()
+    {
+        using var arquivo = Csv(Cabecalho +
+            "UBS 1;UBS;SGAN 906;S/N;Asa Norte;Brasília;DF;70790-060;\"-15,7401\";\"-47,8829\";\n");
+
+        var linha = Reader().Ler(arquivo, "u.csv").Linhas.Single();
+
+        Assert.True(linha.Valida);
+        Assert.Equal(-15.7401, linha.Latitude);
+    }
+
+    [Theory]
+    [InlineData("-15.74", "", "juntas")]
+    [InlineData("abc", "-47.88", "Latitude inválida")]
+    [InlineData("-95", "-47.88", "fora do intervalo")]
+    [InlineData("0", "0", "(0, 0)")]
+    public void Coordenada_invalida_recusa_a_linha(string lat, string lon, string trecho)
+    {
+        using var arquivo = Csv(Cabecalho +
+            $"UBS 1;UBS;SGAN 906;S/N;Asa Norte;Brasília;DF;70790-060;{lat};{lon};\n");
+
+        var linha = Reader().Ler(arquivo, "u.csv").Linhas.Single();
+
+        Assert.False(linha.Valida);
+        Assert.Contains(linha.Erros, e => e.Contains(trecho));
+    }
+
+    [Fact]
+    public async Task Unidade_com_coordenadas_entra_localizada_e_fora_da_fila()
+    {
+        using var db = TestSupport.NovoContexto();
+        var fila = new GeocodingQueue();
+        var service = Montar(db, fila);
+
+        using var arquivo = Csv(Cabecalho +
+            "UBS 1 Asa Norte;UBS;SGAN 906;S/N;Asa Norte;Brasília;DF;70790-060;-15.7401;-47.8829;0010456\n" +
+            "UBS 2 Asa Sul;UBS;SGAS 612;S/N;Asa Sul;Brasília;DF;70200-720;;;\n");
+
+        var (previa, _) = await service.GerarPreviaAsync(arquivo, "u.csv", default);
+        var (_, criadas, _, _, enfileiradas) = await service.ConfirmarAsync(previa, false, default);
+
+        Assert.Equal(2, criadas);
+        // Só a unidade sem coordenadas vai para o geocodificador.
+        Assert.Equal(1, enfileiradas);
+
+        var localizada = db.Locations.Single(l => l.Name == "UBS 1 Asa Norte");
+        Assert.Equal(-15.7401, localizada.Latitude);
+        Assert.Equal(StatusGeocodificacao.Sucesso, localizada.StatusGeocodificacao);
+        Assert.Equal(OrigemCoordenadas.Outro, localizada.OrigemCoordenadas);
+        Assert.Equal("0010456", localizada.CodigoCnes);
+
+        Assert.Equal(StatusGeocodificacao.Pendente,
+            db.Locations.Single(l => l.Name == "UBS 2 Asa Sul").StatusGeocodificacao);
+    }
+
+    [Fact]
+    public async Task Mesmo_cnes_com_nome_diferente_e_duplicata()
+    {
+        using var db = TestSupport.NovoContexto();
+        var existente = TestSupport.Unidade("UBS 1 Asa Norte");
+        existente.CodigoCnes = "0010456";
+        db.Locations.Add(existente);
+        await db.SaveChangesAsync();
+
+        // Nome e endereço escritos de outro jeito: só o CNES denuncia a repetição.
+        using var arquivo = Csv(Cabecalho +
+            "CENTRO DE SAUDE 01 ASA NORTE;UBS;SGAN QUADRA 905;S/N;ASA NORTE;BRASILIA;DF;70790-050;-15.74;-47.88;0010456\n");
+
+        var (r, _) = await Montar(db, new GeocodingQueue()).GerarPreviaAsync(arquivo, "u.csv", default);
+
+        Assert.True(r.Linhas.Single().Duplicada);
+    }
+
+    [Fact]
+    public async Task Cnes_repetido_na_planilha_recusa_a_segunda_linha()
+    {
+        using var db = TestSupport.NovoContexto();
+
+        using var arquivo = Csv(Cabecalho +
+            "UBS 1;UBS;SGAN 906;S/N;Asa Norte;Brasília;DF;70790-060;-15.74;-47.88;0010456\n" +
+            "UBS Um;UBS;Outra via;10;Asa Norte;Brasília;DF;70790-060;-15.74;-47.88;0010456\n");
+
+        var (r, _) = await Montar(db, new GeocodingQueue()).GerarPreviaAsync(arquivo, "u.csv", default);
+
+        Assert.True(r.Linhas[0].Valida);
+        Assert.Contains(r.Linhas[1].Erros, e => e.Contains("CNES 0010456 repetido"));
+    }
+
+    [Fact]
+    public async Task Coordenada_da_planilha_nao_sobrescreve_correcao_manual()
+    {
+        using var db = TestSupport.NovoContexto();
+        var existente = TestSupport.Unidade("UBS 1 Asa Norte");
+        existente.CodigoCnes = "0010456";
+        existente.Latitude = -15.1;
+        existente.Longitude = -47.1;
+        existente.OrigemCoordenadas = OrigemCoordenadas.Manual;
+        db.Locations.Add(existente);
+        await db.SaveChangesAsync();
+
+        var service = Montar(db, new GeocodingQueue());
+        using var arquivo = Csv(Cabecalho +
+            "UBS 1 Asa Norte;UBS;SGAN 906;S/N;Asa Norte;Brasília;DF;70790-060;-15.9;-47.9;0010456\n");
+
+        var (previa, _) = await service.GerarPreviaAsync(arquivo, "u.csv", default);
+        await service.ConfirmarAsync(previa, atualizarDuplicadas: true, default);
+
+        var unidade = db.Locations.Single();
+        Assert.Equal(-15.1, unidade.Latitude);
+        Assert.Equal(OrigemCoordenadas.Manual, unidade.OrigemCoordenadas);
+    }
+}

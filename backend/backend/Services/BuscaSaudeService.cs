@@ -100,7 +100,7 @@ public class BuscaSaudeService(
     }
 
     private static BuscaSaudeEstabelecimentoDto Map(CnesEstabelecimento e) => new(
-        CodigoCnes: e.CodigoCnes.ToString(),
+        CodigoCnes: Models.Cnes.Formatar(e.CodigoCnes),
         Nome: !string.IsNullOrEmpty(e.NomeFantasia) ? e.NomeFantasia : e.NomeRazaoSocial,
         Endereco: FormatarEndereco(e),
         Latitude: e.Latitude!.Value,

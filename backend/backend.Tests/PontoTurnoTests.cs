@@ -39,18 +39,28 @@ public class PontoTurnoTests
         return controller;
     }
 
+    /// <summary>Unidade localizada onde os pontos destes testes são registrados.</summary>
+    private static readonly Guid UnidadeId = Guid.Parse("7b1d2c3e-0000-4000-8000-000000000001");
+    private const double LatUnidade = -15.7401, LonUnidade = -47.8829;
+
     /// <summary>
-    /// Registro no local do aluno. Sem LocationId a API não aplica geofence — é o
-    /// caminho que isola a regra de turno da regra de distância.
+    /// Registro em cima da unidade, dentro do raio. O ponto sem unidade deixou de
+    /// ser aceito (ele passava sem checagem de distância nenhuma), então a regra
+    /// de turno é isolada da de distância registrando exatamente no local.
     /// </summary>
     private static CreateAttendanceDto Ponto(string tipo, Guid? escalaId = null, string? descricao = null) =>
-        new(0, 0, tipo, escalaId, null, descricao, null, null);
+        new(LatUnidade, LonUnidade, tipo, escalaId, UnidadeId, descricao, null, null);
 
     private static async Task<(EstagioCheck.API.Data.AppDbContext db, ApplicationUser aluno)> ComAlunoAsync()
     {
         var db = TestSupport.NovoContexto();
         var aluno = TestSupport.Aluno();
-        db.Add(aluno);
+        var unidade = TestSupport.Unidade();
+        unidade.Id = UnidadeId;
+        unidade.Latitude = LatUnidade;
+        unidade.Longitude = LonUnidade;
+        unidade.StatusGeocodificacao = StatusGeocodificacao.Sucesso;
+        db.AddRange(aluno, unidade);
         await db.SaveChangesAsync();
         return (db, aluno);
     }

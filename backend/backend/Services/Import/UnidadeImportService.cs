@@ -84,8 +84,14 @@ public class UnidadeImportService(
 
                 AtualizarCadastro(existente, linha);
 
+                // Coordenada da planilha vale mais que a geocodificada, mas nunca
+                // passa por cima de uma correção feita à mão.
+                if (linha.TemCoordenadas && !existente.CoordenadaManual)
+                {
+                    AplicarCoordenadasDaPlanilha(existente, linha, loteId);
+                }
                 // Endereço mudou → as coordenadas antigas não valem mais, exceto as manuais.
-                if (linha.EnderecoAlterado && !existente.CoordenadaManual)
+                else if (linha.EnderecoAlterado && !existente.CoordenadaManual)
                 {
                     existente.Latitude = 0;
                     existente.Longitude = 0;
@@ -114,14 +120,19 @@ public class UnidadeImportService(
                 Uf = linha.Uf,
                 Cep = linha.Cep,
                 Telefone = linha.Telefone,
+                CodigoCnes = linha.CodigoCnes,
                 Ativo = true,
                 StatusGeocodificacao = StatusGeocodificacao.Pendente,
                 LoteImportacao = loteId
             };
 
             db.Locations.Add(unidade);
-            paraGeocodificar.Add(unidade.Id);
             criadas++;
+
+            // Com coordenadas na planilha a unidade já nasce localizada; sem elas,
+            // vai para a fila do geocodificador como antes.
+            if (linha.TemCoordenadas) AplicarCoordenadasDaPlanilha(unidade, linha, loteId);
+            else paraGeocodificar.Add(unidade.Id);
         }
 
         await db.SaveChangesAsync(ct);
@@ -152,7 +163,7 @@ public class UnidadeImportService(
         var existentes = await db.Locations
             .Select(l => new
             {
-                l.Id, l.Name, l.Address, l.Numero, l.Cidade, l.Bairro, l.Cep
+                l.Id, l.Name, l.Address, l.Numero, l.Cidade, l.Bairro, l.Cep, l.CodigoCnes
             })
             .ToListAsync(ct);
 
@@ -162,6 +173,18 @@ public class UnidadeImportService(
             var chave = ChaveLogica(e.Name, e.Address, e.Numero, e.Cidade);
             indice.TryAdd(chave, e.Id);
         }
+
+        // O código CNES identifica a unidade sozinho, mesmo com nome ou endereço
+        // escritos de outro jeito — e tem índice único no banco: sem esta checagem,
+        // reimportar a mesma unidade derrubava a confirmação inteira.
+        // Normalizado dos dois lados: cadastros antigos gravaram o código sem os
+        // zeros à esquerda ("10731"), a planilha oficial traz "0010731".
+        var porCnes = existentes
+            .Select(e => new { e.Id, Cnes = Cnes.Normalizar(e.CodigoCnes) })
+            .Where(e => e.Cnes != null)
+            .GroupBy(e => e.Cnes!)
+            .ToDictionary(g => g.Key, g => g.First().Id);
+        var cnesNoArquivo = new Dictionary<string, int>();
 
         var enderecoAtual = existentes.ToDictionary(
             e => e.Id,
@@ -181,7 +204,23 @@ public class UnidadeImportService(
             }
             vistasNoArquivo[chave] = linha.Linha;
 
-            if (!indice.TryGetValue(chave, out var idExistente)) continue;
+            var cnes = linha.CodigoCnes?.Trim();
+            if (!string.IsNullOrEmpty(cnes))
+            {
+                if (cnesNoArquivo.TryGetValue(cnes, out var linhaDoCnes))
+                {
+                    linha.Erros.Add($"Código CNES {cnes} repetido na planilha (já aparece na linha {linhaDoCnes}).");
+                    continue;
+                }
+                cnesNoArquivo[cnes] = linha.Linha;
+            }
+
+            // O CNES vence a chave de nome/endereço: é o identificador oficial.
+            Guid idExistente;
+            if (!string.IsNullOrEmpty(cnes) && porCnes.TryGetValue(cnes, out var idPorCnes))
+                idExistente = idPorCnes;
+            else if (!indice.TryGetValue(chave, out idExistente))
+                continue;
 
             linha.UnidadeExistenteId = idExistente;
             var novoEndereco = normalizer.Normalizar(
@@ -212,5 +251,23 @@ public class UnidadeImportService(
         unidade.Uf = linha.Uf ?? unidade.Uf;
         unidade.Cep = linha.Cep ?? unidade.Cep;
         unidade.Telefone = linha.Telefone ?? unidade.Telefone;
+        unidade.CodigoCnes = linha.CodigoCnes ?? unidade.CodigoCnes;
+    }
+
+    /// <summary>
+    /// Grava as coordenadas que vieram na planilha. A unidade fica localizada sem
+    /// passar pelo geocodificador; a origem é "OUTRO" porque não é o Nominatim
+    /// nem uma correção manual (e é o que a restrição do banco aceita).
+    /// </summary>
+    private static void AplicarCoordenadasDaPlanilha(Location unidade, UnidadeImportRow linha, Guid loteId)
+    {
+        unidade.Latitude = linha.Latitude!.Value;
+        unidade.Longitude = linha.Longitude!.Value;
+        unidade.OrigemCoordenadas = OrigemCoordenadas.Outro;
+        unidade.StatusGeocodificacao = StatusGeocodificacao.Sucesso;
+        unidade.EnderecoGeocodificado = null;
+        unidade.PrecisaoLocalizacao = "Coordenadas informadas na planilha";
+        unidade.GeocodificadoEm = BrasiliaTime.Agora;
+        unidade.LoteImportacao = loteId;
     }
 }

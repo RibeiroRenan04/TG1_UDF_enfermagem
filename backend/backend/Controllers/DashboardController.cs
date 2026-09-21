@@ -12,7 +12,8 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class DashboardController(AppDbContext db, PendenciasService pendenciasService) : ControllerBase
+public class DashboardController(
+    AppDbContext db, PendenciasService pendenciasService, PainelGestaoService painelGestao) : ControllerBase
 {
     [HttpGet("stats")]
     public async Task<ActionResult<DashboardStatsDto>> GetStats()
@@ -118,6 +119,17 @@ public class DashboardController(AppDbContext db, PendenciasService pendenciasSe
             Groups = turmas
         });
     }
+
+    // ── Painel de gestão ──────────────────────────────────────────────────────
+    /// <summary>
+    /// Indicadores do professor e da coordenadora: presença de hoje, tendência das
+    /// últimas duas semanas, quem acumula turnos sem registro, progresso da carga
+    /// horária e o que falta configurar para o estágio funcionar.
+    /// </summary>
+    [HttpGet("gestao")]
+    [Authorize(Roles = Roles.Gestao)]
+    public async Task<ActionResult<PainelGestaoDto>> GetPainelGestao(CancellationToken ct) =>
+        Ok(await painelGestao.MontarAsync(ct));
 
     // ── Status pendentes ──────────────────────────────────────────────────────
     /// <summary>

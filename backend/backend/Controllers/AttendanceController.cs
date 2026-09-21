@@ -163,9 +163,9 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         // data em que o aluno não deveria estar em lugar algum.
         var dia = await programacao.ObterAsync(userId, DateOnly.FromDateTime(agora));
 
-        // Aluno ainda sem rodízio nem exceção não tem programação a contrariar: o
-        // registro segue pelo caminho antigo e cai em "pendente" para validação
-        // manual. Bloqueá-lo aqui só esconderia o cadastro que falta.
+        // Aluno ainda sem rodízio nem exceção não tem programação a contrariar: ele
+        // registra na unidade que escolher na tela — mas, como todo ponto, só
+        // dentro do raio dela (validado logo abaixo).
         var temProgramacao = dia.ScheduleId.HasValue || dia.ExcecaoId.HasValue;
 
         if (temProgramacao && dia.Modo == ModoAtividade.SemAtividade)
@@ -240,13 +240,36 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
                 locationId = dia.Local.Id,
                 locationName = dia.Local.Name
             });
+        // O ponto só existe dentro do raio de uma unidade. Sem unidade para comparar,
+        // não há raio — antes o registro passava sem checagem de distância nenhuma.
+        if (location == null)
+            return BadRequest(new
+            {
+                message = "Não há unidade definida para o seu ponto hoje, então a localização não pode ser "
+                        + "validada. Procure a coordenação para conferir o seu rodízio; se esteve em "
+                        + "atividade, registre uma irregularidade.",
+                code = "sem_unidade"
+            });
+
+        // Unidade sem localização confirmada (não encontrada, em revisão, pendente)
+        // tem coordenadas (0, 0) ou duvidosas: medir o raio contra elas recusava o
+        // aluno com "você está a 5.000 km", culpando-o por um erro de cadastro.
+        if (!location.LocalizacaoConfirmada)
+            return BadRequest(new
+            {
+                message = $"A unidade {location.Name} ainda não tem a localização confirmada no sistema, "
+                        + "então o ponto não pode ser validado pelo raio. Avise a coordenação; se esteve "
+                        + "em atividade, registre uma irregularidade.",
+                code = "unidade_sem_localizacao",
+                locationName = location.Name
+            });
+
         // Fora do raio o ponto não é registrado: o aluno precisa estar na unidade.
         // Quem tem um motivo legítimo (GPS falhando, atendimento externo) abre uma
         // irregularidade para análise, em vez de gravar um ponto inválido.
-        if (location != null)
         {
             var distancia = geo.HaversineMeters(dto.Latitude, dto.Longitude, location.Latitude, location.Longitude);
-            var precisaoGps = dto.AccuracyMeters.GetValueOrDefault(0);
+            var precisaoGps = ToleranciaGps(dto.AccuracyMeters);
             if (Math.Max(0, distancia - precisaoGps) > location.RadiusMeters)
             {
                 return BadRequest(new
@@ -355,10 +378,23 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
     // Tolerância (minutos) aplicada à janela do turno antes de marcar como pendente.
     private const int ToleranciaTurnoMin = 30;
 
+    /// <summary>Maior desconto, em metros, que a imprecisão do GPS pode dar à distância.</summary>
+    public const double ToleranciaGpsMaximaMetros = 50;
+
+    /// <summary>
+    /// Quanto da precisão informada pelo aparelho é descontado da distância. A
+    /// precisão vem do próprio celular e não tinha limite: um aparelho que dissesse
+    /// "precisão de 10 km" passava em qualquer raio. Valor negativo ou ausente
+    /// não desconta nada.
+    /// </summary>
+    public static double ToleranciaGps(double? precisaoInformada) =>
+        Math.Clamp(precisaoInformada.GetValueOrDefault(0), 0, ToleranciaGpsMaximaMetros);
+
     /// <summary>
     /// Validação inteligente do registro: combina distância (geofence, ajustada pela precisão do GPS),
     /// janela de horário do turno e a regra de sexta-feira (registro na instituição de ensino).
-    /// - Sem local definido → "pendente" (validação manual).
+    /// - Sem local definido → "pendente". Não acontece no registro: o POST já
+    ///   recusa ponto sem unidade ou com unidade sem localização confirmada.
     /// - Fora do raio OU sexta-feira fora da instituição → "irregular".
     /// - Dentro do raio, porém fora do horário do turno → "pendente".
     /// - Dentro do raio e dentro do horário → "aprovado".
@@ -382,7 +418,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         var motivos = new List<string>();
 
         // Distância efetiva considera a margem de erro do GPS (mais tolerante).
-        var precisao = accuracyMeters.GetValueOrDefault(0);
+        var precisao = ToleranciaGps(accuracyMeters);
         var distanciaEfetiva = Math.Max(0, distance - precisao);
         var foraDoRaio = distanciaEfetiva > location.RadiusMeters;
         if (foraDoRaio)

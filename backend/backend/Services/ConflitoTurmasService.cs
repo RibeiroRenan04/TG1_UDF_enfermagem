@@ -33,8 +33,50 @@ public class ConflitoTurmasService(AppDbContext db)
             .ToListAsync(ct);
         if (outrasTurmas.Count == 0) return null;
 
-        var atuais = await EscalasAsync(outrasTurmas, ct);
+        return PrimeiroConflito(novas, await EscalasAsync(outrasTurmas, ct));
+    }
 
+    /// <summary>
+    /// A mesma verificação de <see cref="VerificarAsync"/> para vários alunos de
+    /// uma vez, com três consultas no total em vez de três por aluno — é o que
+    /// torna viável vincular uma turma inteira de 100 alunos num clique.
+    /// Devolve só os alunos com conflito, cada um com o motivo.
+    /// </summary>
+    public async Task<Dictionary<Guid, string>> VerificarLoteAsync(
+        Guid groupId, IReadOnlyCollection<Guid> studentIds, CancellationToken ct = default)
+    {
+        var conflitos = new Dictionary<Guid, string>();
+        if (studentIds.Count == 0) return conflitos;
+
+        var novas = await EscalasAsync([groupId], ct);
+        if (novas.Count == 0) return conflitos;
+
+        var outrasPorAluno = (await db.GroupMemberships
+                .AsNoTracking()
+                .Where(m => studentIds.Contains(m.StudentId) && m.GroupId != groupId)
+                .Select(m => new { m.StudentId, m.GroupId })
+                .ToListAsync(ct))
+            .GroupBy(m => m.StudentId)
+            .ToDictionary(g => g.Key, g => g.Select(m => m.GroupId).ToHashSet());
+        if (outrasPorAluno.Count == 0) return conflitos;
+
+        var escalasDasOutras = (await EscalasAsync([.. outrasPorAluno.Values.SelectMany(g => g).Distinct()], ct))
+            .GroupBy(s => s.GroupId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var (alunoId, turmas) in outrasPorAluno)
+        {
+            var atuais = turmas.SelectMany(t => escalasDasOutras.GetValueOrDefault(t) ?? []).ToList();
+            var motivo = PrimeiroConflito(novas, atuais);
+            if (motivo != null) conflitos[alunoId] = motivo;
+        }
+
+        return conflitos;
+    }
+
+    /// <summary>Primeira sobreposição exata entre os rodízios novos e os atuais, explicada.</summary>
+    private static string? PrimeiroConflito(List<RotationSchedule> novas, List<RotationSchedule> atuais)
+    {
         foreach (var nova in novas)
         {
             var turnoNovo = Turnos.Normalizar(nova.Shift);

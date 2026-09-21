@@ -60,6 +60,9 @@ builder.Services.AddScoped<ProgramacaoService>();
 // O aluno pode cursar mais de uma turma: este serviço recusa apenas a agenda
 // impossível (mesmo turno, mesmos dias da semana, períodos sobrepostos).
 builder.Services.AddScoped<ConflitoTurmasService>();
+// Indicadores do painel do professor: programação de todos os alunos em lote.
+builder.Services.AddScoped<PainelGestaoService>();
+builder.Services.AddScoped<IrregularidadesPainelService>();
 
 // ── Geocodificação de unidades de saúde ───────────────────────────────────────
 // Toda a aplicação depende de IGeocodingService: trocar o Nominatim por outro

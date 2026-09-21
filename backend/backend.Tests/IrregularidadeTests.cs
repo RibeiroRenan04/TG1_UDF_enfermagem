@@ -22,7 +22,7 @@ public class IrregularidadeTests
     private static IrregularitiesController Montar(
         EstagioCheck.API.Data.AppDbContext db, Guid usuarioId, string papel = Roles.Aluno)
     {
-        var controller = new IrregularitiesController(db);
+        var controller = new IrregularitiesController(db, new IrregularidadesPainelService(db));
         var identidade = new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, usuarioId.ToString()),

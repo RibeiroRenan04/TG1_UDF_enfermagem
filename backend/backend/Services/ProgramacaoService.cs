@@ -59,7 +59,7 @@ public class ProgramacaoService(AppDbContext db)
     /// pendências percorrem um semestre inteiro dia a dia; carregar por dia
     /// transformaria uma abertura do painel em centenas de consultas.
     /// </summary>
-    private sealed record Contexto(
+    internal sealed record Contexto(
         ApplicationUser? Aluno,
         /// <summary>Todas as turmas do aluno: ele pode cursar mais de um rodízio ao mesmo tempo.</summary>
         List<Guid> GroupIds,
@@ -94,14 +94,67 @@ public class ProgramacaoService(AppDbContext db)
         return dias;
     }
 
-    private async Task<Contexto> CarregarAsync(Guid studentId, DateOnly de, DateOnly ate, CancellationToken ct)
+    private async Task<Contexto> CarregarAsync(Guid studentId, DateOnly de, DateOnly ate, CancellationToken ct) =>
+        (await CarregarContextosAsync([studentId], de, ate, ct)).Contextos[studentId];
+
+    /// <summary>
+    /// Programação de vários alunos num intervalo, lida em cinco consultas no
+    /// total — em vez de cinco por aluno. É o que permite ao painel do professor
+    /// saber quem deveria estar em estágio em cada dia sem abrir centenas de
+    /// consultas. A resolução de cada dia é a mesma do check-in.
+    /// </summary>
+    public async Task<ProgramacaoLote> CarregarLoteAsync(
+        IReadOnlyCollection<Guid> studentIds, DateOnly de, DateOnly ate, CancellationToken ct = default)
     {
-        var aluno = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == studentId, ct);
-        var groupIds = await db.GroupMemberships.AsNoTracking()
-            .Where(m => m.StudentId == studentId)
-            .Select(m => m.GroupId)
-            .Distinct()
+        var (contextos, entradas) = await CarregarContextosAsync(studentIds, de, ate, ct);
+        return new ProgramacaoLote(contextos, entradas);
+    }
+
+    /// <summary>Programação já carregada de um grupo de alunos, resolvida em memória.</summary>
+    public sealed class ProgramacaoLote
+    {
+        private readonly Dictionary<Guid, Contexto> _contextos;
+        private readonly Dictionary<(Guid Aluno, Guid Turma), DateOnly> _entradas;
+
+        internal ProgramacaoLote(Dictionary<Guid, Contexto> contextos, Dictionary<(Guid, Guid), DateOnly> entradas)
+        {
+            _contextos = contextos;
+            _entradas = entradas;
+        }
+
+        /// <summary>
+        /// O dia do aluno naquele turno, ou <c>null</c> quando ele não tem rodízio
+        /// no turno — ou ainda não estava na turma do rodízio naquela data (a
+        /// turma não cobra presença de antes de o aluno entrar nela).
+        /// </summary>
+        public ProgramacaoDia? NoTurno(Guid studentId, DateOnly data, string turno)
+        {
+            if (!_contextos.TryGetValue(studentId, out var ctx)) return null;
+
+            var escala = ctx.Escalas.FirstOrDefault(s =>
+                s.StartDate <= data && s.EndDate >= data && Turnos.Normalizar(s.Shift) == turno);
+            if (escala == null) return null;
+
+            if (_entradas.TryGetValue((studentId, escala.GroupId), out var entrada) && data < entrada)
+                return null;
+
+            return Resolver(ctx, data, turno);
+        }
+    }
+
+    private async Task<(Dictionary<Guid, Contexto> Contextos, Dictionary<(Guid, Guid), DateOnly> Entradas)>
+        CarregarContextosAsync(IReadOnlyCollection<Guid> studentIds, DateOnly de, DateOnly ate, CancellationToken ct)
+    {
+        var alunos = await db.Users.AsNoTracking()
+            .Where(u => studentIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, ct);
+
+        var vinculos = await db.GroupMemberships.AsNoTracking()
+            .Where(m => studentIds.Contains(m.StudentId))
+            .Select(m => new { m.StudentId, m.GroupId, m.CreatedAt })
             .ToListAsync(ct);
+
+        var groupIds = vinculos.Select(v => v.GroupId).Distinct().ToList();
 
         // Cursando dois rodízios ao mesmo tempo, o dia do aluno sai da união das
         // escalas das suas turmas; quem separa uma da outra é o turno.
@@ -129,14 +182,38 @@ public class ProgramacaoService(AppDbContext db)
                 .OrderBy(a => a.StartTime)
                 .ToListAsync(ct);
 
-        var participacoes = await db.RemoteActivityParticipations
-            .AsNoTracking()
-            .Where(p => p.StudentId == studentId
-                     && p.RemoteActivity.ActivityDate >= de && p.RemoteActivity.ActivityDate <= ate)
-            .Select(p => p.RemoteActivityId)
-            .ToListAsync(ct);
+        var participacoes = (await db.RemoteActivityParticipations
+                .AsNoTracking()
+                .Where(p => studentIds.Contains(p.StudentId)
+                         && p.RemoteActivity.ActivityDate >= de && p.RemoteActivity.ActivityDate <= ate)
+                .Select(p => new { p.StudentId, p.RemoteActivityId })
+                .ToListAsync(ct))
+            .GroupBy(p => p.StudentId)
+            .ToDictionary(g => g.Key, g => g.Select(p => p.RemoteActivityId).ToHashSet());
 
-        return new Contexto(aluno, groupIds, escalas, excecoes, atividades, [.. participacoes]);
+        var turmasPorAluno = vinculos
+            .GroupBy(v => v.StudentId)
+            .ToDictionary(g => g.Key, g => g.Select(v => v.GroupId).Distinct().ToList());
+
+        var contextos = new Dictionary<Guid, Contexto>();
+        foreach (var id in studentIds.Distinct())
+        {
+            var turmas = turmasPorAluno.GetValueOrDefault(id) ?? [];
+            contextos[id] = new Contexto(
+                alunos.GetValueOrDefault(id),
+                turmas,
+                [.. escalas.Where(s => turmas.Contains(s.GroupId))],
+                excecoes,
+                [.. atividades.Where(a => turmas.Contains(a.GroupId))],
+                participacoes.GetValueOrDefault(id) ?? []);
+        }
+
+        // O vínculo é gravado em UTC; o dia do estágio é o de Brasília.
+        var entradas = vinculos
+            .GroupBy(v => (v.StudentId, v.GroupId))
+            .ToDictionary(g => g.Key, g => DateOnly.FromDateTime(BrasiliaTime.DeUtc(g.Min(v => v.CreatedAt))));
+
+        return (contextos, entradas);
     }
 
     private static ProgramacaoDia Resolver(Contexto ctx, DateOnly data, string? turno)

@@ -100,6 +100,16 @@ public class UnidadesSaudeController(
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UnidadeSaudeDto>> Create([FromBody] CriarUnidadeSaudeDto dto)
     {
+        // Coordenada pela metade não localiza nada, e fora do intervalo (ou 0, 0)
+        // viraria uma unidade "confirmada" num lugar qualquer — com o raio do
+        // check-in medido a partir dali.
+        if (dto.Latitude.HasValue != dto.Longitude.HasValue)
+            return BadRequest(ErrosApi.Corpo(
+                "Informe latitude e longitude juntas, ou deixe as duas em branco para localizar pelo endereço.",
+                "latitude", "coordenada_incompleta"));
+        if (dto.Latitude.HasValue && Coordenadas.Validar(dto.Latitude.Value, dto.Longitude!.Value) is { } erroCoordenada)
+            return BadRequest(ErrosApi.Corpo(erroCoordenada, "latitude", "coordenada_invalida"));
+
         var unidade = new Location
         {
             Name = dto.Nome.Trim(),
@@ -293,6 +303,9 @@ public class UnidadesSaudeController(
         var unidade = await db.Locations.FirstOrDefaultAsync(l => l.Id == id);
         if (unidade == null) return NotFound(new { message = "Unidade não encontrada." });
 
+        var erro = Coordenadas.Validar(dto.Latitude, dto.Longitude);
+        if (erro != null) return BadRequest(ErrosApi.Corpo(erro, "latitude", "coordenada_invalida"));
+
         unidade.Latitude = dto.Latitude;
         unidade.Longitude = dto.Longitude;
         unidade.OrigemCoordenadas = OrigemCoordenadas.Manual;
@@ -450,8 +463,10 @@ public class UnidadesSaudeController(
         var linhas = new[]
         {
             string.Join(";", PlanilhaUnidadesReader.ColunasModelo),
-            "UBS 1 Asa Norte;UBS;SGAN 906;S/N;;Asa Norte;Brasília;DF;70790-060;(61) 3550-0000",
-            "UBS 2 Asa Sul;UBS;SGAS 612;S/N;;Asa Sul;Brasília;DF;70200-720;(61) 3550-0001"
+            // Latitude/Longitude/CodigoCnes são opcionais: a primeira linha já vem
+            // localizada; a segunda, sem coordenadas, é geocodificada pelo endereço.
+            "UBS 1 Asa Norte;UBS;SGAN 906;S/N;;Asa Norte;Brasília;DF;70790-060;(61) 3550-0000;-15.7401;-47.8829;",
+            "UBS 2 Asa Sul;UBS;SGAS 612;S/N;;Asa Sul;Brasília;DF;70200-720;(61) 3550-0001;;;"
         };
         var conteudo = "﻿" + string.Join("\r\n", linhas); // BOM: o Excel abre em UTF-8
         return File(System.Text.Encoding.UTF8.GetBytes(conteudo), "text/csv", "modelo-unidades-saude.csv");

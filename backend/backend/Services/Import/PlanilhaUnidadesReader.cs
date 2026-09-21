@@ -1,5 +1,6 @@
 using System.Text;
 using ClosedXML.Excel;
+using EstagioCheck.API.Models;
 using EstagioCheck.API.Services.Geocoding;
 
 namespace EstagioCheck.API.Services.Import;
@@ -28,8 +29,15 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
     public static readonly string[] ColunasObrigatorias = ["nome"];
 
     /// <summary>Cabeçalho oficial do modelo distribuído aos usuários.</summary>
+    /// <remarks>
+    /// Latitude, Longitude e CodigoCnes são opcionais. Com as coordenadas preenchidas
+    /// a unidade já entra localizada, sem passar pela geocodificação por endereço.
+    /// </remarks>
     public static readonly string[] ColunasModelo =
-        ["Nome", "Tipo", "Endereco", "Numero", "Complemento", "Bairro", "Cidade", "UF", "CEP", "Telefone"];
+    [
+        "Nome", "Tipo", "Endereco", "Numero", "Complemento", "Bairro", "Cidade", "UF", "CEP", "Telefone",
+        "Latitude", "Longitude", "CodigoCnes"
+    ];
 
     public UnidadeImportResult Ler(Stream conteudo, string nomeArquivo)
     {
@@ -251,11 +259,44 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
             Cidade = Campo("cidade", "municipio"),
             Uf = Campo("uf", "estado"),
             Cep = Campo("cep"),
-            Telefone = Campo("telefone", "fone", "contato")
+            Telefone = Campo("telefone", "fone", "contato"),
+            CodigoCnes = Campo("codigocnes", "cnes")
         };
 
+        LerCoordenadas(linha, valores);
         Validar(linha);
         return linha;
+    }
+
+    /// <summary>
+    /// Coordenadas opcionais. Lidas do valor cru, sem <see cref="Sanitizar"/>: toda
+    /// latitude do Brasil é negativa, e o sanitizador prefixa com apóstrofo o que
+    /// começa com "-" (proteção contra fórmula), o que estragaria o número. Aceita
+    /// ponto ou vírgula decimal, como o Excel em português grava.
+    /// </summary>
+    private static void LerCoordenadas(UnidadeImportRow linha, Dictionary<string, string> valores)
+    {
+        string? Cru(params string[] nomes)
+        {
+            foreach (var nome in nomes)
+                if (valores.TryGetValue(nome, out var v) && !string.IsNullOrWhiteSpace(v))
+                    return v.Trim().TrimStart('\'');
+            return null;
+        }
+
+        double? Numero(string? texto, string rotulo)
+        {
+            if (texto == null) return null;
+            var normalizado = texto.Replace(',', '.');
+            if (double.TryParse(normalizado, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var n))
+                return n;
+            linha.Erros.Add($"{rotulo} inválida: \"{texto}\".");
+            return null;
+        }
+
+        linha.Latitude = Numero(Cru("latitude", "lat"), "Latitude");
+        linha.Longitude = Numero(Cru("longitude", "long", "lon", "lng"), "Longitude");
     }
 
     private void Validar(UnidadeImportRow linha)
@@ -286,6 +327,20 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
         if (linha.Endereco?.Length > 300) linha.Erros.Add("Endereço excede 300 caracteres.");
         if (linha.Cidade?.Length > 100) linha.Erros.Add("Cidade excede 100 caracteres.");
         if (linha.Telefone?.Length > 30) linha.Erros.Add("Telefone excede 30 caracteres.");
+        // CNES no formato oficial de 7 dígitos: "10731" e "0010731" são a mesma
+        // unidade e precisam casar na checagem de duplicidade.
+        if (!string.IsNullOrWhiteSpace(linha.CodigoCnes))
+        {
+            var cnes = Cnes.Normalizar(linha.CodigoCnes);
+            if (cnes == null) linha.Erros.Add($"Código CNES inválido: \"{linha.CodigoCnes}\" (até 7 dígitos).");
+            else linha.CodigoCnes = cnes;
+        }
+
+        // Coordenada pela metade não localiza nada: ou vêm as duas, ou nenhuma.
+        if (linha.Latitude.HasValue != linha.Longitude.HasValue)
+            linha.Erros.Add("Informe latitude e longitude juntas, ou deixe as duas em branco.");
+        else if (linha.TemCoordenadas && Coordenadas.Validar(linha.Latitude!.Value, linha.Longitude!.Value) is { } erro)
+            linha.Erros.Add(erro);
     }
 
     /// <summary>

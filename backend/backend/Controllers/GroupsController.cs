@@ -132,6 +132,74 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
     }
 
     /// <summary>
+    /// Vincula e desvincula vários alunos desta turma numa única chamada — a
+    /// turma inteira de uma vez, marcada no modal por semestre e turno.
+    ///
+    /// Antes a tela disparava uma requisição por aluno: 100 alunos eram 100
+    /// chamadas, e a primeira recusa interrompia o resto no meio, deixando parte
+    /// gravada e parte não. Aqui o que é válido é gravado junto, e cada aluno
+    /// recusado (agenda incompatível, perfil errado) volta com o motivo.
+    /// As outras turmas dos alunos não são tocadas.
+    /// </summary>
+    [HttpPut("{id}/members")]
+    [Authorize(Roles = Roles.Supervisor)]
+    public async Task<ActionResult<VinculoLoteResultadoDto>> AtualizarMembros(Guid id, [FromBody] VinculoLoteDto dto)
+    {
+        if (!await db.StudentGroups.AnyAsync(g => g.Id == id))
+            return NotFound(new { message = "Turma não encontrada." });
+
+        var adicionar = (dto.Adicionar ?? []).Distinct().ToList();
+        // Quem aparece nas duas listas fica: marcar vence desmarcar.
+        var remover = (dto.Remover ?? []).Distinct().Where(r => !adicionar.Contains(r)).ToList();
+
+        var recusados = new List<VinculoRecusadoDto>();
+
+        var alunos = await db.Users
+            .Where(u => adicionar.Contains(u.Id))
+            .Select(u => new { u.Id, u.FullName, u.Role })
+            .ToDictionaryAsync(u => u.Id);
+
+        foreach (var idAluno in adicionar.Where(a => !alunos.ContainsKey(a)))
+            recusados.Add(new VinculoRecusadoDto(idAluno, null, "Aluno não encontrado."));
+        foreach (var a in alunos.Values.Where(a => a.Role != Roles.Aluno))
+            recusados.Add(new VinculoRecusadoDto(a.Id, a.FullName, "Apenas alunos podem ser vinculados a uma turma."));
+
+        var jaVinculados = (await db.GroupMemberships
+                .Where(m => m.GroupId == id && (adicionar.Contains(m.StudentId) || remover.Contains(m.StudentId)))
+                .ToListAsync())
+            .ToDictionary(m => m.StudentId);
+
+        var candidatos = alunos.Values
+            .Where(a => a.Role == Roles.Aluno && !jaVinculados.ContainsKey(a.Id))
+            .Select(a => a.Id)
+            .ToList();
+
+        var conflitosAgenda = await conflitos.VerificarLoteAsync(id, candidatos);
+        foreach (var (idAluno, motivo) in conflitosAgenda)
+            recusados.Add(new VinculoRecusadoDto(idAluno, alunos[idAluno].FullName, motivo));
+
+        var vinculados = 0;
+        foreach (var idAluno in candidatos.Where(c => !conflitosAgenda.ContainsKey(c)))
+        {
+            db.GroupMemberships.Add(new GroupMembership { StudentId = idAluno, GroupId = id });
+            vinculados++;
+        }
+
+        var desvinculados = 0;
+        foreach (var idAluno in remover)
+        {
+            if (!jaVinculados.TryGetValue(idAluno, out var vinculo)) continue;
+            db.GroupMemberships.Remove(vinculo);
+            desvinculados++;
+        }
+
+        await db.SaveChangesAsync();
+
+        return Ok(new VinculoLoteResultadoDto(vinculados, desvinculados,
+            [.. recusados.OrderBy(r => r.Nome, StringComparer.CurrentCultureIgnoreCase)]));
+    }
+
+    /// <summary>
     /// Desvincula o aluno desta turma. As demais turmas dele seguem intactas, e o
     /// histórico de presença do rodízio não é apagado.
     /// </summary>

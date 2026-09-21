@@ -193,6 +193,80 @@ public class MultiplasTurmasTests
         Assert.DoesNotContain(c.Id, turmas);
     }
 
+    private static VinculoLoteResultadoDto Resultado(ActionResult<VinculoLoteResultadoDto> r) =>
+        (VinculoLoteResultadoDto)((ObjectResult)r.Result!).Value!;
+
+    [Fact]
+    public async Task Turma_inteira_e_vinculada_numa_chamada_so()
+    {
+        using var db = TestSupport.NovoContexto();
+        var turma = new StudentGroup { Code = "T01", Name = "Saúde Coletiva" };
+        var alunos = Enumerable.Range(1, 100).Select(i => TestSupport.Aluno($"Aluno {i}", $"{50000000 + i}")).ToList();
+        db.Add(turma);
+        db.AddRange(alunos);
+        await db.SaveChangesAsync();
+
+        var r = Resultado(await MontarGrupos(db).AtualizarMembros(turma.Id,
+            new VinculoLoteDto([.. alunos.Select(a => a.Id)], null)));
+
+        Assert.Equal(100, r.Vinculados);
+        Assert.Empty(r.Recusados);
+        Assert.Equal(100, await db.GroupMemberships.CountAsync(m => m.GroupId == turma.Id));
+    }
+
+    [Fact]
+    public async Task Lote_grava_os_validos_e_devolve_cada_recusado_com_o_motivo()
+    {
+        // Antes: uma requisição por aluno, e a primeira recusa interrompia o resto.
+        using var db = TestSupport.NovoContexto();
+        var manha = new StudentGroup { Code = "T01", Name = "Saúde Coletiva" };
+        var outraManha = new StudentGroup { Code = "T02", Name = "Reposição" };
+        var ubs = TestSupport.Unidade("UBS Sobradinho");
+        var livre = TestSupport.Aluno("Aluno Livre", "11111111");
+        var ocupado = TestSupport.Aluno("Aluno Ocupado", "22222222");
+        var preceptor = TestSupport.Usuario(Roles.Preceptor, "Preceptor");
+        db.AddRange(manha, outraManha, ubs, livre, ocupado, preceptor);
+        db.AddRange(
+            Escala(manha, ubs, Turnos.Manha, new(2026, 9, 7), new(2026, 9, 18), 1, 2, 3),
+            Escala(outraManha, ubs, Turnos.Manha, new(2026, 9, 7), new(2026, 9, 18), 1, 2, 3));
+        db.Add(new GroupMembership { StudentId = ocupado.Id, GroupId = outraManha.Id });
+        await db.SaveChangesAsync();
+
+        var r = Resultado(await MontarGrupos(db).AtualizarMembros(manha.Id,
+            new VinculoLoteDto([livre.Id, ocupado.Id, preceptor.Id], null)));
+
+        Assert.Equal(1, r.Vinculados);
+        Assert.Equal(2, r.Recusados.Count);
+        Assert.Contains(r.Recusados, x => x.StudentId == ocupado.Id && x.Motivo.Contains("Conflito de agenda"));
+        Assert.Contains(r.Recusados, x => x.StudentId == preceptor.Id && x.Motivo.Contains("Apenas alunos"));
+        Assert.True(await db.GroupMemberships.AnyAsync(m => m.StudentId == livre.Id && m.GroupId == manha.Id));
+    }
+
+    [Fact]
+    public async Task Lote_desvincula_so_desta_turma_e_repetir_nao_duplica()
+    {
+        using var db = TestSupport.NovoContexto();
+        var t1 = new StudentGroup { Code = "T01", Name = "Saúde Coletiva" };
+        var t2 = new StudentGroup { Code = "T02", Name = "Estágio Hospitalar" };
+        var a = TestSupport.Aluno("Aluno A", "33333333");
+        var b = TestSupport.Aluno("Aluno B", "44444444");
+        db.AddRange(t1, t2, a, b);
+        db.AddRange(
+            new GroupMembership { StudentId = a.Id, GroupId = t1.Id },
+            new GroupMembership { StudentId = a.Id, GroupId = t2.Id });
+        await db.SaveChangesAsync();
+
+        var controller = MontarGrupos(db);
+        var r = Resultado(await controller.AtualizarMembros(t1.Id, new VinculoLoteDto([b.Id], [a.Id])));
+        var repetido = Resultado(await controller.AtualizarMembros(t1.Id, new VinculoLoteDto([b.Id], [a.Id])));
+
+        Assert.Equal((1, 1), (r.Vinculados, r.Desvinculados));
+        Assert.Equal((0, 0), (repetido.Vinculados, repetido.Desvinculados));
+        // O aluno A saiu de T01, mas continua em T02.
+        Assert.True(await db.GroupMemberships.AnyAsync(m => m.StudentId == a.Id && m.GroupId == t2.Id));
+        Assert.False(await db.GroupMemberships.AnyAsync(m => m.StudentId == a.Id && m.GroupId == t1.Id));
+    }
+
     [Fact]
     public async Task Programacao_do_dia_enxerga_o_rodizio_das_duas_turmas()
     {

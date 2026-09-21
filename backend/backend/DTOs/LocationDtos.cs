@@ -23,25 +23,3 @@ public record ImportBuscaSaudeDto(
     [Required] double Latitude,
     [Required] double Longitude
 );
-
-public record CreateLocationDto(
-    [Required, MaxLength(300)] string Name,
-    [MaxLength(500)] string? Address,
-    [Required] double Latitude,
-    [Required] double Longitude,
-    int RadiusMeters,
-    bool IsInstitution,
-    [MaxLength(5)] string ShiftStart,
-    [MaxLength(5)] string ShiftEnd
-);
-
-public record UpdateLocationDto(
-    [Required, MaxLength(300)] string Name,
-    [MaxLength(500)] string? Address,
-    [Required] double Latitude,
-    [Required] double Longitude,
-    int RadiusMeters,
-    bool IsInstitution,
-    [MaxLength(5)] string ShiftStart,
-    [MaxLength(5)] string ShiftEnd
-);

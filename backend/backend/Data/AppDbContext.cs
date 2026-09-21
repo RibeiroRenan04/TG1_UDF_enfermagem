@@ -120,6 +120,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Ignore(x => x.EnderecoCompleto);
             e.Ignore(x => x.CoordenadaManual);
             e.Ignore(x => x.TemCoordenadas);
+            e.Ignore(x => x.LocalizacaoConfirmada);
             e.HasIndex(x => x.CodigoCnes).IsUnique().HasFilter("\"CodigoCnes\" IS NOT NULL");
             // Índices dos filtros da tela de unidades.
             e.HasIndex(x => x.Name);

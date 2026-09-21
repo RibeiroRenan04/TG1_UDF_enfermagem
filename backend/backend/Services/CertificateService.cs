@@ -86,8 +86,11 @@ public class CertificateService(AppDbContext db)
         return certificados.OrderBy(c => c.StudentName).ToList();
     }
 
-    /// <summary>Soma as horas de dias com par check_in/check_out, ambos aprovados.</summary>
-    private static double CalcularHorasAprovadas(IEnumerable<RegistroHora> registros)
+    /// <summary>
+    /// Soma as horas de dias com par check_in/check_out, ambos aprovados. Pública
+    /// para o painel do professor usar a mesma conta do certificado.
+    /// </summary>
+    public static double CalcularHorasAprovadas(IEnumerable<RegistroHora> registros)
     {
         var porDia = registros
             .GroupBy(r => r.RecordedAt.Date)
@@ -122,5 +125,5 @@ public class CertificateService(AppDbContext db)
         return Convert.ToHexString(hash)[..10];
     }
 
-    private readonly record struct RegistroHora(string Type, string Status, DateTime RecordedAt);
+    public readonly record struct RegistroHora(string Type, string Status, DateTime RecordedAt);
 }

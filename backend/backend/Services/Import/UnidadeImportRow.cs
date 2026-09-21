@@ -17,6 +17,19 @@ public class UnidadeImportRow
     public string? Cep { get; set; }
     public string? Telefone { get; set; }
 
+    /// <summary>
+    /// Coordenadas informadas na própria planilha (opcionais, sempre em par). Vindas
+    /// de fonte oficial como o CNES, dispensam a geocodificação pelo endereço — que
+    /// é lenta (uma unidade por segundo) e erra com endereços de Brasília.
+    /// </summary>
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+
+    /// <summary>Código CNES da unidade (opcional). Também identifica duplicidade.</summary>
+    public string? CodigoCnes { get; set; }
+
+    public bool TemCoordenadas => Latitude.HasValue && Longitude.HasValue;
+
     public List<string> Erros { get; } = [];
 
     /// <summary>Unidade equivalente já cadastrada, quando houver.</summary>
