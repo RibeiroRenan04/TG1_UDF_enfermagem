@@ -487,14 +487,20 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         var hoje = DateOnly.FromDateTime(agora);
 
         // A escala ativa manda no turno; sem escala, vale o horário do relógio.
-        var membership = await db.GroupMemberships.FirstOrDefaultAsync(m => m.StudentId == studentId);
+        var turmas = await db.GroupMemberships
+            .Where(m => m.StudentId == studentId)
+            .Select(m => m.GroupId)
+            .Distinct()
+            .ToListAsync();
         var turnoDoRelogio = Turnos.DaHora(agora);
         var turno = turnoDoRelogio;
 
-        if (membership != null)
+        if (turmas.Count > 0)
         {
+            // O aluno pode estar em duas turmas: consideramos as escalas de todas,
+            // que é o que separa o rodízio da manhã do da tarde.
             var turnosHoje = await db.RotationSchedules
-                .Where(sc => sc.GroupId == membership.GroupId
+                .Where(sc => turmas.Contains(sc.GroupId)
                           && sc.StartDate <= hoje && sc.EndDate >= hoje)
                 .Select(sc => sc.Shift)
                 .ToListAsync();

@@ -30,9 +30,12 @@ public record AuthResponseDto(
     /// </summary>
     bool MustAcceptTerms = false,
     // Turma e turno do aluno: o menu lateral identifica a que turma ele pertence.
+    // GroupCode/GroupName trazem a turma principal; Groups, todas elas — o aluno
+    // pode cursar mais de um módulo de estágio no mesmo período.
     string? GroupCode = null,
     string? GroupName = null,
-    string? Shift = null
+    string? Shift = null,
+    List<UserGroupDto>? Groups = null
 );
 
 // ── Termo de responsabilidade ─────────────────────────────────────────────────

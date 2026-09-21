@@ -13,8 +13,8 @@ namespace EstagioCheck.API.Controllers;
 /// Calendário de exceções: feriados, recessos, estágios cancelados, trocas de
 /// local, dias que viraram remotos, atividades especiais e reposições.
 ///
-/// A exceção é cadastrada uma vez com a abrangência certa (faculdade, curso,
-/// turma, rodízio ou um aluno) e a programação de cada data a aplica sozinha —
+/// A exceção é cadastrada uma vez com a abrangência certa (faculdade, turma,
+/// rodízio ou um aluno) e a programação de cada data a aplica sozinha —
 /// não é preciso mexer aluno por aluno.
 /// </summary>
 [ApiController]
@@ -136,10 +136,6 @@ public class ExcecoesCalendarioController(AppDbContext db) : ControllerBase
                 if (!await db.Users.AnyAsync(u => u.Id == dto.StudentId.Value && u.Role == Roles.Aluno))
                     return "Aluno não encontrado.";
                 break;
-
-            case AbrangenciaExcecao.Curso:
-                if (string.IsNullOrWhiteSpace(dto.Course)) return "Informe o curso alcançado pela exceção.";
-                break;
         }
 
         // A troca de local só faz sentido com o local de destino.
@@ -170,7 +166,6 @@ public class ExcecoesCalendarioController(AppDbContext db) : ControllerBase
         excecao.GroupId = dto.Scope == AbrangenciaExcecao.Turma ? dto.GroupId : null;
         excecao.ScheduleId = dto.Scope == AbrangenciaExcecao.Rodizio ? dto.ScheduleId : null;
         excecao.StudentId = dto.Scope == AbrangenciaExcecao.Aluno ? dto.StudentId : null;
-        excecao.Course = dto.Scope == AbrangenciaExcecao.Curso ? dto.Course?.Trim() : null;
         excecao.LocationId = dto.LocationId;
         excecao.RemoteActivityId = dto.Type == TipoExcecao.Remoto ? dto.RemoteActivityId : null;
         excecao.Description = dto.Description.Trim();
@@ -202,7 +197,6 @@ public class ExcecoesCalendarioController(AppDbContext db) : ControllerBase
         PeriodLabel = x.Schedule?.PeriodLabel,
         StudentId = x.StudentId,
         StudentName = x.Student?.FullName,
-        Course = x.Course,
         LocationId = x.LocationId,
         LocationName = x.Location?.Name,
         RemoteActivityId = x.RemoteActivityId,

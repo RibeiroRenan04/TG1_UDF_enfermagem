@@ -26,25 +26,44 @@ public class PendenciasService(AppDbContext db, ProgramacaoService programacao)
 {
     public async Task<List<PendencyDto>> CalcularAsync(Guid studentId, CancellationToken ct = default)
     {
-        var membership = await db.GroupMemberships
+        var vinculos = await db.GroupMemberships
             .AsNoTracking()
-            .FirstOrDefaultAsync(m => m.StudentId == studentId, ct);
-        if (membership == null) return [];
+            .Where(m => m.StudentId == studentId)
+            .Select(m => new { m.GroupId, m.CreatedAt })
+            .ToListAsync(ct);
+        if (vinculos.Count == 0) return [];
+
+        var groupIds = vinculos.Select(v => v.GroupId).Distinct().ToList();
 
         var escalas = (await db.RotationSchedules
                 .AsNoTracking()
-                .Where(s => s.GroupId == membership.GroupId)
-                .Select(s => new { s.StartDate, s.EndDate })
+                .Where(s => groupIds.Contains(s.GroupId))
+                .Select(s => new { s.GroupId, s.StartDate, s.EndDate })
                 .ToListAsync(ct))
             .Where(s => RotationSchedule.PeriodoValido(s.StartDate, s.EndDate))
             .ToList();
         if (escalas.Count == 0) return [];
 
+        // Cada turma tem a sua janela: começa no maior entre o início do rodízio e
+        // a entrada do aluno naquela turma. Cursando duas, a varredura cobre da
+        // primeira janela aberta até a última fechada — o dia que não exigia nada
+        // de nenhuma delas é descartado adiante pela programação.
         // O vínculo é gravado em UTC; o dia do estágio é o de Brasília.
-        var entradaNaTurma = DateOnly.FromDateTime(BrasiliaTime.DeUtc(membership.CreatedAt));
+        var janelas = vinculos
+            .Select(v => new
+            {
+                v.GroupId,
+                Entrada = DateOnly.FromDateTime(BrasiliaTime.DeUtc(v.CreatedAt))
+            })
+            .SelectMany(v => escalas
+                .Where(s => s.GroupId == v.GroupId)
+                .Select(s => new { Inicio = Maior(s.StartDate, v.Entrada), Fim = s.EndDate }))
+            .Where(j => j.Fim >= j.Inicio)
+            .ToList();
+        if (janelas.Count == 0) return [];
 
-        var inicio = Maior(escalas.Min(s => s.StartDate), entradaNaTurma);
-        var fim = Menor(escalas.Max(s => s.EndDate), BrasiliaTime.Hoje.AddDays(-1));
+        var inicio = janelas.Min(j => j.Inicio);
+        var fim = Menor(janelas.Max(j => j.Fim), BrasiliaTime.Hoje.AddDays(-1));
         if (fim < inicio) return [];
 
         // Check-ins existentes, indexados por data: o dia remoto gera o mesmo par
@@ -61,6 +80,9 @@ public class PendenciasService(AppDbContext db, ProgramacaoService programacao)
         var dias = await programacao.ObterIntervaloAsync(studentId, inicio, fim, ct: ct);
 
         return [.. dias
+            // Só o dia dentro de alguma janela conta: o rodízio de uma turma não
+            // cobra presença de antes de o aluno entrar nela.
+            .Where(dia => janelas.Any(j => dia.Data >= j.Inicio && dia.Data <= j.Fim))
             .Where(dia => dia.ExigePonto && !checkIns.Contains(dia.Data))
             .Select(dia => new PendencyDto
             {

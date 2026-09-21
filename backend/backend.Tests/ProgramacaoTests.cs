@@ -32,7 +32,6 @@ public class ProgramacaoTests
         var db = TestSupport.NovoContexto();
 
         var aluno = TestSupport.Aluno();
-        aluno.Course = "Enfermagem";
 
         var grupo = new StudentGroup { Code = "T01", Name = "Grupo X" };
         var ubs = TestSupport.Unidade("UBS Sobradinho");
@@ -269,8 +268,13 @@ public class ProgramacaoTests
         Assert.Equal(TipoExcecao.Reposicao, dia.TipoExcecao);
     }
 
+    /// <summary>
+    /// A abrangência "curso" foi removida — o sistema atende só a Enfermagem, e
+    /// nela "curso" era o mesmo que "faculdade". Uma exceção gravada com escopo
+    /// desconhecido não pode alcançar ninguém por acidente.
+    /// </summary>
     [Fact]
-    public async Task Excecao_de_curso_alcanca_apenas_o_curso_informado()
+    public async Task Excecao_com_abrangencia_desconhecida_nao_alcanca_o_aluno()
     {
         var c = await MontarAsync();
         using var _ = c.Db;
@@ -278,11 +282,10 @@ public class ProgramacaoTests
         c.Db.Add(new CalendarException
         {
             Type = TipoExcecao.Recesso,
-            Scope = AbrangenciaExcecao.Curso,
-            Course = "Medicina",
+            Scope = "curso",
             StartDate = Segunda,
             EndDate = Segunda,
-            Description = "Recesso do curso de Medicina"
+            Description = "Recesso de um curso que não existe mais no sistema"
         });
         await c.Db.SaveChangesAsync();
 

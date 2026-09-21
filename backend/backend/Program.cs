@@ -57,6 +57,9 @@ builder.Services.AddScoped<BuscaSaudeService>();
 // Programação do dia: é ela que decide se o ponto é validado por localização,
 // por código de atividade remota ou se o dia não gera obrigação nenhuma.
 builder.Services.AddScoped<ProgramacaoService>();
+// O aluno pode cursar mais de uma turma: este serviço recusa apenas a agenda
+// impossível (mesmo turno, mesmos dias da semana, períodos sobrepostos).
+builder.Services.AddScoped<ConflitoTurmasService>();
 
 // ── Geocodificação de unidades de saúde ───────────────────────────────────────
 // Toda a aplicação depende de IGeocodingService: trocar o Nominatim por outro

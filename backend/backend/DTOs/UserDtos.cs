@@ -10,8 +10,6 @@ public class UserDto
     public string? Rgm { get; init; }
     public int? Semester { get; init; }
     public string? Shift { get; init; }
-    /// <summary>Curso do aluno — é por ele que uma exceção de curso o alcança.</summary>
-    public string? Course { get; init; }
     public string Role { get; init; } = string.Empty;
     public bool IsActive { get; init; }
     /// <summary>Aluno autorizado a chegar após o horário previsto de início.</summary>
@@ -21,12 +19,35 @@ public class UserDto
     public bool MustSetEmail { get; init; }
     /// <summary>Quando o usuário aceitou o termo de responsabilidade de acesso.</summary>
     public DateTime? TermsAcceptedAt { get; init; }
+    /// <summary>
+    /// Turma principal — a primeira em que o aluno entrou. Continua aqui porque
+    /// várias telas mostram uma turma só; a lista completa está em
+    /// <see cref="Groups"/>.
+    /// </summary>
     public Guid? GroupId { get; init; }
     public string? GroupCode { get; init; }
     public string? GroupName { get; init; }
+
+    /// <summary>
+    /// Todas as turmas do aluno. São várias quando ele cursa mais de um módulo de
+    /// estágio no mesmo período ou repõe carga horária em turma complementar.
+    /// </summary>
+    public List<UserGroupDto> Groups { get; init; } = [];
 }
 
-public record AssignGroupDto(Guid? GroupId);
+/// <summary>Turma do aluno, na forma enxuta que as telas de vínculo consomem.</summary>
+public class UserGroupDto
+{
+    public Guid Id { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Turmas do aluno. <c>GroupIds</c> define a lista completa; <c>GroupId</c>
+/// continua aceito e vale como lista de uma turma só.
+/// </summary>
+public record AssignGroupDto(Guid? GroupId, List<Guid>? GroupIds = null);
 
 // ── Permissão de atraso ───────────────────────────────────────────────────────
 public record LatePermissionDto(
@@ -37,12 +58,6 @@ public record LatePermissionDto(
 // ── Troca de turno do aluno ───────────────────────────────────────────────────
 public record UpdateShiftDto(
     [Required, MaxLength(10)] string Shift  // "manha" | "tarde" | "noite"
-);
-
-// ── Curso do aluno ────────────────────────────────────────────────────────────
-// Vazio limpa o curso: o aluno deixa de ser alcançado por exceções de curso.
-public record UpdateCourseDto(
-    [MaxLength(150)] string? Course
 );
 
 // ── Criação de preceptor / supervisor ─────────────────────────────────────────
@@ -60,9 +75,7 @@ public record BulkImportStudentDto(
     [Required, MaxLength(50)] string Rgm,
     [Required, MinLength(2), MaxLength(200)] string FullName,
     [Required] int Semester,
-    [Required, MaxLength(10)] string Shift,  // "manha" | "tarde" | "noite"
-    // Opcional: define o alcance das exceções de calendário por curso.
-    [MaxLength(150)] string? Course = null
+    [Required, MaxLength(10)] string Shift  // "manha" | "tarde" | "noite"
 );
 
 public record BulkImportRequestDto(

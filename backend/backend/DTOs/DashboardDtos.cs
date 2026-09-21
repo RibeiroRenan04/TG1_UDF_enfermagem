@@ -30,9 +30,16 @@ public class DashboardStatsDto
     public List<PendingStatusDto> PendingStatuses { get; init; } = [];
 
     // ── Identificação do aluno ────────────────────────────────────────────────
-    /// <summary>Código da turma de matrícula (ex.: "T02"). Nulo sem vínculo ou fora do perfil aluno.</summary>
+    /// <summary>
+    /// Código da turma de matrícula (ex.: "T02"), ou os códigos separados por
+    /// vírgula quando o aluno cursa mais de uma. Nulo sem vínculo ou fora do
+    /// perfil aluno.
+    /// </summary>
     public string? GroupCode { get; init; }
     public string? GroupName { get; init; }
+
+    /// <summary>Turmas do aluno, uma a uma — o painel lista todas as matrículas.</summary>
+    public List<UserGroupDto> Groups { get; init; } = [];
 
     /// <summary>Turno do aluno: "manha" | "tarde" | "noite".</summary>
     public string? Shift { get; init; }

@@ -163,7 +163,7 @@ public class RodizioValidacaoTests
         var (db, dto) = await MontarAsync(default, new DateOnly(2026, 10, 30));
         using var _ = db;
 
-        var r = await new GroupsController(db).CreateSchedule(dto);
+        var r = await new GroupsController(db, new ConflitoTurmasService(db)).CreateSchedule(dto);
 
         var falha = Assert.IsAssignableFrom<ObjectResult>(r.Result);
         Assert.Equal(400, falha.StatusCode);
@@ -177,7 +177,7 @@ public class RodizioValidacaoTests
         var (db, dto) = await MontarAsync(new DateOnly(1970, 1, 1), new DateOnly(2026, 10, 30));
         using var _ = db;
 
-        var falha = Assert.IsAssignableFrom<ObjectResult>((await new GroupsController(db).CreateSchedule(dto)).Result);
+        var falha = Assert.IsAssignableFrom<ObjectResult>((await new GroupsController(db, new ConflitoTurmasService(db)).CreateSchedule(dto)).Result);
         Assert.Equal(400, falha.StatusCode);
         Assert.Equal("startDate", Campo(falha));
     }
@@ -188,7 +188,7 @@ public class RodizioValidacaoTests
         var (db, dto) = await MontarAsync(new DateOnly(2026, 1, 1), new DateOnly(2027, 6, 30));
         using var _ = db;
 
-        var falha = Assert.IsAssignableFrom<ObjectResult>((await new GroupsController(db).CreateSchedule(dto)).Result);
+        var falha = Assert.IsAssignableFrom<ObjectResult>((await new GroupsController(db, new ConflitoTurmasService(db)).CreateSchedule(dto)).Result);
         Assert.Equal("endDate", Campo(falha));
     }
 
@@ -203,7 +203,7 @@ public class RodizioValidacaoTests
             Days = [new CriarDiaRodizioDto((int)DayOfWeek.Saturday, ModoAtividade.Presencial, null, null)]
         };
 
-        var r = await new GroupsController(db).CreateSchedule(comSabado);
+        var r = await new GroupsController(db, new ConflitoTurmasService(db)).CreateSchedule(comSabado);
 
         var ok = Assert.IsType<OkObjectResult>(r.Result);
         var escala = Assert.IsType<ScheduleDto>(ok.Value);
@@ -229,7 +229,7 @@ public class ConclusaoAlunoTests
         db.Add(aluno);
         await db.SaveChangesAsync();
 
-        var controller = new UsersController(db);
+        var controller = new UsersController(db, new ConflitoTurmasService(db));
 
         var concluido = Assert.IsType<OkObjectResult>((await controller.Concluir(aluno.Id)).Result);
         Assert.False(Assert.IsType<UserDto>(concluido.Value).IsActive);
@@ -253,7 +253,7 @@ public class ConclusaoAlunoTests
         db.Add(preceptor);
         await db.SaveChangesAsync();
 
-        var r = await new UsersController(db).Concluir(preceptor.Id);
+        var r = await new UsersController(db, new ConflitoTurmasService(db)).Concluir(preceptor.Id);
 
         Assert.IsType<BadRequestObjectResult>(r.Result);
         Assert.True(db.Users.Single().IsActive);

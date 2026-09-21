@@ -231,14 +231,14 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         [FromQuery] DateOnly? de, [FromQuery] DateOnly? ate)
     {
         var userId = UsuarioAtual();
-        var membership = await db.GroupMemberships.FirstOrDefaultAsync(m => m.StudentId == userId);
-        if (membership == null) return Ok(new List<AtividadeRemotaAlunoDto>());
+        var turmas = await TurmasDoAlunoAsync(userId);
+        if (turmas.Count == 0) return Ok(new List<AtividadeRemotaAlunoDto>());
 
         var inicio = de ?? BrasiliaTime.Hoje.AddDays(-30);
         var fim = ate ?? BrasiliaTime.Hoje.AddDays(30);
 
         var atividades = await db.RemoteActivities
-            .Where(a => a.GroupId == membership.GroupId
+            .Where(a => turmas.Contains(a.GroupId)
                      && a.ActivityDate >= inicio && a.ActivityDate <= fim)
             .OrderByDescending(a => a.ActivityDate)
             .ThenBy(a => a.StartTime)
@@ -267,8 +267,8 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         if (codigo.Length == 0)
             return BadRequest(new { message = "Informe o código de presença.", code = "codigo_vazio" });
 
-        var membership = await db.GroupMemberships.FirstOrDefaultAsync(m => m.StudentId == userId);
-        if (membership == null)
+        var turmas = await TurmasDoAlunoAsync(userId);
+        if (turmas.Count == 0)
             return BadRequest(new
             {
                 message = "Você não está vinculado a nenhuma turma. Procure a coordenação.",
@@ -295,7 +295,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
 
         // Um código de outro grupo existe, mas não é do aluno: a mensagem precisa
         // dizer isso, e não "código inválido".
-        var atividade = atividades.FirstOrDefault(a => a.GroupId == membership.GroupId);
+        var atividade = atividades.FirstOrDefault(a => turmas.Contains(a.GroupId));
         if (atividade == null)
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
@@ -498,6 +498,17 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
             .Where(p => p.StudentId == studentId && atividadeIds.Contains(p.RemoteActivityId))
             .ToDictionaryAsync(p => p.RemoteActivityId);
     }
+
+    /// <summary>
+    /// Turmas do aluno. São várias porque ele pode cursar mais de um rodízio ao
+    /// mesmo tempo — a atividade remota de qualquer uma delas é dele.
+    /// </summary>
+    private async Task<List<Guid>> TurmasDoAlunoAsync(Guid studentId) =>
+        await db.GroupMemberships
+            .Where(m => m.StudentId == studentId)
+            .Select(m => m.GroupId)
+            .Distinct()
+            .ToListAsync();
 
     private Guid UsuarioAtual() => Guid.Parse(
         User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);

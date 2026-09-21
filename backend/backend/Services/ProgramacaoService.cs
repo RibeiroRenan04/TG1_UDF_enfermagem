@@ -61,7 +61,8 @@ public class ProgramacaoService(AppDbContext db)
     /// </summary>
     private sealed record Contexto(
         ApplicationUser? Aluno,
-        Guid? GroupId,
+        /// <summary>Todas as turmas do aluno: ele pode cursar mais de um rodízio ao mesmo tempo.</summary>
+        List<Guid> GroupIds,
         List<RotationSchedule> Escalas,
         List<CalendarException> Excecoes,
         List<RemoteActivity> Atividades,
@@ -96,18 +97,21 @@ public class ProgramacaoService(AppDbContext db)
     private async Task<Contexto> CarregarAsync(Guid studentId, DateOnly de, DateOnly ate, CancellationToken ct)
     {
         var aluno = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == studentId, ct);
-        var groupId = await db.GroupMemberships.AsNoTracking()
+        var groupIds = await db.GroupMemberships.AsNoTracking()
             .Where(m => m.StudentId == studentId)
-            .Select(m => (Guid?)m.GroupId)
-            .FirstOrDefaultAsync(ct);
+            .Select(m => m.GroupId)
+            .Distinct()
+            .ToListAsync(ct);
 
-        List<RotationSchedule> escalas = groupId == null
+        // Cursando dois rodízios ao mesmo tempo, o dia do aluno sai da união das
+        // escalas das suas turmas; quem separa uma da outra é o turno.
+        List<RotationSchedule> escalas = groupIds.Count == 0
             ? []
             : await db.RotationSchedules
                 .AsNoTracking()
                 .Include(s => s.Location)
                 .Include(s => s.Days).ThenInclude(d => d.Location)
-                .Where(s => s.GroupId == groupId && s.StartDate <= ate && s.EndDate >= de)
+                .Where(s => groupIds.Contains(s.GroupId) && s.StartDate <= ate && s.EndDate >= de)
                 .ToListAsync(ct);
 
         var excecoes = await db.CalendarExceptions
@@ -116,11 +120,11 @@ public class ProgramacaoService(AppDbContext db)
             .Where(x => x.StartDate <= ate && x.EndDate >= de)
             .ToListAsync(ct);
 
-        List<RemoteActivity> atividades = groupId == null
+        List<RemoteActivity> atividades = groupIds.Count == 0
             ? []
             : await db.RemoteActivities
                 .AsNoTracking()
-                .Where(a => a.Ativo && a.GroupId == groupId
+                .Where(a => a.Ativo && groupIds.Contains(a.GroupId)
                          && a.ActivityDate >= de && a.ActivityDate <= ate)
                 .OrderBy(a => a.StartTime)
                 .ToListAsync(ct);
@@ -132,7 +136,7 @@ public class ProgramacaoService(AppDbContext db)
             .Select(p => p.RemoteActivityId)
             .ToListAsync(ct);
 
-        return new Contexto(aluno, groupId, escalas, excecoes, atividades, [.. participacoes]);
+        return new Contexto(aluno, groupIds, escalas, excecoes, atividades, [.. participacoes]);
     }
 
     private static ProgramacaoDia Resolver(Contexto ctx, DateOnly data, string? turno)
@@ -211,7 +215,7 @@ public class ProgramacaoService(AppDbContext db)
     // ── 3: exceções do calendário ─────────────────────────────────────────────
     /// <summary>
     /// Exceção que vale para o aluno naquela data. Havendo mais de uma, vence a de
-    /// abrangência mais específica (aluno, rodízio, turma, curso, faculdade) e,
+    /// abrangência mais específica (aluno, rodízio, turma, faculdade) e,
     /// no empate, a cadastrada por último.
     /// </summary>
     private static CalendarException? ExcecaoAplicavel(
@@ -219,19 +223,17 @@ public class ProgramacaoService(AppDbContext db)
         ctx.Excecoes
             .Where(x => x.AlcancaData(data))
             .Where(x => x.Shift == null || Turnos.Normalizar(x.Shift) == turno)
-            .Where(x => Alcanca(x, ctx.Aluno, ctx.GroupId, scheduleId))
+            .Where(x => Alcanca(x, ctx.Aluno, ctx.GroupIds, scheduleId))
             .OrderByDescending(x => Models.AbrangenciaExcecao.Especificidade(x.Scope))
             .ThenByDescending(x => x.CreatedAt)
             .FirstOrDefault();
 
-    private static bool Alcanca(CalendarException x, ApplicationUser? aluno, Guid? groupId, Guid? scheduleId)
+    private static bool Alcanca(CalendarException x, ApplicationUser? aluno, List<Guid> groupIds, Guid? scheduleId)
         => x.Scope switch
         {
             Models.AbrangenciaExcecao.Aluno => aluno != null && x.StudentId == aluno.Id,
             Models.AbrangenciaExcecao.Rodizio => scheduleId != null && x.ScheduleId == scheduleId,
-            Models.AbrangenciaExcecao.Turma => groupId != null && x.GroupId == groupId,
-            Models.AbrangenciaExcecao.Curso => !string.IsNullOrWhiteSpace(x.Course)
-                && string.Equals(x.Course, aluno?.Course, StringComparison.OrdinalIgnoreCase),
+            Models.AbrangenciaExcecao.Turma => x.GroupId != null && groupIds.Contains(x.GroupId.Value),
             Models.AbrangenciaExcecao.Faculdade => true,
             _ => false
         };

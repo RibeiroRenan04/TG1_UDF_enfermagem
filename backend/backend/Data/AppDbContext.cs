@@ -44,7 +44,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Shift).HasColumnName("Turno").HasMaxLength(10);
             e.Property(x => x.Phone).HasColumnName("Telefone").HasMaxLength(30);
             e.Property(x => x.Institution).HasColumnName("Instituicao").HasMaxLength(200);
-            e.Property(x => x.Course).HasColumnName("Curso").HasMaxLength(150);
             e.Property(x => x.AllowLateArrival).HasColumnName("PermissaoAtraso").HasDefaultValue(false);
             e.Property(x => x.LateArrivalNote).HasColumnName("ObservacaoAtraso");
             e.Property(x => x.TermsAcceptedAt).HasColumnName("TermoAceitoEm");
@@ -152,10 +151,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.StudentId).HasColumnName("IdEstudante");
             e.Property(x => x.GroupId).HasColumnName("IdGrupo");
             e.Property(x => x.CreatedAt).HasColumnName("CriadoEm");
-            e.HasIndex(x => x.StudentId).IsUnique(); // 1 aluno → 1 grupo
+            // O aluno pode estar em mais de uma turma (dois módulos de estágio no
+            // mesmo período, reposição de carga horária): o que não se repete é o
+            // par aluno + turma.
+            e.HasIndex(x => new { x.StudentId, x.GroupId }).IsUnique();
+            e.HasIndex(x => x.StudentId);
             e.HasOne(x => x.Student)
-             .WithOne(u => u.GroupMembership)
-             .HasForeignKey<GroupMembership>(x => x.StudentId)
+             .WithMany(u => u.GroupMemberships)
+             .HasForeignKey(x => x.StudentId)
              .OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Group)
              .WithMany(g => g.Memberships)
@@ -541,7 +544,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.GroupId).HasColumnName("IdGrupo");
             e.Property(x => x.ScheduleId).HasColumnName("IdEscala");
             e.Property(x => x.StudentId).HasColumnName("IdEstudante");
-            e.Property(x => x.Course).HasColumnName("Curso").HasMaxLength(150);
             e.Property(x => x.LocationId).HasColumnName("IdLocal");
             e.Property(x => x.RemoteActivityId).HasColumnName("IdAtividadeRemota");
             e.Property(x => x.Description).HasColumnName("Descricao").HasMaxLength(300);

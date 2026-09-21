@@ -8,8 +8,8 @@ namespace EstagioCheck.API.Models;
 /// atividade especial ou reposição.
 ///
 /// A exceção nunca é gravada aluno a aluno: ela tem uma abrangência (faculdade,
-/// curso, turma, rodízio ou um aluno específico) e a programação de cada data
-/// aplica a mais específica que alcança aquele aluno.
+/// turma, rodízio ou um aluno específico) e a programação de cada data aplica a
+/// mais específica que alcança aquele aluno.
 /// </summary>
 public class CalendarException
 {
@@ -33,9 +33,6 @@ public class CalendarException
     public Guid? GroupId { get; set; }
     public Guid? ScheduleId { get; set; }
     public Guid? StudentId { get; set; }
-
-    /// <summary>Curso alcançado quando a abrangência é "curso".</summary>
-    public string? Course { get; set; }
 
     // ── Substituição da programação ───────────────────────────────────────────
     /// <summary>Unidade que passa a valer quando o tipo é troca de local.</summary>
@@ -101,29 +98,26 @@ public static class TipoExcecao
 public static class AbrangenciaExcecao
 {
     public const string Faculdade = "faculdade";
-    public const string Curso = "curso";
     public const string Turma = "turma";
     public const string Rodizio = "rodizio";
     public const string Aluno = "aluno";
 
-    public static readonly string[] Todas = [Faculdade, Curso, Turma, Rodizio, Aluno];
+    public static readonly string[] Todas = [Faculdade, Turma, Rodizio, Aluno];
 
     public static bool Valida(string? escopo) => escopo != null && Todas.Contains(escopo);
 
     /// <summary>Quanto maior, mais específica — e mais forte na hora de decidir o dia.</summary>
     public static int Especificidade(string? escopo) => escopo switch
     {
-        Aluno => 4,
-        Rodizio => 3,
-        Turma => 2,
-        Curso => 1,
+        Aluno => 3,
+        Rodizio => 2,
+        Turma => 1,
         _ => 0
     };
 
     public static string Rotulo(string? escopo) => escopo switch
     {
         Faculdade => "Toda a faculdade",
-        Curso => "Curso",
         Turma => "Turma",
         Rodizio => "Rodízio",
         Aluno => "Aluno específico",

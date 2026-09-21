@@ -11,7 +11,7 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class GroupsController(AppDbContext db) : ControllerBase
+public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) : ControllerBase
 {
     private static readonly string[] TurnosValidos = ["manha", "tarde", "noite"];
     private static readonly string[] AtividadesValidas = ["gestao", "pic", "assistencia", "outro"];
@@ -99,6 +99,57 @@ public class GroupsController(AppDbContext db) : ControllerBase
         return Ok(members);
     }
 
+    /// <summary>
+    /// Vincula um aluno à turma sem mexer nas outras turmas dele — é assim que o
+    /// mesmo discente cursa dois módulos de estágio no mesmo período. Repetir a
+    /// chamada não cria vínculo duplicado.
+    ///
+    /// A única recusa é a agenda impossível: outro rodízio dele no mesmo turno,
+    /// nos mesmos dias da semana e com período sobreposto.
+    /// </summary>
+    [HttpPost("{id}/members/{studentId}")]
+    [Authorize(Roles = Roles.Supervisor)]
+    public async Task<IActionResult> AddMember(Guid id, Guid studentId)
+    {
+        if (!await db.StudentGroups.AnyAsync(g => g.Id == id))
+            return NotFound(new { message = "Turma não encontrada." });
+
+        var aluno = await db.Users.FirstOrDefaultAsync(u => u.Id == studentId);
+        if (aluno == null) return NotFound(new { message = "Aluno não encontrado." });
+        if (aluno.Role != Roles.Aluno)
+            return BadRequest(ErrosApi.Corpo("Apenas alunos podem ser vinculados a uma turma."));
+
+        if (await db.GroupMemberships.AnyAsync(m => m.StudentId == studentId && m.GroupId == id))
+            return NoContent();
+
+        var conflito = await conflitos.VerificarAsync(studentId, id);
+        if (conflito != null)
+            return Conflict(ErrosApi.Corpo(conflito, "groupId", "conflito_agenda"));
+
+        db.GroupMemberships.Add(new GroupMembership { StudentId = studentId, GroupId = id });
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Desvincula o aluno desta turma. As demais turmas dele seguem intactas, e o
+    /// histórico de presença do rodízio não é apagado.
+    /// </summary>
+    [HttpDelete("{id}/members/{studentId}")]
+    [Authorize(Roles = Roles.Supervisor)]
+    public async Task<IActionResult> RemoveMember(Guid id, Guid studentId)
+    {
+        var vinculo = await db.GroupMemberships
+            .FirstOrDefaultAsync(m => m.StudentId == studentId && m.GroupId == id);
+
+        // Sem vínculo, o estado já é o desejado — repetir a remoção não é erro.
+        if (vinculo == null) return NoContent();
+
+        db.GroupMemberships.Remove(vinculo);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
     // ── Schedules ──────────────────────────────────────────────────────────────
     [HttpGet("schedules")]
     public async Task<ActionResult<List<ScheduleDto>>> GetSchedules()
@@ -181,13 +232,11 @@ public class GroupsController(AppDbContext db) : ControllerBase
         schedule.RequiredHours = dto.RequiredHours;
         schedule.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
 
-        // A programação semanal é substituída inteira: enviar a lista vazia volta o
-        // rodízio ao padrão (todo dia útil presencial no local principal).
-        db.RotationDaySchedules.RemoveRange(schedule.Days);
-        schedule.Days.Clear();
-        AplicarDias(schedule, dto.Days);
+        // A programação semanal é reconciliada dia a dia: enviar a lista vazia
+        // volta o rodízio ao padrão (todo dia útil presencial no local principal).
+        ReconciliarDias(schedule, dto.Days);
 
-        await db.SaveChangesAsync();
+        await SalvarProgramacaoAsync();
 
         return Ok(MapSchedule(await RecarregarAsync(id)));
     }
@@ -199,7 +248,7 @@ public class GroupsController(AppDbContext db) : ControllerBase
         var schedule = await db.RotationSchedules.FindAsync(id);
         if (schedule == null) return NotFound(new { message = "Rodízio não encontrado. Ele pode ter sido excluído." });
         db.RotationSchedules.Remove(schedule);
-        await db.SaveChangesAsync();
+        await SalvarProgramacaoAsync();
         return NoContent();
     }
 
@@ -347,6 +396,67 @@ public class GroupsController(AppDbContext db) : ControllerBase
                 LocationId = modo == ModoAtividade.Presencial ? dia.LocationId : null,
                 Notes = string.IsNullOrWhiteSpace(dia.Notes) ? null : dia.Notes.Trim()
             });
+        }
+    }
+
+    /// <summary>
+    /// Ajusta a programação já gravada à que veio do formulário: o dia que
+    /// permanece é atualizado, o que saiu é removido e o que entrou é inserido.
+    ///
+    /// Antes a edição apagava todos os dias e inseria todos de novo. Salvar duas
+    /// vezes em sequência (o clique duplo no botão) fazia a segunda gravação
+    /// tentar apagar linhas que a primeira já tinha apagado; o EF trata "apaguei
+    /// zero linhas" como edição concorrente e a tela acusava alteração por outra
+    /// pessoa, sem que ninguém mais estivesse editando. Atualizando o que já
+    /// existe, a segunda gravação apenas repete o mesmo resultado.
+    /// </summary>
+    private void ReconciliarDias(RotationSchedule schedule, List<CriarDiaRodizioDto>? dias)
+    {
+        var desejados = (dias ?? [])
+            .GroupBy(d => d.DayOfWeek)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        foreach (var atual in schedule.Days.ToList())
+        {
+            if (!desejados.TryGetValue(atual.DayOfWeek, out var dia))
+            {
+                db.RotationDaySchedules.Remove(atual);
+                schedule.Days.Remove(atual);
+                continue;
+            }
+
+            var modo = ModoAtividade.Normalizar(dia.Mode) ?? ModoAtividade.Presencial;
+            atual.Mode = modo;
+            atual.LocationId = modo == ModoAtividade.Presencial ? dia.LocationId : null;
+            atual.Notes = string.IsNullOrWhiteSpace(dia.Notes) ? null : dia.Notes.Trim();
+            desejados.Remove(atual.DayOfWeek);
+        }
+
+        AplicarDias(schedule, [.. desejados.Values]);
+    }
+
+    /// <summary>
+    /// Grava a alocação tolerando a linha que sumiu entre a leitura e a escrita.
+    ///
+    /// Sem token de versão nas entidades, a única origem de
+    /// <see cref="DbUpdateConcurrencyException"/> aqui é um DELETE que não
+    /// encontrou a linha — ou seja, alguém já a removeu e o estado desejado já
+    /// vale. Isso não é conflito de edição: desistimos só daquela remoção e
+    /// gravamos o resto, em vez de recusar a alocação inteira.
+    /// </summary>
+    private async Task SalvarProgramacaoAsync()
+    {
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException ex)
+            when (ex.Entries.All(e => e.State == EntityState.Deleted))
+        {
+            foreach (var entry in ex.Entries)
+                entry.State = EntityState.Detached;
+
+            await db.SaveChangesAsync();
         }
     }
 

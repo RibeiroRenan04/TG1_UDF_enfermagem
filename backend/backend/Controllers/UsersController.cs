@@ -1,6 +1,7 @@
 using EstagioCheck.API.Data;
 using EstagioCheck.API.DTOs;
 using EstagioCheck.API.Models;
+using EstagioCheck.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,13 +15,13 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = Roles.Gestao)]
-public class UsersController(AppDbContext db) : ControllerBase
+public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<UserDto>>> GetAll()
     {
         var users = await db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .OrderBy(u => u.FullName)
             .ToListAsync();
 
@@ -35,7 +36,7 @@ public class UsersController(AppDbContext db) : ControllerBase
         [FromQuery] bool? isActive)
     {
         var query = db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .Where(u => u.Role == "aluno");
 
         if (semester.HasValue)
@@ -78,31 +79,52 @@ public class UsersController(AppDbContext db) : ControllerBase
         return Ok(new { id = user.Id, isActive = user.IsActive });
     }
 
+    /// <summary>
+    /// Define as turmas do aluno. <c>GroupIds</c> traz a lista completa — o que
+    /// não vier nela é desvinculado, o que já estava é mantido. <c>GroupId</c>
+    /// continua aceito e vale como lista de uma turma só (nulo desvincula de
+    /// todas).
+    ///
+    /// Vincular a uma turma nova não desfaz as demais: o aluno pode cursar dois
+    /// módulos de estágio ao mesmo tempo. O que o sistema recusa é a agenda
+    /// impossível — mesmo turno, mesmos dias da semana e períodos sobrepostos.
+    /// </summary>
     [HttpPatch("{id}/assign-group")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> AssignGroup(Guid id, [FromBody] AssignGroupDto dto)
     {
         var user = await db.Users
-            .Include(u => u.GroupMembership)
+            .Include(u => u.GroupMemberships)
             .FirstOrDefaultAsync(u => u.Id == id);
 
         if (user == null) return NotFound();
         if (user.Role != "aluno")
             return BadRequest(new { message = "Apenas alunos podem ser atribuídos a grupos." });
 
-        if (user.GroupMembership != null)
-            db.GroupMemberships.Remove(user.GroupMembership);
+        var desejadas = (dto.GroupIds ?? (dto.GroupId.HasValue ? [dto.GroupId.Value] : []))
+            .Distinct()
+            .ToList();
 
-        if (dto.GroupId.HasValue)
+        var existentes = await db.StudentGroups
+            .Where(g => desejadas.Contains(g.Id))
+            .Select(g => g.Id)
+            .ToListAsync();
+
+        if (existentes.Count != desejadas.Count)
+            return NotFound(new { message = "Grupo não encontrado." });
+
+        foreach (var vinculo in user.GroupMemberships.Where(m => !desejadas.Contains(m.GroupId)).ToList())
+            db.GroupMemberships.Remove(vinculo);
+
+        var jaVinculadas = user.GroupMemberships.Select(m => m.GroupId).ToHashSet();
+
+        foreach (var groupId in desejadas.Where(g => !jaVinculadas.Contains(g)))
         {
-            var group = await db.StudentGroups.FindAsync(dto.GroupId.Value);
-            if (group == null) return NotFound(new { message = "Grupo não encontrado." });
+            var conflito = await conflitos.VerificarAsync(id, groupId);
+            if (conflito != null)
+                return Conflict(ErrosApi.Corpo(conflito, "groupId", "conflito_agenda"));
 
-            db.GroupMemberships.Add(new GroupMembership
-            {
-                StudentId = id,
-                GroupId = dto.GroupId.Value
-            });
+            db.GroupMemberships.Add(new GroupMembership { StudentId = id, GroupId = groupId });
         }
 
         await db.SaveChangesAsync();
@@ -120,7 +142,7 @@ public class UsersController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<UserDto>> SetLatePermission(Guid id, [FromBody] LatePermissionDto dto)
     {
         var user = await db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .FirstOrDefaultAsync(u => u.Id == id);
 
         if (user == null) return NotFound();
@@ -151,7 +173,7 @@ public class UsersController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = "Turno deve ser 'manha', 'tarde' ou 'noite'." });
 
         var user = await db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .FirstOrDefaultAsync(u => u.Id == id);
 
         if (user == null) return NotFound();
@@ -163,46 +185,6 @@ public class UsersController(AppDbContext db) : ControllerBase
 
         await db.SaveChangesAsync();
         return Ok(MapToDto(user));
-    }
-
-    // ── Curso do aluno ────────────────────────────────────────────────────────
-    /// <summary>
-    /// Define o curso do aluno. É por ele que uma exceção de calendário com
-    /// abrangência "curso" (um recesso só da Enfermagem, por exemplo) alcança o
-    /// aluno sem precisar listar turma por turma.
-    /// </summary>
-    [HttpPatch("{id}/course")]
-    [Authorize(Roles = Roles.Supervisor)]
-    public async Task<ActionResult<UserDto>> UpdateCourse(Guid id, [FromBody] UpdateCourseDto dto)
-    {
-        var user = await db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
-            .FirstOrDefaultAsync(u => u.Id == id);
-
-        if (user == null) return NotFound();
-
-        user.Course = string.IsNullOrWhiteSpace(dto.Course) ? null : dto.Course.Trim();
-        user.UpdatedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync();
-        return Ok(MapToDto(user));
-    }
-
-    /// <summary>
-    /// Cursos já cadastrados. Alimenta a lista da tela de exceções, para o mesmo
-    /// curso não ser digitado de duas formas diferentes e deixar de casar.
-    /// </summary>
-    [HttpGet("cursos")]
-    public async Task<ActionResult<List<string>>> GetCursos()
-    {
-        var cursos = await db.Users
-            .Where(u => u.Course != null && u.Course != "")
-            .Select(u => u.Course!)
-            .Distinct()
-            .OrderBy(c => c)
-            .ToListAsync();
-
-        return Ok(cursos);
     }
 
     // ── Vínculo institucional ─────────────────────────────────────────────────
@@ -317,7 +299,6 @@ public class UsersController(AppDbContext db) : ControllerBase
                     existing.Rgm = rgm;
                     existing.Semester = s.Semester;
                     existing.Shift = s.Shift.ToLower();
-                    if (!string.IsNullOrWhiteSpace(s.Course)) existing.Course = s.Course.Trim();
                     // Aluno que ainda não fez o primeiro acesso tem a senha inicial
                     // igual ao RGM: reemite o hash no formato novo.
                     if (existing.MustChangePassword)
@@ -349,7 +330,6 @@ public class UsersController(AppDbContext db) : ControllerBase
                         Rgm = rgm, // o RGM é a matrícula do aluno
                         Semester = s.Semester,
                         Shift = s.Shift.ToLower(),
-                        Course = string.IsNullOrWhiteSpace(s.Course) ? null : s.Course.Trim(),
                         MustChangePassword = true,
                         MustSetEmail = false
                     });
@@ -491,7 +471,7 @@ public class UsersController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<UserDto>> Concluir(Guid id)
     {
         var user = await db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .FirstOrDefaultAsync(u => u.Id == id);
 
         if (user == null) return NotFound(new { message = "Aluno não encontrado." });
@@ -530,7 +510,7 @@ public class UsersController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<UserDto>> Reativar(Guid id)
     {
         var user = await db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .FirstOrDefaultAsync(u => u.Id == id);
 
         if (user == null) return NotFound(new { message = "Aluno não encontrado." });
@@ -571,7 +551,6 @@ public class UsersController(AppDbContext db) : ControllerBase
         Rgm = u.Rgm,
         Semester = u.Semester,
         Shift = u.Shift,
-        Course = u.Course,
         Role = u.Role,
         IsActive = u.IsActive,
         AllowLateArrival = u.AllowLateArrival,
@@ -579,8 +558,19 @@ public class UsersController(AppDbContext db) : ControllerBase
         MustChangePassword = u.MustChangePassword,
         MustSetEmail = u.MustSetEmail,
         TermsAcceptedAt = u.TermsAcceptedAt,
-        GroupId = u.GroupMembership?.GroupId,
-        GroupCode = u.GroupMembership?.Group?.Code,
-        GroupName = u.GroupMembership?.Group?.Name
+        // Turma principal (a primeira em que o aluno entrou) nos campos singulares,
+        // que as telas antigas leem; a lista completa em Groups, porque o aluno
+        // pode cursar mais de um rodízio ao mesmo tempo.
+        GroupId = TurmasDoAluno.Principal(u.GroupMemberships)?.GroupId,
+        GroupCode = TurmasDoAluno.Principal(u.GroupMemberships)?.Group?.Code,
+        GroupName = TurmasDoAluno.Principal(u.GroupMemberships)?.Group?.Name,
+        Groups = [.. TurmasDoAluno.Ordenados(u.GroupMemberships)
+            .Where(m => m.Group != null)
+            .Select(m => new UserGroupDto
+            {
+                Id = m.GroupId,
+                Code = m.Group.Code,
+                Name = m.Group.Name
+            })]
     };
 }

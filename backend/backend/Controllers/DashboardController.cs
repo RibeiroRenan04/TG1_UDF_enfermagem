@@ -53,18 +53,28 @@ public class DashboardController(AppDbContext db, PendenciasService pendenciasSe
         int required = 0;
         var pendencies = new List<PendencyDto>();
         string? groupCode = null, groupName = null, shift = null;
+        var turmas = new List<UserGroupDto>();
 
         if (role == Roles.Aluno)
         {
-            var membership = await db.GroupMemberships
+            // Cursando mais de uma turma, a carga exigida é a soma dos rodízios de
+            // todas elas — e o painel identifica cada uma.
+            var vinculos = await db.GroupMemberships
                 .Include(m => m.Group).ThenInclude(g => g.Schedules)
-                .FirstOrDefaultAsync(m => m.StudentId == userId);
+                .Where(m => m.StudentId == userId)
+                .ToListAsync();
 
-            if (membership != null)
+            if (vinculos.Count > 0)
             {
-                required = membership.Group.Schedules.Sum(s => s.RequiredHours);
-                groupCode = membership.Group.Code;
-                groupName = membership.Group.Name;
+                required = vinculos.Sum(m => m.Group.Schedules.Sum(s => s.RequiredHours));
+
+                var ordenados = TurmasDoAluno.Ordenados(vinculos);
+                groupCode = TurmasDoAluno.Codigos(vinculos);
+                groupName = string.Join(", ", ordenados.Select(m => m.Group.Name));
+                turmas = [.. ordenados.Select(m => new UserGroupDto
+                {
+                    Id = m.GroupId, Code = m.Group.Code, Name = m.Group.Name
+                })];
             }
 
             // O painel identifica a turma e o turno do aluno, que antes só via o
@@ -104,7 +114,8 @@ public class DashboardController(AppDbContext db, PendenciasService pendenciasSe
             PendingStatuses = MontarStatusPendentes(role, pendencies, ocorrencias, contagens),
             GroupCode = groupCode,
             GroupName = groupName,
-            Shift = shift
+            Shift = shift,
+            Groups = turmas
         });
     }
 

@@ -20,7 +20,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
     {
         var user = await db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
         if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             return Unauthorized(new { message = "Credenciais inválidas." });
@@ -35,7 +35,14 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
     private AuthResponseDto Resposta(ApplicationUser user) => new(
         tokenService.GenerateToken(user), user.Id.ToString(), user.Email, user.FullName, user.Role,
         user.MustChangePassword, user.MustSetEmail, DeveAceitarTermo(user),
-        user.GroupMembership?.Group?.Code, user.GroupMembership?.Group?.Name, user.Shift);
+        // O aluno pode cursar mais de uma turma: o menu lateral mostra todas, e os
+        // campos singulares seguem com a principal para quem lê um código só.
+        TurmasDoAluno.Principal(user.GroupMemberships)?.Group?.Code,
+        TurmasDoAluno.Principal(user.GroupMemberships)?.Group?.Name,
+        user.Shift,
+        [.. TurmasDoAluno.Ordenados(user.GroupMemberships)
+            .Where(m => m.Group != null)
+            .Select(m => new UserGroupDto { Id = m.GroupId, Code = m.Group.Code, Name = m.Group.Name })]);
 
     // ── Termo de responsabilidade de acesso ───────────────────────────────────
     /// <summary>
@@ -94,7 +101,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
             return Unauthorized();
 
         var user = await db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .FirstOrDefaultAsync(u => u.Id == id);
         if (user == null) return NotFound();
 

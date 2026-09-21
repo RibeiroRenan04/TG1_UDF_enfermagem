@@ -23,9 +23,6 @@ public class ApplicationUser
     public string? Phone { get; set; }
     public string? Institution { get; set; }
 
-    /// <summary>Curso do aluno, ex: "Enfermagem". Define o alcance das exceções de curso.</summary>
-    public string? Course { get; set; }
-
     /// <summary>
     /// Autoriza o aluno a chegar depois do horário previsto de início do estágio.
     /// A carga horária do dia continua sendo exigida: a permissão só evita que o
@@ -50,7 +47,12 @@ public class ApplicationUser
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation
-    public GroupMembership? GroupMembership { get; set; }
+    /// <summary>
+    /// Turmas do aluno. São várias porque ele pode cursar mais de um rodízio ao
+    /// mesmo tempo; <see cref="TurmasDoAluno"/> resume a lista onde a tela ainda
+    /// mostra uma turma só.
+    /// </summary>
+    public ICollection<GroupMembership> GroupMemberships { get; set; } = [];
     public ICollection<AttendanceRecord> AttendanceRecords { get; set; } = [];
     public ICollection<Evaluation> EvaluationsAsStudent { get; set; } = [];
     public ICollection<Evaluation> EvaluationsAsPreceptor { get; set; } = [];

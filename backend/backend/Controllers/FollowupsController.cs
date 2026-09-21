@@ -83,22 +83,25 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         var termo = rgm.Trim();
 
         var student = await db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .FirstOrDefaultAsync(u => u.Role == "aluno" && u.Rgm == termo);
 
         if (student == null)
             return NotFound(new { message = "Aluno não encontrado para esse RGM." });
 
         var hoje = BrasiliaTime.Hoje;
-        var groupId = student.GroupMembership?.GroupId;
+        var turmas = TurmasDoAluno.Ids(student.GroupMemberships);
+        var principal = TurmasDoAluno.Principal(student.GroupMemberships);
+        var groupId = principal?.GroupId;
 
-        // Escala do grupo do aluno: prioriza a vigente hoje; senão, a mais recente.
+        // Escala do aluno: prioriza a vigente hoje — entre as turmas dele, quando
+        // cursa mais de uma; senão, a mais recente.
         RotationSchedule? escala = null;
-        if (groupId.HasValue)
+        if (turmas.Count > 0)
         {
             var escalas = await db.RotationSchedules
                 .Include(s => s.Location)
-                .Where(s => s.GroupId == groupId.Value)
+                .Where(s => turmas.Contains(s.GroupId))
                 .OrderByDescending(s => s.StartDate)
                 .ToListAsync();
 
@@ -116,9 +119,11 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
             // Período do rodízio quando houver escala; senão, o semestre do aluno.
             PeriodLabel = escala?.PeriodLabel
                 ?? (student.Semester.HasValue ? $"{student.Semester}° semestre" : null),
-            GroupId = groupId,
-            GroupCode = student.GroupMembership?.Group?.Code,
-            GroupName = student.GroupMembership?.Group?.Name,
+            // Com mais de uma turma, vale a do rodízio encontrado: é nele que o
+            // preceptor está acompanhando o aluno.
+            GroupId = escala?.GroupId ?? groupId,
+            GroupCode = principal?.Group?.Code,
+            GroupName = principal?.Group?.Name,
             ScheduleId = escala?.Id,
             LocationId = escala?.LocationId,
             LocationName = escala?.Location?.Name,
@@ -210,7 +215,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         var userId = CurrentUserId();
 
         var aluno = await db.Users
-            .Include(u => u.GroupMembership)
+            .Include(u => u.GroupMemberships)
             .FirstOrDefaultAsync(u => u.Id == dto.StudentId);
 
         if (aluno == null || aluno.Role != "aluno")
@@ -221,7 +226,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
             StudentId = dto.StudentId,
             PreceptorId = userId,
             ScheduleId = dto.ScheduleId,
-            GroupId = dto.GroupId ?? aluno.GroupMembership?.GroupId,
+            GroupId = dto.GroupId ?? TurmasDoAluno.Principal(aluno.GroupMemberships)?.GroupId,
             LocationId = dto.LocationId,
             Shift = dto.Shift ?? aluno.Shift,
             PeriodLabel = dto.PeriodLabel,

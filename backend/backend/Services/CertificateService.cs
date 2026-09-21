@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using EstagioCheck.API.Data;
 using EstagioCheck.API.DTOs;
+using EstagioCheck.API.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace EstagioCheck.API.Services;
@@ -21,11 +22,14 @@ public class CertificateService(AppDbContext db)
             .FirstOrDefaultAsync(u => u.Id == studentId && u.Role == "aluno");
         if (student == null) return null;
 
-        var membership = await db.GroupMemberships
+        // O aluno pode cursar mais de uma turma ao mesmo tempo: o certificado soma
+        // a carga horária de todos os rodízios em que ele está.
+        var vinculos = await db.GroupMemberships
             .Include(m => m.Group).ThenInclude(g => g.Schedules).ThenInclude(s => s.Location)
-            .FirstOrDefaultAsync(m => m.StudentId == studentId);
+            .Where(m => m.StudentId == studentId)
+            .ToListAsync();
 
-        var schedules = membership?.Group.Schedules.ToList() ?? [];
+        var schedules = vinculos.SelectMany(m => m.Group.Schedules).ToList();
         var required = schedules.Sum(s => s.RequiredHours);
 
         var recsRaw = await db.AttendanceRecords
@@ -49,7 +53,9 @@ public class CertificateService(AppDbContext db)
             StudentId = student.Id,
             StudentName = student.FullName,
             Rgm = student.Rgm,
-            GroupName = membership?.Group.Name,
+            GroupName = vinculos.Count == 0
+                ? null
+                : string.Join(", ", TurmasDoAluno.Ordenados(vinculos).Select(m => m.Group.Name)),
             CompletedHours = Math.Round(completed, 1),
             RequiredHours = required,
             ProgressPercent = Math.Round(pct, 1),

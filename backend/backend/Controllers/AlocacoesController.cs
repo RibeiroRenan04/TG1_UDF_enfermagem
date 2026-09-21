@@ -71,7 +71,7 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         Guid id, [FromQuery] string? busca)
     {
         var query = db.Users
-            .Include(u => u.GroupMembership).ThenInclude(m => m!.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .Where(u => u.Role == Roles.Aluno && u.IsActive);
 
         if (!string.IsNullOrWhiteSpace(busca))
@@ -113,7 +113,8 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
                 Email = u.Email,
                 Semestre = u.Semester,
                 Turno = u.Shift,
-                Turma = u.GroupMembership?.Group?.Code,
+                // Cursando dois rodízios, o aluno aparece com as duas turmas ("T01, T02").
+                Turma = TurmasDoAluno.Codigos(u.GroupMemberships),
                 UnidadeAtualId = principal?.LocationId,
                 UnidadeAtualNome = principal?.Location?.Name,
                 AlocacoesAtivas = [.. minhas.Select(a => new AlocacaoPorTurnoDto

@@ -20,7 +20,6 @@ public class ExcecaoCalendarioDto
     public string? PeriodLabel { get; init; }
     public Guid? StudentId { get; init; }
     public string? StudentName { get; init; }
-    public string? Course { get; init; }
 
     public Guid? LocationId { get; init; }
     public string? LocationName { get; init; }
@@ -45,7 +44,6 @@ public record CriarExcecaoCalendarioDto(
     Guid? GroupId,
     Guid? ScheduleId,
     Guid? StudentId,
-    [MaxLength(150)] string? Course,
     Guid? LocationId,
     Guid? RemoteActivityId,
     [Required(ErrorMessage = "Descreva a exceção."), MaxLength(300)] string Description

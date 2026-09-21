@@ -9,7 +9,7 @@ Há **duas fontes** de mudança no banco, e a distinção importa:
 | Origem | O que é | Como é aplicado |
 |---|---|---|
 | `backend/Migrations/` (EF Core) | O schema base. Fonte de verdade. | **Automático**: a API roda `db.Database.Migrate()` no startup (`backend/Program.cs`). |
-| `database/002` … `010` | Evoluções posteriores. | **Manual**: executadas à mão, na ordem. Não são migrations do EF. |
+| `database/002` … `012` | Evoluções posteriores. | **Manual**: executadas à mão, na ordem. Não são migrations do EF. |
 
 Por isso `migration.sql` normalmente **não é necessário**: aponte a connection
 string para um banco vazio, suba a API e o schema base se cria sozinho. O arquivo
@@ -28,6 +28,8 @@ migration.sql   →  schema base (equivalente à migration 20260507011153_Initia
 008             →  alocação por turno e travas do ponto
 009             →  programação do dia e atividades remotas
 010             →  liga Row Level Security em todas as tabelas
+011             →  permite o aluno em mais de uma turma (vínculo único por aluno + turma)
+012             →  remove o curso do aluno e a abrangência "curso" das exceções
 ```
 
 A ordem não é negociável: `003` renomeia o que `migration.sql` e `002` criaram, e
@@ -40,7 +42,7 @@ tudo a partir dali assume os nomes em português.
 1. Crie o banco vazio (ex.: projeto novo no Supabase).
 2. Aponte `ConnectionStrings__DefaultConnection` para ele.
 3. Suba a API. O EF Core cria o schema base e registra em `__EFMigrationsHistory`.
-4. Aplique `002` … `010` na ordem.
+4. Aplique `002` … `012` na ordem.
 
 ### Opção B — tudo por SQL, sem executar a API
 
@@ -48,7 +50,7 @@ tudo a partir dali assume os nomes em português.
 ./apply_all.sh "postgresql://usuario:senha@host:5432/postgres"
 ```
 
-O script executa `migration.sql` e depois `002` … `010`, parando no primeiro erro.
+O script executa `migration.sql` e depois `002` … `012`, parando no primeiro erro.
 
 ## Por que `migration.sql` registra a própria migration
 
@@ -70,6 +72,6 @@ São as do EF Core / Npgsql, não escolhas destes arquivos:
 
 ## Idempotência
 
-`005`, `007`, `008` e `010` podem rodar mais de uma vez. As demais **não** são
+`005`, `007`, `008`, `010`, `011` e `012` podem rodar mais de uma vez. As demais **não** são
 idempotentes: rodar duas vezes causa erro (`003` tenta renomear tabelas que já
 foram renomeadas, por exemplo). Aplique cada uma exatamente uma vez por banco.
