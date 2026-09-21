@@ -36,10 +36,19 @@ export class DashboardComponent implements OnInit {
   /** O card só some quando não há nenhum aviso a mostrar. */
   temPendencias = computed(() => this.statusPendentes().length > 0);
 
-  /** Turma de matrícula do aluno: "T02 - Teste (Manhã)". */
-  turma = computed(() => {
+  /**
+   * Turmas de matrícula do aluno: "T02 - Teste (Manhã)". São várias quando ele
+   * cursa mais de um módulo de estágio no mesmo período.
+   */
+  turmas = computed<string[]>(() => {
     const s = this.stats();
-    return s ? rotuloTurma(s.groupCode, s.groupName, s.shift) : '';
+    if (!s) return [];
+
+    if (s.groups?.length) {
+      return s.groups.map(g => rotuloTurma(g.code, g.name, s.shift)).filter(t => !!t);
+    }
+    const unica = rotuloTurma(s.groupCode, s.groupName, s.shift);
+    return unica ? [unica] : [];
   });
 
   constructor(private dashService: DashboardService, private auth: AuthService) {}
@@ -52,7 +61,9 @@ export class DashboardComponent implements OnInit {
         // Mantém o menu lateral em dia com a turma atual, inclusive em sessões
         // abertas antes de a turma vir no login ou após uma troca de turma.
         if (this.role() === 'aluno') {
-          this.auth.atualizarPerfil({ groupCode: s.groupCode, groupName: s.groupName, shift: s.shift });
+          this.auth.atualizarPerfil({
+            groupCode: s.groupCode, groupName: s.groupName, shift: s.shift, groups: s.groups
+          });
         }
       },
       error: () => this.loading.set(false)

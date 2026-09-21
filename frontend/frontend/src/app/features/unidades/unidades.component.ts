@@ -122,7 +122,7 @@ export class UnidadesComponent implements OnInit {
   }
 
   novaUnidade(): void {
-    const ref = this.dialog.open(UnidadeFormDialogComponent, { width: '640px', maxHeight: '90vh' });
+    const ref = this.dialog.open(UnidadeFormDialogComponent, { width: 'min(640px, 92vw)', maxHeight: '90vh' });
     ref.afterClosed().subscribe((criada: UnidadeSaude | null) => {
       if (criada) {
         this.snackBar.open(`Unidade "${criada.nome}" cadastrada.`, '',
@@ -134,7 +134,7 @@ export class UnidadesComponent implements OnInit {
 
   editar(u: UnidadeSaude): void {
     const ref = this.dialog.open(UnidadeFormDialogComponent, {
-      width: '640px', maxHeight: '90vh', data: { unidade: u }
+      width: 'min(640px, 92vw)', maxHeight: '90vh', data: { unidade: u }
     });
     ref.afterClosed().subscribe((salva: UnidadeSaude | null) => {
       if (salva) {

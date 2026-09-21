@@ -20,7 +20,11 @@
         <code>CEP</code>, <code>Telefone</code>.
         Apenas <strong>Nome</strong> é obrigatório, mais o endereço ou a cidade —
         sem eles não há como localizar a unidade no mapa.
-        <a [href]="urlModelo()" target="_blank" rel="noopener">Baixar planilha modelo</a>
+        <a class="link-modelo" role="button" tabindex="0"
+           [class.ocupado]="baixandoModelo()"
+           (click)="baixarModelo()" (keyup.enter)="baixarModelo()">
+          {{ baixandoModelo() ? 'Baixando…' : 'Baixar planilha modelo' }}
+        </a>
       </div>
     </div>
 

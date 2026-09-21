@@ -49,8 +49,6 @@ export class ExcecoesComponent implements OnInit {
   schedules = signal<RotationSchedule[]>([]);
   locations = signal<Location[]>([]);
   students = signal<UserDto[]>([]);
-  /** Cursos já cadastrados nos alunos — evita o mesmo curso escrito de dois jeitos. */
-  cursos = signal<string[]>([]);
   loading = signal(true);
   saving = signal(false);
   showForm = signal(false);
@@ -73,7 +71,6 @@ export class ExcecoesComponent implements OnInit {
 
   readonly abrangencias: { valor: AbrangenciaExcecao; rotulo: string }[] = [
     { valor: 'faculdade', rotulo: 'Toda a faculdade' },
-    { valor: 'curso', rotulo: 'Curso' },
     { valor: 'turma', rotulo: 'Turma' },
     { valor: 'rodizio', rotulo: 'Rodízio específico' },
     { valor: 'aluno', rotulo: 'Aluno específico' }
@@ -95,7 +92,6 @@ export class ExcecoesComponent implements OnInit {
     groupId: [''],
     scheduleId: [''],
     studentId: [''],
-    course: [''],
     locationId: [''],
     description: ['', Validators.required]
   });
@@ -109,7 +105,6 @@ export class ExcecoesComponent implements OnInit {
   pedeTurma = computed(() => this.escopoAtual() === 'turma');
   pedeRodizio = computed(() => this.escopoAtual() === 'rodizio');
   pedeAluno = computed(() => this.escopoAtual() === 'aluno');
-  pedeCurso = computed(() => this.escopoAtual() === 'curso');
 
   /** A troca de local exige o destino; os demais tipos aceitam um local opcional. */
   pedeLocal = computed(() => this.tipoAtual() === 'troca_local');
@@ -136,7 +131,6 @@ export class ExcecoesComponent implements OnInit {
     this.groupsService.getSchedules().subscribe(s => this.schedules.set(s));
     this.locationsService.getAll().subscribe(l => this.locations.set(l));
     this.usersService.getStudents().subscribe(s => this.students.set(s));
-    this.usersService.getCursos().subscribe(c => this.cursos.set(c));
     this.load();
   }
 
@@ -154,7 +148,6 @@ export class ExcecoesComponent implements OnInit {
       case 'turma': return e.groupCode ?? '—';
       case 'rodizio': return e.periodLabel ?? '—';
       case 'aluno': return e.studentName ?? '—';
-      case 'curso': return e.course ?? '—';
       default: return 'Todos';
     }
   }
@@ -165,7 +158,7 @@ export class ExcecoesComponent implements OnInit {
       type: 'feriado', scope: 'faculdade',
       startDate: new Date().toISOString().substring(0, 10),
       endDate: '', shift: '', groupId: '', scheduleId: '', studentId: '',
-      course: '', locationId: '', description: ''
+      locationId: '', description: ''
     });
     this.showForm.set(true);
   }
@@ -181,7 +174,6 @@ export class ExcecoesComponent implements OnInit {
       groupId: e.groupId ?? '',
       scheduleId: e.scheduleId ?? '',
       studentId: e.studentId ?? '',
-      course: e.course ?? '',
       locationId: e.locationId ?? '',
       description: e.description
     });
@@ -212,7 +204,6 @@ export class ExcecoesComponent implements OnInit {
       groupId: v.scope === 'turma' ? v.groupId! : undefined,
       scheduleId: v.scope === 'rodizio' ? v.scheduleId! : undefined,
       studentId: v.scope === 'aluno' ? v.studentId! : undefined,
-      course: v.scope === 'curso' ? v.course! : undefined,
       locationId: v.locationId || undefined,
       description: v.description!
     };
@@ -245,7 +236,6 @@ export class ExcecoesComponent implements OnInit {
     if (v.scope === 'turma' && !v.groupId) return 'Selecione a turma alcançada.';
     if (v.scope === 'rodizio' && !v.scheduleId) return 'Selecione o rodízio alcançado.';
     if (v.scope === 'aluno' && !v.studentId) return 'Selecione o aluno alcançado.';
-    if (v.scope === 'curso' && !v.course) return 'Informe o curso alcançado.';
     if (v.type === 'troca_local' && !v.locationId)
       return 'Selecione a unidade que passa a valer na troca de local.';
     return null;

@@ -1,12 +1,17 @@
 <div class="page-header">
   <h1>Painel</h1>
-  <!-- Turma de matrícula: o aluno vê a que turma e turno está vinculado. -->
-  <div class="turma-badge" *ngIf="role() === 'aluno' && stats()"
-       [class.sem-turma]="!turma()">
-    <mat-icon>groups</mat-icon>
-    <span *ngIf="turma(); else semTurma">Turma: <strong>{{ turma() }}</strong></span>
-    <ng-template #semTurma><span>Você ainda não está vinculado(a) a uma turma.</span></ng-template>
-  </div>
+  <!-- Turmas de matrícula: o aluno vê a que turmas e turno está vinculado. São
+       várias quando ele cursa mais de um módulo de estágio no mesmo período. -->
+  <ng-container *ngIf="role() === 'aluno' && stats()">
+    <div class="turma-badge" *ngFor="let t of turmas()">
+      <mat-icon>groups</mat-icon>
+      <span>Turma: <strong>{{ t }}</strong></span>
+    </div>
+    <div class="turma-badge sem-turma" *ngIf="!turmas().length">
+      <mat-icon>groups</mat-icon>
+      <span>Você ainda não está vinculado(a) a uma turma.</span>
+    </div>
+  </ng-container>
 </div>
 
 <div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>

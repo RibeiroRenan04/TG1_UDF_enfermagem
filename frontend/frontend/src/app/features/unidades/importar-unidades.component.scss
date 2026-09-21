@@ -31,6 +31,15 @@
   strong:first-child { display: block; }
   code { background: #dbeafe; padding: 1px 5px; border-radius: 4px; font-size: 0.75rem; }
   a { display: inline-block; margin-top: 6px; color: #1e40af; font-weight: 600; }
+
+  // O modelo é baixado por requisição autenticada, não por href: o link precisa
+  // do cursor e do sublinhado que o <a href> dava de graça.
+  .link-modelo {
+    cursor: pointer;
+    text-decoration: underline;
+
+    &.ocupado { cursor: progress; opacity: 0.7; }
+  }
 }
 
 .file-area {

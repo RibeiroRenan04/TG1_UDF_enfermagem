@@ -194,17 +194,6 @@
           (click)="abrirPermissaoAtraso(s)">
     <mat-icon>{{ s.allowLateArrival ? 'alarm_on' : 'alarm_add' }}</mat-icon>
   </button>
-  <!-- O curso define quais exceções do calendário alcançam o aluno. O ícone é um
-       livro: o capelo ficou reservado para a conclusão, que é o que ele sugere. -->
-  <button mat-icon-button *ngIf="!somenteLeitura()"
-          [color]="s.course ? 'primary' : undefined"
-          [matTooltip]="s.course
-            ? 'Curso: ' + s.course + ' — clique para alterar'
-            : 'Definir o curso do aluno'"
-          [attr.aria-label]="s.course ? 'Alterar curso do aluno' : 'Definir o curso do aluno'"
-          (click)="definirCurso(s)">
-    <mat-icon>menu_book</mat-icon>
-  </button>
   <!-- Conclusão de estágio: move o aluno para "Alunos inativos" (reversível). -->
   <button mat-icon-button *ngIf="!somenteLeitura()"
           matTooltip="Marcar discente como Concluinte / Formado"
@@ -215,14 +204,15 @@
   </button>
 </ng-template>
 
-<!-- Seletor de turma do aluno: o vínculo libera o rodízio, o check-in e os relatórios. -->
+<!-- Seletor de turmas do aluno: o vínculo libera o rodízio, o check-in e os
+     relatórios. São várias porque o aluno pode cursar mais de um módulo de
+     estágio no mesmo período. -->
 <ng-template #turmaSelect let-s>
   <mat-form-field appearance="outline" class="turma-select" subscriptSizing="dynamic">
-    <mat-label>Turma</mat-label>
-    <mat-select [value]="s.groupId ?? null"
+    <mat-label>Turmas</mat-label>
+    <mat-select multiple [value]="turmasDoAluno(s)"
                 [disabled]="somenteLeitura() || assigningId() === s.id"
-                (selectionChange)="atribuirTurma(s, $event.value)">
-      <mat-option [value]="null">Sem turma</mat-option>
+                (selectionChange)="atribuirTurmas(s, $event.value)">
       <mat-option *ngFor="let g of groups()" [value]="g.id">{{ g.code }} — {{ g.name }}</mat-option>
     </mat-select>
   </mat-form-field>

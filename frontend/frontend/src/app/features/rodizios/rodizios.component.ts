@@ -355,6 +355,12 @@ export class RodiziosComponent implements OnInit {
   }
 
   salvarAlocacao(): void {
+    // Clique duplo no botão disparava duas gravações quase simultâneas, e a
+    // segunda voltava como "o registro foi alterado por outra pessoa". O botão
+    // já fica desabilitado enquanto salva; esta trava cobre o intervalo entre os
+    // dois cliques, antes de a tela se atualizar.
+    if (this.savingSchedule()) return;
+
     this.erroGeral.set(null);
 
     if (this.scheduleForm.invalid) {

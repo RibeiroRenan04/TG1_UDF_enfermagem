@@ -96,8 +96,16 @@ export class UnidadesSaudeService {
     return this.http.get<ImportacaoProgresso>(`${this.api}/importar/${loteId}/progresso`);
   }
 
-  urlModeloPlanilha(): string {
-    return `${this.api}/importar/modelo`;
+  /**
+   * Modelo da planilha, baixado pelo HttpClient.
+   *
+   * Um `<a href>` apontando direto para a rota abria a URL sem o cabeçalho
+   * Authorization — o token só entra pelo interceptor — e o endpoint, que exige
+   * perfil de gestão, respondia 401. Vindo como blob, a requisição leva o token
+   * e o arquivo é salvo pela própria tela.
+   */
+  baixarModeloPlanilha(): Observable<Blob> {
+    return this.http.get(`${this.api}/importar/modelo`, { responseType: 'blob' });
   }
 
   // ── Alocação ──────────────────────────────────────────────────────────────

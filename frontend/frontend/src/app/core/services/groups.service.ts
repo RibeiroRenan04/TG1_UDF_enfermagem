@@ -54,6 +54,19 @@ export class GroupsService {
     return this.http.get<GroupMember[]>(`${this.api}/${groupId}/members`);
   }
 
+  /**
+   * Vincula o aluno a esta turma sem desfazer as outras turmas dele — é assim
+   * que o mesmo discente cursa dois módulos de estágio no mesmo período.
+   */
+  vincularAluno(groupId: string, studentId: string): Observable<void> {
+    return this.http.post<void>(`${this.api}/${groupId}/members/${studentId}`, {});
+  }
+
+  /** Desvincula o aluno apenas desta turma; as demais seguem intactas. */
+  desvincularAluno(groupId: string, studentId: string): Observable<void> {
+    return this.http.delete<void>(`${this.api}/${groupId}/members/${studentId}`);
+  }
+
   getSchedules(groupId?: string): Observable<RotationSchedule[]> {
     const url = groupId ? `${this.api}/${groupId}/schedules` : `${this.api}/schedules`;
     return this.http.get<RotationSchedule[]>(url);

@@ -87,11 +87,17 @@ export class AuthService {
    * Atualiza dados de exibição do usuário logado (turma, turno) sem trocar o
    * token: o painel traz a turma atual e o menu lateral reflete na hora.
    */
-  atualizarPerfil(dados: Pick<AuthResponse, 'groupCode' | 'groupName' | 'shift'>): void {
+  atualizarPerfil(dados: Pick<AuthResponse, 'groupCode' | 'groupName' | 'shift' | 'groups'>): void {
     const atual = this._user();
     if (!atual) return;
+
+    // Compara também a lista de turmas: o aluno pode cursar mais de uma, e
+    // entrar ou sair de uma delas precisa chegar ao menu lateral.
+    const mesmasTurmas =
+      JSON.stringify(atual.groups ?? []) === JSON.stringify(dados.groups ?? []);
+
     if (atual.groupCode === dados.groupCode && atual.groupName === dados.groupName
-        && atual.shift === dados.shift) return;
+        && atual.shift === dados.shift && mesmasTurmas) return;
     this.persist({ ...atual, ...dados });
   }
 

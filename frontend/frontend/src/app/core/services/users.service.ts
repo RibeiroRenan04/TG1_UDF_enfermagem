@@ -22,8 +22,16 @@ export class UsersService {
     return this.http.get<UserDto[]>(`${this.api}/preceptors`);
   }
 
-  assignGroup(userId: string, groupId: string | null): Observable<void> {
-    return this.http.patch<void>(`${this.api}/${userId}/assign-group`, { groupId });
+  /**
+   * Define as turmas do aluno de uma vez: a lista enviada passa a ser o vínculo
+   * completo, e a lista vazia desvincula de todas.
+   *
+   * O aluno pode ficar em mais de uma turma — dois módulos de estágio no mesmo
+   * período, ou uma turma de reposição. A API só recusa a agenda impossível
+   * (mesmo turno, mesmos dias da semana e períodos sobrepostos).
+   */
+  assignGroups(userId: string, groupIds: string[]): Observable<void> {
+    return this.http.patch<void>(`${this.api}/${userId}/assign-group`, { groupIds });
   }
 
   /**
@@ -37,19 +45,6 @@ export class UsersService {
   /** Altera o turno do aluno — usado nas trocas autorizadas entre alunos. */
   updateShift(userId: string, shift: 'manha' | 'tarde' | 'noite'): Observable<UserDto> {
     return this.http.patch<UserDto>(`${this.api}/${userId}/shift`, { shift });
-  }
-
-  /**
-   * Define o curso do aluno. É por ele que uma exceção de calendário com
-   * abrangência "curso" o alcança. Vazio limpa o vínculo.
-   */
-  updateCourse(userId: string, course: string | null): Observable<UserDto> {
-    return this.http.patch<UserDto>(`${this.api}/${userId}/course`, { course });
-  }
-
-  /** Cursos já cadastrados — evita o mesmo curso escrito de duas formas. */
-  getCursos(): Observable<string[]> {
-    return this.http.get<string[]>(`${this.api}/cursos`);
   }
 
   /**

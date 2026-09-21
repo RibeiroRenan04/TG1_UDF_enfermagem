@@ -35,13 +35,13 @@ import { mensagemErro } from '../../core/utils/api-error';
         </div>
       </div>
       <form [formGroup]="form" class="form">
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Nome completo</mat-label>
           <input matInput formControlName="fullName">
         </mat-form-field>
 
         <div class="row-two">
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Tipo de perfil</mat-label>
             <mat-select formControlName="role">
               <mat-option value="preceptor">Preceptor(a)</mat-option>
@@ -55,7 +55,7 @@ import { mensagemErro } from '../../core/utils/api-error';
 
           <!-- Lista suspensa, não texto livre: em campo aberto a mesma unidade
                chegava escrita de várias formas e não dava para agrupar. -->
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Vínculo institucional</mat-label>
             <mat-select formControlName="institution" [disabled]="carregandoVinculos()">
               <mat-option [value]="''">Sem vínculo definido</mat-option>
@@ -71,7 +71,7 @@ import { mensagemErro } from '../../core/utils/api-error';
           </mat-form-field>
         </div>
 
-        <mat-form-field appearance="outline">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>E-mail (login)</mat-label>
           <input matInput type="email" formControlName="email" placeholder="pode ser e-mail externo">
           <mat-hint>
@@ -81,12 +81,12 @@ import { mensagemErro } from '../../core/utils/api-error';
         </mat-form-field>
 
         <div class="row-two">
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Senha inicial</mat-label>
             <input matInput type="password" formControlName="password" placeholder="Mínimo 6 caracteres">
             <mat-error *ngIf="form.get('password')?.hasError('minlength')">Mínimo 6 caracteres</mat-error>
           </mat-form-field>
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Telefone (opcional)</mat-label>
             <input matInput formControlName="phone">
           </mat-form-field>
@@ -112,8 +112,22 @@ import { mensagemErro } from '../../core/utils/api-error';
       mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
       strong:first-child { display: block; margin-bottom: 2px; }
     }
-    .form { display: flex; flex-direction: column; gap: 14px; min-width: 380px; }
-    .row-two { display: flex; gap: 12px; mat-form-field { flex: 1; } }
+    .form { display: flex; flex-direction: column; gap: 16px; min-width: 380px; }
+    /* Campos lado a lado têm textos de apoio de alturas diferentes; alinhados
+       pelo topo, um não empurra o outro. */
+    .row-two {
+      display: flex; gap: 12px; align-items: flex-start;
+      mat-form-field { flex: 1; min-width: 0; }
+    }
+    /* O Material reserva uma linha só para o texto de apoio. Estes textos ocupam
+       duas (em meia largura, três) e vinham por cima do campo seguinte: o
+       subscriptSizing="dynamic" faz a área crescer conforme o conteúdo, e aqui
+       se ajusta o respiro para o texto não colar no campo. */
+    ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+      line-height: 1.35;
+      padding-top: 3px;
+      .mat-mdc-form-field-hint { font-size: 0.72rem; }
+    }
     .erro { color: #b91c1c; font-size: 0.85rem; margin: 8px 0 0; }
   `]
 })

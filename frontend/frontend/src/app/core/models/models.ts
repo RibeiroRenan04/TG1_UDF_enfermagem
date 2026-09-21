@@ -11,10 +11,21 @@ export interface AuthResponse {
   mustSetEmail?: boolean;
   /** Perfis não-aluno precisam aceitar o termo de responsabilidade de acesso. */
   mustAcceptTerms?: boolean;
-  /** Turma de matrícula e turno do aluno, exibidos no menu lateral. */
+  /**
+   * Turma principal e turno do aluno, exibidos no menu lateral. Como ele pode
+   * cursar mais de um módulo de estágio, a lista completa vem em `groups`.
+   */
   groupCode?: string | null;
   groupName?: string | null;
   shift?: string | null;
+  groups?: TurmaVinculada[];
+}
+
+/** Turma em que o aluno está matriculado. */
+export interface TurmaVinculada {
+  id: string;
+  code: string;
+  name: string;
 }
 
 /** Termo de responsabilidade exibido a preceptores, professores e coordenadoras. */
@@ -288,7 +299,7 @@ export type TipoExcecao =
   | 'feriado' | 'recesso' | 'cancelado' | 'remoto'
   | 'troca_local' | 'atividade_especial' | 'reposicao';
 
-export type AbrangenciaExcecao = 'faculdade' | 'curso' | 'turma' | 'rodizio' | 'aluno';
+export type AbrangenciaExcecao = 'faculdade' | 'turma' | 'rodizio' | 'aluno';
 
 export interface ExcecaoCalendario {
   id: string;
@@ -305,7 +316,6 @@ export interface ExcecaoCalendario {
   periodLabel?: string;
   studentId?: string;
   studentName?: string;
-  course?: string;
   locationId?: string;
   locationName?: string;
   remoteActivityId?: string;
@@ -339,9 +349,14 @@ export interface DashboardStats {
   irregularities: IrregularityCounts;
   /** Avisos centralizados do card "Status Pendentes". */
   pendingStatuses: PendingStatus[];
-  /** Turma de matrícula do aluno (ex.: "T02"); nulo sem vínculo. */
+  /**
+   * Turmas de matrícula do aluno em um rótulo só (ex.: "T01, T02"); nulo sem
+   * vínculo. Uma a uma, em `groups`.
+   */
   groupCode?: string | null;
   groupName?: string | null;
+  /** Turmas do aluno — são várias quando ele cursa mais de um rodízio. */
+  groups?: TurmaVinculada[];
   /** Turno do aluno: "manha" | "tarde" | "noite". */
   shift?: string | null;
 }
@@ -374,13 +389,14 @@ export interface UserDto {
   email: string;
   rgm?: string;
   role: string;
+  /** Turma principal — a primeira em que o aluno entrou. */
   groupId?: string;
   groupCode?: string;
   groupName?: string;
+  /** Todas as turmas do aluno: ele pode cursar mais de um rodízio ao mesmo tempo. */
+  groups?: TurmaVinculada[];
   semester?: 7 | 8;
   shift?: 'manha' | 'tarde' | 'noite';
-  /** Curso do aluno — é por ele que uma exceção de curso o alcança. */
-  course?: string;
   mustChangePassword?: boolean;
   mustSetEmail?: boolean;
   isActive?: boolean;

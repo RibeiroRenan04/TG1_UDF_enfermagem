@@ -11,7 +11,9 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { forkJoin, of } from 'rxjs';
 import { UsersService } from '../../core/services/users.service';
+import { GroupsService } from '../../core/services/groups.service';
 import { StudentGroup, UserDto } from '../../core/models/models';
+import { mensagemErro } from '../../core/utils/api-error';
 
 export interface VincularAlunosDialogData {
   group: StudentGroup;
@@ -42,8 +44,15 @@ export interface VincularAlunosResult {
     <mat-dialog-content>
       <p class="hint">
         Marque os alunos que fazem parte de <strong>{{ data.group.name }}</strong>.
-        Cada aluno pertence a uma única turma: ao marcar aqui, o vínculo anterior é substituído.
+        O aluno pode fazer parte de mais de uma turma: marcar aqui não desfaz os vínculos
+        dele com outras turmas, desde que haja compatibilidade de agenda (turnos ou dias
+        da semana diferentes).
       </p>
+
+      <div class="erro" *ngIf="erro()">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ erro() }}</span>
+      </div>
 
       <mat-form-field appearance="outline" class="search">
         <mat-label>Buscar por nome ou RGM</mat-label>
@@ -71,9 +80,9 @@ export interface VincularAlunosResult {
                 <ng-container *ngIf="a.shift"> · {{ turnoLabel(a.shift) }}</ng-container>
               </span>
             </span>
-            <span class="outra-turma" *ngIf="estaEmOutraTurma(a)"
-                  matTooltip="Ao marcar, o aluno sai da turma atual">
-              <mat-icon>swap_horiz</mat-icon> {{ a.groupCode || a.groupName }}
+            <span class="outra-turma" *ngIf="outrasTurmas(a) as outras"
+                  [matTooltip]="'O vínculo com ' + outras + ' é mantido'">
+              <mat-icon>groups</mat-icon> {{ outras }}
             </span>
           </label>
         </div>
@@ -122,9 +131,16 @@ export interface VincularAlunosResult {
     .meta { font-size: 0.72rem; color: #6B7280; }
     .outra-turma {
       display: inline-flex; align-items: center; gap: 3px;
-      font-size: 0.7rem; color: #854d0e; background: #fef9c3;
+      font-size: 0.7rem; color: #0B427A; background: #e0f2fe;
       padding: 2px 8px; border-radius: 9999px; flex-shrink: 0;
       mat-icon { font-size: 14px; width: 14px; height: 14px; }
+    }
+    .erro {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 0.8rem; color: #991b1b; background: #fef2f2;
+      border: 1px solid #fecaca; border-radius: 8px;
+      padding: 8px 10px; margin-bottom: 12px;
+      mat-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; }
     }
     .btn-spinner { display: inline-block; margin-right: 8px; }
   `]
@@ -134,6 +150,8 @@ export class VincularAlunosDialogComponent implements OnInit {
   selecionados = signal<Set<string>>(new Set());
   loading = signal(true);
   saving = signal(false);
+  /** Recusa da API — hoje, a agenda incompatível entre dois rodízios do aluno. */
+  erro = signal<string | null>(null);
 
   filtro = '';
   filtroSignal = signal('');
@@ -152,6 +170,7 @@ export class VincularAlunosDialogComponent implements OnInit {
   constructor(
     public dialogRef: MatDialogRef<VincularAlunosDialogComponent>,
     private usersService: UsersService,
+    private groupsService: GroupsService,
     @Inject(MAT_DIALOG_DATA) public data: VincularAlunosDialogData
   ) {}
 
@@ -160,7 +179,7 @@ export class VincularAlunosDialogComponent implements OnInit {
       next: (todos) => {
         const ativos = todos.filter(u => u.role === 'aluno' && u.isActive !== false);
         this.alunos.set(ativos);
-        this.originais = new Set(ativos.filter(a => a.groupId === this.data.group.id).map(a => a.id));
+        this.originais = new Set(ativos.filter(a => this.turmasDe(a).includes(this.data.group.id)).map(a => a.id));
         this.selecionados.set(new Set(this.originais));
         this.loading.set(false);
       },
@@ -168,8 +187,28 @@ export class VincularAlunosDialogComponent implements OnInit {
     });
   }
 
-  estaEmOutraTurma(a: UserDto): boolean {
-    return !!a.groupId && a.groupId !== this.data.group.id;
+  /**
+   * Ids das turmas do aluno. `groups` é a lista completa; `groupId` cobre a
+   * resposta antiga, de quando o aluno só podia ter uma turma.
+   */
+  private turmasDe(a: UserDto): string[] {
+    if (a.groups?.length) return a.groups.map(g => g.id);
+    return a.groupId ? [a.groupId] : [];
+  }
+
+  /**
+   * Demais turmas do aluno, só para informar: elas continuam valendo depois de
+   * vincular a esta.
+   */
+  outrasTurmas(a: UserDto): string {
+    const outras = (a.groups ?? [])
+      .filter(g => g.id !== this.data.group.id)
+      .map(g => g.code || g.name);
+
+    if (!outras.length && a.groupId && a.groupId !== this.data.group.id) {
+      return a.groupCode || a.groupName || '';
+    }
+    return outras.join(', ');
   }
 
   alternar(id: string): void {
@@ -208,9 +247,13 @@ export class VincularAlunosDialogComponent implements OnInit {
     if (!paraVincular.length && !paraDesvincular.length) return;
 
     this.saving.set(true);
+    this.erro.set(null);
+
+    // Vínculo por turma: desvincular daqui não tira o aluno das outras turmas
+    // dele, e vincular aqui não substitui nenhuma.
     const chamadas = [
-      ...paraVincular.map(id => this.usersService.assignGroup(id, this.data.group.id)),
-      ...paraDesvincular.map(id => this.usersService.assignGroup(id, null))
+      ...paraVincular.map(id => this.groupsService.vincularAluno(this.data.group.id, id)),
+      ...paraDesvincular.map(id => this.groupsService.desvincularAluno(this.data.group.id, id))
     ];
 
     forkJoin(chamadas.length ? chamadas : [of(void 0)]).subscribe({
@@ -221,7 +264,12 @@ export class VincularAlunosDialogComponent implements OnInit {
           desvinculados: paraDesvincular.length
         } as VincularAlunosResult);
       },
-      error: () => this.saving.set(false)
+      error: (err) => {
+        this.saving.set(false);
+        // A recusa mais provável é a agenda incompatível: o motivo precisa ficar
+        // na tela, e não sumir em um toast.
+        this.erro.set(mensagemErro(err, 'Não foi possível salvar os vínculos.'));
+      }
     });
   }
 

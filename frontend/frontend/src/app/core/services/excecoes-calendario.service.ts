@@ -14,7 +14,6 @@ export interface ExcecaoCalendarioForm {
   groupId?: string;
   scheduleId?: string;
   studentId?: string;
-  course?: string;
   locationId?: string;
   remoteActivityId?: string;
   description: string;

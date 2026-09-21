@@ -35,7 +35,7 @@
         <mat-select formControlName="scope">
           <mat-option *ngFor="let a of abrangencias" [value]="a.valor">{{ a.rotulo }}</mat-option>
         </mat-select>
-        <mat-hint>A mais específica vence: aluno, rodízio, turma, curso, faculdade.</mat-hint>
+        <mat-hint>A mais específica vence: aluno, rodízio, turma, faculdade.</mat-hint>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
@@ -81,15 +81,6 @@
             {{ s.fullName }}<ng-container *ngIf="s.rgm"> — {{ s.rgm }}</ng-container>
           </mat-option>
         </mat-select>
-      </mat-form-field>
-
-      <mat-form-field appearance="outline" *ngIf="pedeCurso()">
-        <mat-label>Curso</mat-label>
-        <input matInput formControlName="course" placeholder="Enfermagem" list="cursos-cadastrados">
-        <datalist id="cursos-cadastrados">
-          <option *ngFor="let c of cursos()" [value]="c"></option>
-        </datalist>
-        <mat-hint>Precisa bater com o curso cadastrado no aluno.</mat-hint>
       </mat-form-field>
 
       <!-- Local: exigido na troca, opcional nas atividades especiais -->

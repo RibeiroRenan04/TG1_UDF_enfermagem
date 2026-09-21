@@ -7,12 +7,14 @@
   @media (min-width: 640px) { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 }
 
-// Turma de matrícula do aluno, logo abaixo do título.
+// Turmas de matrícula do aluno, logo abaixo do título. Cursando mais de um
+// módulo de estágio, ele vê um badge por turma, lado a lado.
 .turma-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-top: 6px;
+  margin-right: 8px;
   padding: 4px 12px;
   border-radius: 999px;
   background: #f0f9ff;

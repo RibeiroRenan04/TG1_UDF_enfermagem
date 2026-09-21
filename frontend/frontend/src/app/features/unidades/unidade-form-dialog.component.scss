@@ -1,4 +1,21 @@
-.form { display: flex; flex-direction: column; gap: 4px; min-width: 560px; }
+/*
+ * O modal abre com maxHeight 90vh, mas o conteúdo do Material para em 65vh por
+ * conta própria: a rolagem começava cedo e sobrava um vão em branco entre o
+ * último campo e a barra de ações. Aqui a área de conteúdo acompanha a altura
+ * do modal, descontando o título e as ações.
+ */
+mat-dialog-content {
+  max-height: calc(90vh - 140px);
+  padding-top: 10px;
+  /* Respiro no fim da rolagem: o último campo não encosta nos botões. */
+  padding-bottom: 12px;
+}
+
+/*
+ * Sem largura mínima fixa: 560px estouravam a janela estreita e criavam rolagem
+ * horizontal. O modal já define a largura; o formulário apenas a acompanha.
+ */
+.form { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 
 .linha {
   display: flex;

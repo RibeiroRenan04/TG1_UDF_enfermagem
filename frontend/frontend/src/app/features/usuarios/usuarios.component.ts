@@ -240,29 +240,47 @@ export class UsuariosComponent implements OnInit {
     return this.groups().find(g => g.id === groupId)?.name ?? '—';
   }
 
-  // ── Vínculo com a turma ───────────────────────────────────────────────────
+  // ── Vínculo com as turmas ─────────────────────────────────────────────────
   /**
-   * Vincula o aluno a uma turma (ou remove o vínculo, com groupId nulo).
-   * O vínculo é obrigatório para o rodízio ser alocado e para o aluno
-   * conseguir fazer check-in: sem ele o aluno fica fora de toda a operação.
+   * Turmas em que o aluno está. `groups` traz todas; `groupId` cobre a resposta
+   * antiga, de quando o aluno só podia ter uma.
    */
-  atribuirTurma(student: UserDto, groupId: string | null): void {
-    if ((student.groupId ?? null) === groupId) return;
+  turmasDoAluno(student: UserDto): string[] {
+    if (student.groups?.length) return student.groups.map(g => g.id);
+    return student.groupId ? [student.groupId] : [];
+  }
+
+  /**
+   * Define as turmas do aluno. O vínculo é obrigatório para o rodízio ser
+   * alocado e para o aluno conseguir fazer check-in.
+   *
+   * São várias porque ele pode cursar mais de um módulo de estágio no mesmo
+   * período: escolher uma turma nova não desfaz as demais. A API recusa somente
+   * a agenda impossível — mesmo turno, mesmos dias da semana e períodos
+   * sobrepostos — e explica o motivo.
+   */
+  atribuirTurmas(student: UserDto, groupIds: string[]): void {
+    const atuais = this.turmasDoAluno(student);
+    const iguais = atuais.length === groupIds.length && atuais.every(id => groupIds.includes(id));
+    if (iguais) return;
 
     this.assigningId.set(student.id);
-    this.usersService.assignGroup(student.id, groupId).subscribe({
+    this.usersService.assignGroups(student.id, groupIds).subscribe({
       next: () => {
         this.assigningId.set(null);
+        const nomes = groupIds.map(id => this.groupName(id)).join(', ');
         this.snackBar.open(
-          groupId ? `${student.fullName} vinculado(a) à turma ${this.groupName(groupId)}.`
-                  : `Vínculo de ${student.fullName} removido.`,
+          groupIds.length ? `${student.fullName} vinculado(a) a: ${nomes}.`
+                          : `Vínculo de ${student.fullName} removido.`,
           '', { duration: 3000, panelClass: 'snack-success' });
         this.loadUsers();
       },
       error: (err) => {
         this.assigningId.set(null);
-        this.snackBar.open(mensagemErro(err, 'Erro ao vincular o aluno à turma'), '',
-          { duration: 4000, panelClass: 'snack-error' });
+        this.snackBar.open(mensagemErro(err, 'Erro ao vincular o aluno à turma'), 'OK',
+          { duration: 8000, panelClass: 'snack-error' });
+        // A seleção volta ao que o servidor tem, para não parecer salva.
+        this.loadUsers();
       }
     });
   }
@@ -295,35 +313,6 @@ export class UsuariosComponent implements OnInit {
   turnoLabel(shift: string | undefined): string {
     if (!shift) return '—';
     return this.turnos.find(t => t.valor === shift)?.rotulo ?? shift;
-  }
-
-  // ── Curso do aluno ────────────────────────────────────────────────────────
-  /**
-   * Define o curso do aluno. É por ele que uma exceção de calendário com
-   * abrangência "curso" (um recesso só da Enfermagem, por exemplo) o alcança
-   * sem que a coordenação precise cadastrar turma por turma.
-   */
-  definirCurso(student: UserDto): void {
-    const curso = prompt(
-      `Curso de ${student.fullName} (deixe em branco para remover):`,
-      student.course ?? '');
-    if (curso === null) return;
-
-    const valor = curso.trim();
-    if (valor === (student.course ?? '')) return;
-
-    this.usersService.updateCourse(student.id, valor || null).subscribe({
-      next: () => {
-        this.snackBar.open(
-          valor ? `Curso de ${student.fullName} definido como ${valor}.`
-                : `Curso de ${student.fullName} removido.`,
-          '', { duration: 3000, panelClass: 'snack-success' });
-        this.loadUsers();
-      },
-      error: (err) => this.snackBar.open(
-        mensagemErro(err, 'Erro ao definir o curso do aluno'), '',
-        { duration: 4000, panelClass: 'snack-error' })
-    });
   }
 
   // ── Permissão de atraso ───────────────────────────────────────────────────
@@ -379,7 +368,10 @@ export class UsuariosComponent implements OnInit {
       'Senha inicial': a.mustChangePassword ? (a.rgm ?? '') : 'já alterada pelo aluno',
       'Semestre': a.semester ? `${a.semester}°` : '',
       'Turno': a.shift ? (turnos[a.shift] ?? a.shift) : '',
-      'Turma': a.groupCode ?? a.groupName ?? '',
+      // Cursando mais de um módulo de estágio, o aluno sai com as duas turmas.
+      'Turma': a.groups?.length
+        ? a.groups.map(g => g.code || g.name).join(', ')
+        : (a.groupCode ?? a.groupName ?? ''),
       '1° acesso': (a.mustChangePassword || a.mustSetEmail) ? 'Pendente' : 'Concluído',
       'Permissão de atraso': a.allowLateArrival ? 'Sim' : 'Não'
     }));

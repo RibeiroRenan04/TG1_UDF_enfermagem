@@ -46,7 +46,7 @@ export class AppLayoutComponent {
     { path: '/app/alocacoes',   label: 'Alocações',          icon: 'assignment_ind',   roles: ['supervisor','coordenadora'] },
     { path: '/app/rodizios',    label: 'Rodízios',           icon: 'calendar_today',   roles: ['supervisor','coordenadora'] },
     { path: '/app/atividades-remotas', label: 'Atividades remotas', icon: 'home_work',  roles: ['aluno','preceptor','supervisor','coordenadora'] },
-    { path: '/app/excecoes',    label: 'Calendário de exceções', icon: 'event_busy',   roles: ['supervisor','coordenadora'] },
+    { path: '/app/excecoes',    label: 'Calendário', icon: 'event_busy',   roles: ['supervisor','coordenadora'] },
     { path: '/app/usuarios',    label: 'Usuários',           icon: 'people',           roles: ['supervisor','coordenadora'] },
     { path: '/app/relatorios',  label: 'Relatórios',         icon: 'bar_chart',        roles: ['supervisor','coordenadora'] }
   ];
@@ -64,12 +64,21 @@ export class AppLayoutComponent {
     return role ? (this.rotulosPerfil[role] ?? role) : '';
   });
 
-  /** Turma de matrícula do aluno, no cartão do usuário: "Turma: T02 - Teste (Manhã)". */
+  /**
+   * Turmas de matrícula do aluno, no cartão do usuário:
+   * "Turma: T02 - Teste (Manhã)". Cursando mais de um módulo de estágio, ele vê
+   * as duas ("Turmas: T01 - …, T02 - …").
+   */
   turmaAluno = computed(() => {
     const u = this.auth.user();
     if (u?.role !== 'aluno') return '';
-    const turma = rotuloTurma(u.groupCode, u.groupName, u.shift);
-    return turma ? `Turma: ${turma}` : 'Sem turma vinculada';
+
+    const turmas = u.groups?.length
+      ? u.groups.map(g => rotuloTurma(g.code, g.name, u.shift)).filter(t => !!t)
+      : [rotuloTurma(u.groupCode, u.groupName, u.shift)].filter(t => !!t);
+
+    if (!turmas.length) return 'Sem turma vinculada';
+    return `${turmas.length > 1 ? 'Turmas' : 'Turma'}: ${turmas.join(', ')}`;
   });
 
   /** A coordenadora navega igual ao professor, mas sem alterar nada. */

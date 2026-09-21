@@ -64,7 +64,35 @@ export class ImportarUnidadesComponent implements OnDestroy {
 
   ngOnDestroy(): void { this.acompanhamento?.unsubscribe(); }
 
-  urlModelo(): string { return this.service.urlModeloPlanilha(); }
+  /** Enquanto o arquivo vem, o link não aceita outro clique. */
+  baixandoModelo = signal(false);
+
+  /**
+   * Salva o modelo da planilha. O arquivo vem pelo HttpClient para a requisição
+   * levar o token: apontar um link direto para a rota abria a URL sem o
+   * cabeçalho Authorization e o endpoint, restrito à gestão, devolvia 401.
+   */
+  baixarModelo(): void {
+    if (this.baixandoModelo()) return;
+    this.baixandoModelo.set(true);
+    this.erro.set('');
+
+    this.service.baixarModeloPlanilha().subscribe({
+      next: (blob) => {
+        this.baixandoModelo.set(false);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'modelo-unidades-saude.csv';
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        this.baixandoModelo.set(false);
+        this.erro.set(mensagemErro(err, 'Não foi possível baixar a planilha modelo.'));
+      }
+    });
+  }
 
   onArquivo(event: Event): void {
     const input = event.target as HTMLInputElement;
