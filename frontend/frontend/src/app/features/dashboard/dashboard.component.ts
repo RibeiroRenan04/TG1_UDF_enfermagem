@@ -9,7 +9,7 @@ import { RouterLink } from '@angular/router';
 import { DashboardService } from '../../core/services/dashboard.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DashboardStats, PendingStatus } from '../../core/models/models';
-import { rotuloTurma } from '../../core/utils/turma';
+import { rotuloTurma, turnoDaTurma } from '../../core/utils/turma';
 import { PainelGestaoComponent } from './painel-gestao.component';
 
 @Component({
@@ -47,7 +47,7 @@ export class DashboardComponent implements OnInit {
     if (!s) return [];
 
     if (s.groups?.length) {
-      return s.groups.map(g => rotuloTurma(g.code, g.name, s.shift)).filter(t => !!t);
+      return s.groups.map(g => rotuloTurma(g.code, g.name, turnoDaTurma(g, s.shift))).filter(t => !!t);
     }
     const unica = rotuloTurma(s.groupCode, s.groupName, s.shift);
     return unica ? [unica] : [];

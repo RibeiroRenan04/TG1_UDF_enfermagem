@@ -207,7 +207,7 @@
         <mat-icon mat-card-avatar>assignment</mat-icon>
         <mat-card-title>{{ a.title }}</mat-card-title>
         <mat-card-subtitle>
-          {{ a.startTime }} às {{ a.endTime }} · {{ a.estimatedHours }} h
+          {{ a.startTime | hora }} às {{ a.endTime | hora }} · {{ a.estimatedHours }} h
           <span class="situacao" [class.aberta]="a.situacao === 'aberta'"
                 [class.encerrada]="a.situacao === 'encerrada'">{{ a.situacao }}</span>
         </mat-card-subtitle>

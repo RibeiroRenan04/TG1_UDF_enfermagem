@@ -2,7 +2,8 @@
   <div>
     <h1>Relatórios</h1>
     <p class="page-subtitle">
-      Horas cumpridas, pendências e liberação de certificado, aluno a aluno.
+      Horas aprovadas, pendências e liberação de certificado. Quem cursa mais de uma
+      turma aparece com o detalhe de cada uma e o total — o certificado é decidido pelo total.
     </p>
   </div>
   <button mat-stroked-button (click)="exportCsv()" [disabled]="!rows().length">
@@ -16,52 +17,76 @@
   <mat-card-content>
     <!-- As colunas seguem os campos de ReportRow: usar nomes que a API não devolve
          deixava a tabela inteira em branco. -->
-    <table mat-table [dataSource]="rows()" class="full-width" *ngIf="rows().length; else empty">
+    <table mat-table [dataSource]="linhas()" class="full-width" *ngIf="linhas().length; else empty">
       <ng-container matColumnDef="name">
         <th mat-header-cell *matHeaderCellDef>Aluno</th>
-        <td mat-cell *matCellDef="let r">{{ r.fullName }}</td>
+        <td mat-cell *matCellDef="let l">
+          <ng-container *ngIf="l.primeira">
+            <strong>{{ l.aluno.fullName }}</strong>
+            <div class="sub">
+              {{ l.aluno.rgm || '—' }}<span *ngIf="!l.aluno.isActive"> · inativo</span>
+            </div>
+          </ng-container>
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="turma">
+        <th mat-header-cell *matHeaderCellDef>Turma</th>
+        <td mat-cell *matCellDef="let l">
+          <ng-container *ngIf="l.tipo === 'turma'; else rotuloTotal">
+            <span [matTooltip]="l.turma?.groupName ?? ''">{{ l.turma?.groupCode || '—' }}</span>
+            <div class="sub" *ngIf="turno(l.turma)">{{ turno(l.turma) }}</div>
+          </ng-container>
+          <ng-template #rotuloTotal>
+            <span class="rotulo-total">Total ({{ l.aluno.turmas.length }} turmas)</span>
+          </ng-template>
+        </td>
       </ng-container>
       <ng-container matColumnDef="hours">
         <th mat-header-cell *matHeaderCellDef>Horas</th>
-        <td mat-cell *matCellDef="let r">{{ r.hours | number:'1.0-1' }}h</td>
+        <td mat-cell *matCellDef="let l">
+          <span [matTooltip]="dicaForaDasTurmas(l)">{{ l.valores.hours | number:'1.0-1' }}h</span>
+        </td>
       </ng-container>
       <ng-container matColumnDef="required">
         <th mat-header-cell *matHeaderCellDef>Exigidas</th>
-        <td mat-cell *matCellDef="let r">{{ r.required }}h</td>
+        <td mat-cell *matCellDef="let l">{{ l.valores.required }}h</td>
       </ng-container>
       <ng-container matColumnDef="progress">
         <th mat-header-cell *matHeaderCellDef>Progresso</th>
-        <td mat-cell *matCellDef="let r">{{ r.progressPercent | number:'1.0-0' }}%</td>
+        <td mat-cell *matCellDef="let l">{{ l.valores.progressPercent | number:'1.0-0' }}%</td>
       </ng-container>
       <ng-container matColumnDef="approved">
         <th mat-header-cell *matHeaderCellDef>Aprovados</th>
-        <td mat-cell *matCellDef="let r">{{ r.approved }}</td>
+        <td mat-cell *matCellDef="let l">{{ l.valores.approved }}</td>
       </ng-container>
       <ng-container matColumnDef="irregular">
         <th mat-header-cell *matHeaderCellDef>Irregulares</th>
-        <td mat-cell *matCellDef="let r">
-          <span [class]="r.irregular > 0 ? 'chip-irregular' : 'chip-aprovado'">{{ r.irregular }}</span>
+        <td mat-cell *matCellDef="let l">
+          <span [class]="l.valores.irregular > 0 ? 'chip-irregular' : 'chip-aprovado'">{{ l.valores.irregular }}</span>
         </td>
       </ng-container>
       <ng-container matColumnDef="pendencies">
         <th mat-header-cell *matHeaderCellDef>Pendências</th>
-        <td mat-cell *matCellDef="let r">
-          <span [class]="r.pendencyDays > 0 ? 'chip-irregular' : 'chip-aprovado'">
-            {{ r.pendencyDays }} dia(s)
+        <td mat-cell *matCellDef="let l">
+          <span [class]="l.valores.pendencyDays > 0 ? 'chip-irregular' : 'chip-aprovado'">
+            {{ l.valores.pendencyDays }} dia(s)
           </span>
         </td>
       </ng-container>
       <ng-container matColumnDef="certificate">
         <th mat-header-cell *matHeaderCellDef>Certificado</th>
-        <td mat-cell *matCellDef="let r">
-          <mat-icon [color]="r.certificateReleased ? 'primary' : 'warn'"
-                    [matTooltip]="r.certificateReleased ? 'Liberado' : 'Carga horária não cumprida'">
-            {{ r.certificateReleased ? 'check_circle' : 'cancel' }}
+        <td mat-cell *matCellDef="let l">
+          <mat-icon *ngIf="l.certificado" [color]="l.aluno.certificateReleased ? 'primary' : 'warn'"
+                    [matTooltip]="l.aluno.certificateReleased ? 'Liberado' : 'Carga horária total não cumprida'">
+            {{ l.aluno.certificateReleased ? 'check_circle' : 'cancel' }}
           </mat-icon>
         </td>
       </ng-container>
       <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"
+          [class.inicio-aluno]="row.primeira"
+          [class.linha-turma]="row.tipo === 'turma' && !row.certificado"
+          [class.linha-total]="row.tipo === 'total'"></tr>
     </table>
     <ng-template #empty>
       <div class="empty-state"><mat-icon>bar_chart</mat-icon><p>Nenhum dado de relatório.</p></div>

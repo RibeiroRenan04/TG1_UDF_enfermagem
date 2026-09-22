@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -11,6 +11,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -25,22 +26,32 @@ import { mensagemErro } from '../../core/utils/api-error';
     CommonModule, FormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule,
-    MatProgressSpinnerModule, MatSnackBarModule
+    MatProgressSpinnerModule, MatSnackBarModule, MatPaginatorModule
   ],
   templateUrl: './alocacoes.component.html',
   styleUrls: ['./alocacoes.component.scss']
 })
-export class AlocacoesComponent implements OnInit {
+export class AlocacoesComponent implements OnInit, OnDestroy {
   alocacoes = signal<Alocacao[]>([]);
   unidades = signal<UnidadeSaude[]>([]);
   loading = signal(true);
 
-  filtroUnidade = '';
   /**
-   * Sinal, e não campo simples: o `filtradas` é um computed e só reage a sinais —
-   * como campo, digitar no filtro não redesenhava a tabela.
+   * Totais do filtro inteiro, vindos da API. Antes a lista parava em 500 e o
+   * contador, feito sobre o que tinha chegado, mostrava "500 ativas" com mais
+   * de 600 alunos alocados.
    */
-  filtroTexto = signal('');
+  total = signal(0);
+  ativas = signal(0);
+
+  /** Página atual (base zero, como o mat-paginator) e tamanho da página. */
+  pagina = 0;
+  tamanhoPagina = 50;
+  readonly tamanhos = [25, 50, 100];
+
+  filtroUnidade = '';
+  /** A busca por nome/RGM também é feita na API: filtrar só a página escondia quem estava nas outras. */
+  filtroTexto = '';
   filtroAtivo: boolean | null = true;
   filtroTurno: Turno | '' = '';
   filtroDe = '';
@@ -52,16 +63,8 @@ export class AlocacoesComponent implements OnInit {
 
   podeEditar = this.auth.ehProfessor;
 
-  /** O filtro por nome/RGM é aplicado aqui: a API filtra por id, não por texto livre. */
-  filtradas = computed(() => {
-    const termo = this.filtroTexto().trim().toLowerCase();
-    if (!termo) return this.alocacoes();
-    return this.alocacoes().filter(a =>
-      a.estagiarioNome.toLowerCase().includes(termo) ||
-      (a.estagiarioRgm ?? '').includes(termo));
-  });
-
-  ativas = computed(() => this.alocacoes().filter(a => a.ativo).length);
+  /** Espera o usuário parar de digitar antes de consultar a API. */
+  private buscaTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private service: UnidadesSaudeService,
@@ -74,6 +77,10 @@ export class AlocacoesComponent implements OnInit {
     this.carregar();
   }
 
+  ngOnDestroy(): void {
+    clearTimeout(this.buscaTimer);
+  }
+
   carregar(): void {
     this.loading.set(true);
     this.service.getAlocacoes({
@@ -81,9 +88,17 @@ export class AlocacoesComponent implements OnInit {
       ativo: this.filtroAtivo ?? undefined,
       turno: this.filtroTurno || undefined,
       de: this.filtroDe || undefined,
-      ate: this.filtroAte || undefined
+      ate: this.filtroAte || undefined,
+      busca: this.filtroTexto.trim() || undefined,
+      pagina: this.pagina + 1,
+      tamanhoPagina: this.tamanhoPagina
     }).subscribe({
-      next: (a) => { this.alocacoes.set(a); this.loading.set(false); },
+      next: (p) => {
+        this.alocacoes.set(p.itens);
+        this.total.set(p.total);
+        this.ativas.set(p.ativas);
+        this.loading.set(false);
+      },
       error: (err) => {
         this.loading.set(false);
         this.snackBar.open(mensagemErro(err, 'Erro ao carregar as alocações'), '', { duration: 4000 });
@@ -91,14 +106,32 @@ export class AlocacoesComponent implements OnInit {
     });
   }
 
+  /** Filtro alterado: volta para a primeira página. */
+  filtrar(): void {
+    this.pagina = 0;
+    this.carregar();
+  }
+
+  buscar(texto: string): void {
+    this.filtroTexto = texto;
+    clearTimeout(this.buscaTimer);
+    this.buscaTimer = setTimeout(() => this.filtrar(), 350);
+  }
+
+  mudarPagina(e: PageEvent): void {
+    this.pagina = e.pageIndex;
+    this.tamanhoPagina = e.pageSize;
+    this.carregar();
+  }
+
   limparFiltros(): void {
     this.filtroUnidade = '';
-    this.filtroTexto.set('');
+    this.filtroTexto = '';
     this.filtroAtivo = true;
     this.filtroTurno = '';
     this.filtroDe = '';
     this.filtroAte = '';
-    this.carregar();
+    this.filtrar();
   }
 
   turnoLabel(t?: string): string {

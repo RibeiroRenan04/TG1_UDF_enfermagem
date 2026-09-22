@@ -76,7 +76,28 @@
 }
 
 /* ── Painéis do professor ───────────────────────────────────────────────── */
-.titulo { font-weight: 600; margin-right: 12px; }
+/* O cabeçalho cresce com o conteúdo (collapsedHeight="auto"): o título quebra
+   linha dentro da própria coluna em vez de invadir o painel vizinho. */
+.lista-atividades mat-expansion-panel-header {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.lista-atividades mat-panel-title {
+  flex: 1 1 45%;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.lista-atividades mat-panel-description {
+  flex: 1 1 55%;
+  min-width: 0;
+  align-items: center;
+}
+
+.titulo { font-weight: 600; overflow-wrap: anywhere; }
 
 .situacao {
   padding: 1px 8px;

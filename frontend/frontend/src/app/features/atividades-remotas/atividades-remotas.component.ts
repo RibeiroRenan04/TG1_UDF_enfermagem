@@ -24,6 +24,7 @@ import {
   RotationSchedule, StudentGroup, TipoTarefaRemota
 } from '../../core/models/models';
 import { aplicarErrosServidor, mensagemErro } from '../../core/utils/api-error';
+import { HoraPipe } from '../../core/utils/hora.pipe';
 
 /**
  * Atividades remotas.
@@ -40,7 +41,7 @@ import { aplicarErrosServidor, mensagemErro } from '../../core/utils/api-error';
     CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatCheckboxModule, MatExpansionModule, MatTableModule,
-    MatProgressSpinnerModule, MatSnackBarModule, MatTooltipModule, MatDividerModule
+    MatProgressSpinnerModule, MatSnackBarModule, MatTooltipModule, MatDividerModule, HoraPipe
   ],
   templateUrl: './atividades-remotas.component.html',
   styleUrls: ['./atividades-remotas.component.scss']

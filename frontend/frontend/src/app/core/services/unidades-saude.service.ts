@@ -5,7 +5,7 @@ import { environment } from '../../../environments/environment';
 import {
   UnidadeSaude, CriarUnidadeSaude, GeocodificacaoResposta,
   ImportPreview, ImportacaoResultado, ImportacaoProgresso,
-  Alocacao, EstagiarioDisponivel, StatusGeocodificacao, Turno
+  Alocacao, AlocacoesPagina, EstagiarioDisponivel, StatusGeocodificacao, Turno
 } from '../models/models';
 
 /**
@@ -143,10 +143,11 @@ export class UnidadesSaudeService {
       `${this.api}/${unidadeId}/estagiarios/${estagiarioId}`, { body: { observacao }, params });
   }
 
+  /** Alocações filtradas, uma página por vez; `pagina` começa em 1. */
   getAlocacoes(filtros?: {
     unidadeId?: string; estagiarioId?: string; ativo?: boolean; turno?: Turno;
-    de?: string; ate?: string;
-  }): Observable<Alocacao[]> {
+    de?: string; ate?: string; busca?: string; pagina?: number; tamanhoPagina?: number;
+  }): Observable<AlocacoesPagina> {
     let params = new HttpParams();
     if (filtros?.unidadeId) params = params.set('unidadeId', filtros.unidadeId);
     if (filtros?.estagiarioId) params = params.set('estagiarioId', filtros.estagiarioId);
@@ -155,7 +156,10 @@ export class UnidadesSaudeService {
     if (filtros?.turno) params = params.set('turno', filtros.turno);
     if (filtros?.de) params = params.set('de', filtros.de);
     if (filtros?.ate) params = params.set('ate', filtros.ate);
-    return this.http.get<Alocacao[]>(`${this.apiBase}/alocacoes`, { params });
+    if (filtros?.busca) params = params.set('busca', filtros.busca);
+    if (filtros?.pagina) params = params.set('pagina', filtros.pagina);
+    if (filtros?.tamanhoPagina) params = params.set('tamanhoPagina', filtros.tamanhoPagina);
+    return this.http.get<AlocacoesPagina>(`${this.apiBase}/alocacoes`, { params });
   }
 
   /** Unidade do estagiário no turno pedido. O aluno só consulta a própria. */

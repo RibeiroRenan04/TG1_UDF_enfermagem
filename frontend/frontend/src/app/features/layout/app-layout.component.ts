@@ -9,7 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../../core/services/auth.service';
-import { rotuloTurma } from '../../core/utils/turma';
+import { rotuloTurma, turnoDaTurma } from '../../core/utils/turma';
 
 interface NavItem {
   path: string;
@@ -74,7 +74,7 @@ export class AppLayoutComponent {
     if (u?.role !== 'aluno') return '';
 
     const turmas = u.groups?.length
-      ? u.groups.map(g => rotuloTurma(g.code, g.name, u.shift)).filter(t => !!t)
+      ? u.groups.map(g => rotuloTurma(g.code, g.name, turnoDaTurma(g, u.shift))).filter(t => !!t)
       : [rotuloTurma(u.groupCode, u.groupName, u.shift)].filter(t => !!t);
 
     if (!turmas.length) return 'Sem turma vinculada';

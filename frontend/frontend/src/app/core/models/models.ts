@@ -26,6 +26,11 @@ export interface TurmaVinculada {
   id: string;
   code: string;
   name: string;
+  /**
+   * Turno da turma pelos rodízios dela. `null` quando ela não tem rodízio ou tem
+   * rodízios em turnos diferentes; ausente em sessões gravadas antes do campo existir.
+   */
+  shift?: string | null;
 }
 
 /** Termo de responsabilidade exibido a preceptores, professores e coordenadoras. */
@@ -448,6 +453,9 @@ export interface AdvanceSemesterResult {
 export interface ReportRow {
   studentId: string;
   fullName: string;
+  rgm?: string | null;
+  isActive: boolean;
+  /** Totais do aluno: a mesma conta do certificado (só horas aprovadas). */
   required: number;
   hours: number;
   approved: number;
@@ -456,6 +464,24 @@ export interface ReportRow {
   pendencyHours: number;
   progressPercent: number;
   certificateReleased: boolean;
+  /** Horas aprovadas de registros sem turma atual (ponto sem rodízio ou de turma antiga). */
+  hoursOutsideGroups: number;
+  /** Detalhe por turma: só os registros e pendências dos rodízios de cada uma. */
+  turmas: ReportTurma[];
+}
+
+export interface ReportTurma {
+  groupId: string;
+  groupCode: string;
+  groupName: string;
+  shift?: string | null;
+  required: number;
+  hours: number;
+  approved: number;
+  irregular: number;
+  pendencyDays: number;
+  pendencyHours: number;
+  progressPercent: number;
 }
 
 export interface StudentLookup {
@@ -795,6 +821,18 @@ export interface Alocacao {
   observacao?: string;
   criadoPorNome?: string;
   criadoEm: string;
+}
+
+/**
+ * Uma página da tela geral de alocações. `total` e `ativas` contam tudo o que
+ * atende aos filtros, não só a página.
+ */
+export interface AlocacoesPagina {
+  itens: Alocacao[];
+  total: number;
+  ativas: number;
+  pagina: number;
+  tamanhoPagina: number;
 }
 
 export interface EstagiarioDisponivel {

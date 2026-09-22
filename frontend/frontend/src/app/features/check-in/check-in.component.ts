@@ -17,6 +17,7 @@ import { ProgramacaoService } from '../../core/services/programacao.service';
 import { AtividadesRemotasService } from '../../core/services/atividades-remotas.service';
 import { AtividadeRemotaAluno, ProgramacaoDia, ShiftPointStatus } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
+import { HoraPipe } from '../../core/utils/hora.pipe';
 
 /**
  * Registro de presença guiado pela programação do dia.
@@ -33,7 +34,7 @@ import { mensagemErro } from '../../core/utils/api-error';
     CommonModule, ReactiveFormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatFormFieldModule, MatInputModule,
     MatIconModule, MatProgressSpinnerModule, MatSnackBarModule, MatDividerModule,
-    MatTooltipModule, MatChipsModule
+    MatTooltipModule, MatChipsModule, HoraPipe
   ],
   templateUrl: './check-in.component.html',
   styleUrls: ['./check-in.component.scss']

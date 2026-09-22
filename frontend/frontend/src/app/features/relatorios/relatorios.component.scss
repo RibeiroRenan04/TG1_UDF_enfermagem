@@ -12,3 +12,23 @@
   transition: background-color 0.15s ease;
   &:hover { background: rgb(0 173 238 / 0.04) !important; }
 }
+
+.sub { font-size: 0.74rem; color: #6B7280; }
+
+/* Aluno em mais de uma turma: as linhas das turmas ficam juntas, sem divisória
+   entre elas, e o total fecha o bloco em destaque. */
+.inicio-aluno td { border-top: 1px solid #E5E7EB; }
+.linha-turma td { border-bottom-color: transparent; }
+
+.linha-total {
+  background: #F9FAFB;
+
+  td { font-weight: 600; }
+}
+
+.rotulo-total {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #374151;
+}

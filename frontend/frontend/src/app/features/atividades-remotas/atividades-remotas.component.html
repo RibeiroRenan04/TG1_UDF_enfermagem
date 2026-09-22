@@ -138,9 +138,11 @@
     <p>Nenhuma atividade remota cadastrada.</p>
   </mat-card>
 
-  <mat-accordion multi="false">
+  <mat-accordion multi="false" class="lista-atividades">
     <mat-expansion-panel *ngFor="let a of atividades()" (opened)="carregarParticipacoes(a)">
-      <mat-expansion-panel-header>
+      <!-- Altura automática: com a altura fixa do Material, um título longo quebrava
+           a linha e invadia o painel de cima. -->
+      <mat-expansion-panel-header collapsedHeight="auto" expandedHeight="auto">
         <mat-panel-title>
           <span class="titulo">{{ a.title }}</span>
           <span class="situacao" [class.aberta]="a.situacao === 'aberta'"
@@ -148,7 +150,7 @@
         </mat-panel-title>
         <mat-panel-description>
           {{ a.groupCode }} · {{ a.activityDate | date:'dd/MM/yyyy' }}
-          · {{ a.startTime }}–{{ a.endTime }}
+          · {{ a.startTime | hora }}–{{ a.endTime | hora }}
           · {{ a.totalParticipantes }}/{{ a.totalAlunosGrupo }} alunos
         </mat-panel-description>
       </mat-expansion-panel-header>
@@ -239,7 +241,7 @@
       <mat-icon mat-card-avatar>{{ a.jaRegistrada ? 'task_alt' : 'assignment' }}</mat-icon>
       <mat-card-title>{{ a.title }}</mat-card-title>
       <mat-card-subtitle>
-        {{ a.activityDate | date:'dd/MM/yyyy' }} · {{ a.startTime }}–{{ a.endTime }}
+        {{ a.activityDate | date:'dd/MM/yyyy' }} · {{ a.startTime | hora }}–{{ a.endTime | hora }}
         · {{ a.estimatedHours }} h
         <span class="situacao" [class.aberta]="a.situacao === 'aberta'"
               [class.encerrada]="a.situacao === 'encerrada'">{{ a.situacao }}</span>

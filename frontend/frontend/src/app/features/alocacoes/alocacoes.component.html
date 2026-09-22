@@ -15,14 +15,14 @@
   <div class="filtros">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Estagiário</mat-label>
-      <input matInput [ngModel]="filtroTexto()" (ngModelChange)="filtroTexto.set($event)"
+      <input matInput [ngModel]="filtroTexto" (ngModelChange)="buscar($event)"
              placeholder="Nome ou RGM">
       <mat-icon matPrefix>search</mat-icon>
     </mat-form-field>
 
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Unidade</mat-label>
-      <mat-select [(ngModel)]="filtroUnidade" (selectionChange)="carregar()">
+      <mat-select [(ngModel)]="filtroUnidade" (selectionChange)="filtrar()">
         <mat-option value="">Todas</mat-option>
         <mat-option *ngFor="let u of unidades()" [value]="u.id">{{ u.nome }}</mat-option>
       </mat-select>
@@ -30,7 +30,7 @@
 
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Situação</mat-label>
-      <mat-select [(ngModel)]="filtroAtivo" (selectionChange)="carregar()">
+      <mat-select [(ngModel)]="filtroAtivo" (selectionChange)="filtrar()">
         <mat-option [value]="true">Ativas</mat-option>
         <mat-option [value]="false">Encerradas</mat-option>
         <mat-option [value]="null">Todas</mat-option>
@@ -39,7 +39,7 @@
 
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Turno</mat-label>
-      <mat-select [(ngModel)]="filtroTurno" (selectionChange)="carregar()">
+      <mat-select [(ngModel)]="filtroTurno" (selectionChange)="filtrar()">
         <mat-option value="">Todos</mat-option>
         <mat-option *ngFor="let t of turnos" [value]="t">{{ turnoLabel(t) }}</mat-option>
       </mat-select>
@@ -47,12 +47,12 @@
 
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Início a partir de</mat-label>
-      <input matInput type="date" [(ngModel)]="filtroDe" (change)="carregar()">
+      <input matInput type="date" [(ngModel)]="filtroDe" (change)="filtrar()">
     </mat-form-field>
 
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Início até</mat-label>
-      <input matInput type="date" [(ngModel)]="filtroAte" (change)="carregar()">
+      <input matInput type="date" [(ngModel)]="filtroAte" (change)="filtrar()">
     </mat-form-field>
 
     <button mat-icon-button matTooltip="Limpar filtros" (click)="limparFiltros()">
@@ -65,11 +65,11 @@
 
 <mat-card *ngIf="!loading()">
   <mat-card-content>
-    <p class="contagem" *ngIf="filtradas().length">
-      {{ filtradas().length }} alocação(ões) · {{ ativas() }} ativa(s)
+    <p class="contagem" *ngIf="total()">
+      {{ total() }} alocação(ões) · {{ ativas() }} ativa(s)
     </p>
 
-    <table mat-table [dataSource]="filtradas()" class="full-width" *ngIf="filtradas().length; else vazio">
+    <table mat-table [dataSource]="alocacoes()" class="full-width" *ngIf="alocacoes().length; else vazio">
       <ng-container matColumnDef="estagiario">
         <th mat-header-cell *matHeaderCellDef>Estagiário</th>
         <td mat-cell *matCellDef="let a">
@@ -118,6 +118,11 @@
       <tr mat-header-row *matHeaderRowDef="colunas"></tr>
       <tr mat-row *matRowDef="let row; columns: colunas;" [class.row-encerrada]="!row.ativo"></tr>
     </table>
+
+    <mat-paginator *ngIf="total() > tamanhos[0]"
+                   [length]="total()" [pageIndex]="pagina" [pageSize]="tamanhoPagina"
+                   [pageSizeOptions]="tamanhos" showFirstLastButtons
+                   (page)="mudarPagina($event)"></mat-paginator>
 
     <ng-template #vazio>
       <div class="empty-state">
