@@ -34,6 +34,32 @@ public static class Turnos
 
     public static string DaHora(DateTime momento) => DaHora(momento.Hour);
 
+    /// <summary>
+    /// Janela de horário padrão de cada turno. Usada quando o horário cadastrado na
+    /// unidade é de outro turno — a unidade guarda um horário só (em geral o da
+    /// manhã), e medir o ponto da tarde contra ele marcava todo registro como
+    /// "fora do turno".
+    /// </summary>
+    public static (TimeSpan Inicio, TimeSpan Fim) JanelaPadrao(string turno) => Normalizar(turno) switch
+    {
+        Tarde => (new TimeSpan(13, 0, 0), new TimeSpan(19, 0, 0)),
+        Noite => (new TimeSpan(19, 0, 0), new TimeSpan(23, 0, 0)),
+        _ => (new TimeSpan(7, 0, 0), new TimeSpan(13, 0, 0))
+    };
+
+    /// <summary>
+    /// Janela que vale para o ponto de um turno na unidade: o horário cadastrado
+    /// quando ele começa naquele turno; senão, a janela padrão do turno.
+    /// </summary>
+    public static (TimeSpan Inicio, TimeSpan Fim)? JanelaNaUnidade(string? inicioUnidade, string? fimUnidade, string turno)
+    {
+        if (TimeSpan.TryParse(inicioUnidade, out var inicio) && TimeSpan.TryParse(fimUnidade, out var fim)
+            && DaHora(inicio.Hours) == Normalizar(turno))
+            return (inicio, fim);
+
+        return Normalizar(turno) == null ? null : JanelaPadrao(turno);
+    }
+
     public static string Rotulo(string? turno) => Normalizar(turno) switch
     {
         Manha => "manhã",

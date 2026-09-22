@@ -22,9 +22,15 @@ public class DashboardController(
             ?? User.FindFirstValue("sub")!);
         var role = User.FindFirstValue(ClaimTypes.Role) ?? Roles.Aluno;
 
+        // O preceptor vê só os alunos das turmas que acompanha — antes os cards
+        // somavam os registros da faculdade inteira.
+        var alunosDoPreceptor = role == Roles.Preceptor ? await AlunosDoPreceptorAsync(userId) : null;
+
         var query = db.AttendanceRecords.AsQueryable();
         if (role == Roles.Aluno)
             query = query.Where(r => r.StudentId == userId);
+        else if (alunosDoPreceptor != null)
+            query = query.Where(r => alunosDoPreceptor.Contains(r.StudentId));
 
         var recs = await query
             .Select(r => new { r.Type, r.Status, r.RecordedAt, r.StudentId })
@@ -74,7 +80,8 @@ public class DashboardController(
                 groupName = string.Join(", ", ordenados.Select(m => m.Group.Name));
                 turmas = [.. ordenados.Select(m => new UserGroupDto
                 {
-                    Id = m.GroupId, Code = m.Group.Code, Name = m.Group.Name
+                    Id = m.GroupId, Code = m.Group.Code, Name = m.Group.Name,
+                    Shift = TurmasDoAluno.Turno(m.Group)
                 })];
             }
 
@@ -92,7 +99,9 @@ public class DashboardController(
         // então a tela do professor exibia zero sempre.
         var totalStudents = role == Roles.Aluno
             ? 0
-            : await db.Users.CountAsync(u => u.Role == Roles.Aluno && u.IsActive);
+            : alunosDoPreceptor != null
+                ? await db.Users.CountAsync(u => alunosDoPreceptor.Contains(u.Id) && u.IsActive)
+                : await db.Users.CountAsync(u => u.Role == Roles.Aluno && u.IsActive);
 
         // As ocorrências vêm da mesma tabela da tela de irregularidades — o que o
         // aluno acabou de enviar já entra nesta contagem.
@@ -166,21 +175,27 @@ public class DashboardController(
         }
         else if (role == Roles.Preceptor)
         {
-            var grupoIds = await db.RotationSchedules
-                .Where(sc => sc.PreceptorId == userId)
-                .Select(sc => sc.GroupId)
-                .Distinct()
-                .ToListAsync();
-
-            var alunoIds = await db.GroupMemberships
-                .Where(m => grupoIds.Contains(m.GroupId))
-                .Select(m => m.StudentId)
-                .ToListAsync();
-
+            var alunoIds = await AlunosDoPreceptorAsync(userId);
             query = query.Where(i => alunoIds.Contains(i.StudentId));
         }
 
         return await query.OrderByDescending(i => i.CreatedAt).ToListAsync();
+    }
+
+    /// <summary>Alunos das turmas em que o preceptor tem ao menos um rodízio.</summary>
+    private async Task<List<Guid>> AlunosDoPreceptorAsync(Guid preceptorId)
+    {
+        var grupoIds = await db.RotationSchedules
+            .Where(sc => sc.PreceptorId == preceptorId)
+            .Select(sc => sc.GroupId)
+            .Distinct()
+            .ToListAsync();
+
+        return await db.GroupMemberships
+            .Where(m => grupoIds.Contains(m.GroupId))
+            .Select(m => m.StudentId)
+            .Distinct()
+            .ToListAsync();
     }
 
     private static IrregularityCountsDto ContarIrregularidades(List<PointIrregularity> ocorrencias)

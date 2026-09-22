@@ -32,6 +32,23 @@ public static class TurmasDoAluno
             .ThenBy(m => m.Group?.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>Códigos das turmas em um rótulo só: "T01, T02". Nulo sem vínculo.</summary>
+    /// <summary>
+    /// Turno da turma, tirado dos rodízios dela: o turno único que todos têm, ou
+    /// <c>null</c> quando a turma ainda não tem rodízio ou tem rodízios em turnos
+    /// diferentes. É o que a tela mostra ao lado da turma — antes ela exibia o turno
+    /// cadastrado do aluno, e o PIC da tarde aparecia como "(Manhã)".
+    /// </summary>
+    public static string? Turno(StudentGroup? turma)
+    {
+        var turnos = (turma?.Schedules ?? [])
+            .Select(s => Turnos.Normalizar(s.Shift))
+            .Where(t => t != null)
+            .Distinct()
+            .ToList();
+
+        return turnos.Count == 1 ? turnos[0] : null;
+    }
+
     public static string? Codigos(IEnumerable<GroupMembership>? vinculos)
     {
         var codigos = Ordenados(vinculos)

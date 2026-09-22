@@ -170,11 +170,11 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
 
         var registrosPorAluno = (await db.AttendanceRecords.AsNoTracking()
                 .Where(r => ids.Contains(r.StudentId))
-                .Select(r => new { r.StudentId, r.Type, r.Status, r.RecordedAt })
+                .Select(r => new { r.StudentId, r.Type, r.Status, r.RecordedAt, r.ScheduleId })
                 .ToListAsync(ct))
             .GroupBy(r => r.StudentId)
             .ToDictionary(g => g.Key, g => g.Select(r =>
-                new CertificateService.RegistroHora(r.Type, r.Status, r.RecordedAt)).ToList());
+                new CertificateService.RegistroHora(r.Type, r.Status, r.RecordedAt, r.ScheduleId)).ToList());
 
         string[] rotulos = ["Até 25%", "25% a 50%", "50% a 75%", "75% a 99%", "Concluída"];
         var faixas = new int[rotulos.Length];

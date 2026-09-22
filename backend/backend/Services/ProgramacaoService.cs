@@ -224,8 +224,11 @@ public class ProgramacaoService(AppDbContext db)
                      ?? Turnos.Normalizar(escalas.Count == 1 ? escalas[0].Shift : null)
                      ?? Turnos.DaHora(BrasiliaTime.Agora);
 
+        // Com o turno pedido explicitamente, só vale a escala daquele turno: antes a
+        // única escala do dia respondia por qualquer turno, e quem tinha rodízio só à
+        // noite aparecia com programação também de manhã (reposição de sábado).
         var escala = escalas.FirstOrDefault(s => Turnos.Normalizar(s.Shift) == turnoAlvo)
-                  ?? (escalas.Count == 1 ? escalas[0] : null);
+                  ?? (Turnos.Normalizar(turno) == null && escalas.Count == 1 ? escalas[0] : null);
 
         var baseDia = MontarBase(escala, data, turnoAlvo);
 

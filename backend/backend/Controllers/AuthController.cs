@@ -20,7 +20,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
     {
         var user = await db.Users
-            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group).ThenInclude(g => g.Schedules)
             .FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
         if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             return Unauthorized(new { message = "Credenciais inválidas." });
@@ -42,7 +42,10 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         user.Shift,
         [.. TurmasDoAluno.Ordenados(user.GroupMemberships)
             .Where(m => m.Group != null)
-            .Select(m => new UserGroupDto { Id = m.GroupId, Code = m.Group.Code, Name = m.Group.Name })]);
+            .Select(m => new UserGroupDto
+            {
+                Id = m.GroupId, Code = m.Group.Code, Name = m.Group.Name, Shift = TurmasDoAluno.Turno(m.Group)
+            })]);
 
     // ── Termo de responsabilidade de acesso ───────────────────────────────────
     /// <summary>
@@ -101,7 +104,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
             return Unauthorized();
 
         var user = await db.Users
-            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
+            .Include(u => u.GroupMemberships).ThenInclude(m => m.Group).ThenInclude(g => g.Schedules)
             .FirstOrDefaultAsync(u => u.Id == id);
         if (user == null) return NotFound();
 

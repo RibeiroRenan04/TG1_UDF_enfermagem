@@ -291,7 +291,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
 
         var (status, irregularityReason, distanceMeters) = AvaliarRegistro(
             location, dto.Latitude, dto.Longitude, dto.AccuracyMeters, agora,
-            dto.Type, aluno?.AllowLateArrival == true, temProgramacaoSemanal);
+            dto.Type, turno, aluno?.AllowLateArrival == true, temProgramacaoSemanal);
 
         // Foto do registro: guardamos o data URI completo (MVP). Limite de ~5 MB
         // para proteger o banco; o frontend já comprime a imagem antes de enviar.
@@ -409,7 +409,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
     /// </summary>
     private (string status, string? reason, double? distance) AvaliarRegistro(
         Location? location, double lat, double lon, double? accuracyMeters, DateTime recordedAt,
-        string tipo, bool permiteAtraso = false, bool temProgramacaoSemanal = false)
+        string tipo, string turno, bool permiteAtraso = false, bool temProgramacaoSemanal = false)
     {
         if (location == null)
             return ("pendente", "Sem local vinculado. Aguardando validação manual.", null);
@@ -427,8 +427,9 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         // recordedAt já chega no horário de Brasília (ver BrasiliaTime).
         var horaLocal = recordedAt.TimeOfDay;
         var foraDoTurno = false;
-        if (TimeSpan.TryParse(location.ShiftStart, out var inicio) &&
-            TimeSpan.TryParse(location.ShiftEnd, out var fim))
+        // A janela é a do turno do registro: o horário da unidade vale para o turno
+        // em que ele começa; os outros turnos usam a janela padrão (ver Turnos).
+        if (Turnos.JanelaNaUnidade(location.ShiftStart, location.ShiftEnd, turno) is var (inicio, fim))
         {
             var tol = TimeSpan.FromMinutes(ToleranciaTurnoMin);
             var antesDoInicio = horaLocal < inicio - tol;
@@ -442,12 +443,12 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
             if (antesDoInicio || depoisDoFim)
             {
                 foraDoTurno = true;
-                motivos.Add($"Registro às {horaLocal:hh\\:mm} fora do turno ({location.ShiftStart}–{location.ShiftEnd})");
+                motivos.Add($"Registro às {horaLocal:hh\\:mm} fora do turno ({inicio:hh\\:mm}–{fim:hh\\:mm})");
             }
             else if (atrasado && !permiteAtraso)
             {
                 foraDoTurno = true;
-                motivos.Add($"Chegada às {horaLocal:hh\\:mm}, após o início do turno ({location.ShiftStart})");
+                motivos.Add($"Chegada às {horaLocal:hh\\:mm}, após o início do turno ({inicio:hh\\:mm})");
             }
         }
 

@@ -75,6 +75,34 @@ public class ProgramacaoTests
     }
 
     [Fact]
+    public async Task Turno_pedido_sem_rodizio_nao_herda_a_escala_de_outro_turno()
+    {
+        var c = await MontarAsync();
+        using var _ = c.Db;
+
+        // O aluno só tem rodízio de manhã: a noite dele não tem programação. Antes a
+        // única escala do dia respondia por qualquer turno pedido.
+        var dia = await Servico(c.Db).ObterAsync(c.Aluno.Id, Segunda, Turnos.Noite);
+
+        Assert.Null(dia.ScheduleId);
+        Assert.Equal(ModoAtividade.SemAtividade, dia.Modo);
+        Assert.False(dia.ExigePonto);
+    }
+
+    [Fact]
+    public async Task Sem_turno_pedido_a_unica_escala_do_dia_continua_valendo()
+    {
+        var c = await MontarAsync();
+        using var _ = c.Db;
+
+        // É o caminho do check-in, que não informa turno: vale o rodízio do dia.
+        var dia = await Servico(c.Db).ObterAsync(c.Aluno.Id, Segunda);
+
+        Assert.Equal(c.Escala.Id, dia.ScheduleId);
+        Assert.Equal(c.Ubs.Id, dia.Local?.Id);
+    }
+
+    [Fact]
     public async Task Fim_de_semana_nao_gera_obrigacao_de_ponto()
     {
         var c = await MontarAsync();

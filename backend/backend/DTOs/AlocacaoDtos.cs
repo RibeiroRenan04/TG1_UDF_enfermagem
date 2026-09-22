@@ -25,6 +25,20 @@ public class AlocacaoDto
     public DateTime CriadoEm { get; init; }
 }
 
+/// <summary>
+/// Uma página da tela geral de alocações. Os totais contam todas as alocações que
+/// atendem aos filtros, não só as da página — antes a lista parava em 500 e o
+/// contador mostrava "500 ativas" com mais de 600 alunos alocados.
+/// </summary>
+public class AlocacoesPaginaDto
+{
+    public List<AlocacaoDto> Itens { get; init; } = [];
+    public int Total { get; init; }
+    public int Ativas { get; init; }
+    public int Pagina { get; init; }
+    public int TamanhoPagina { get; init; }
+}
+
 /// <summary>Aluno disponível para alocação, na busca da tela da unidade.</summary>
 public class EstagiarioDisponivelDto
 {

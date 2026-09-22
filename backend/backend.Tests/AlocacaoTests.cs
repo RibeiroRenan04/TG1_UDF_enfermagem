@@ -473,4 +473,124 @@ public class AlocacaoTests
         Assert.Single(comoAluno);
         Assert.Equal(aluno.Id, comoAluno[0].EstagiarioId);
     }
+
+    private static string? Codigo(ActionResult resultado) =>
+        (resultado as ObjectResult)?.Value?.GetType().GetProperty("code")?.GetValue(((ObjectResult)resultado).Value) as string;
+
+    [Fact]
+    public async Task Transferencia_com_inicio_anterior_a_alocacao_atual_e_recusada_com_o_motivo()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidadeA = TestSupport.Unidade("UBS A");
+        var unidadeB = TestSupport.Unidade("UBS B");
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidadeA, unidadeB, aluno);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        await controller.Alocar(unidadeA.Id, new CriarAlocacaoDto(aluno.Id, new DateOnly(2026, 9, 10), null));
+
+        // Antes, a anterior era encerrada com fim antes do início e o banco devolvia
+        // um "conflito de dados" genérico.
+        var resposta = await controller.Alocar(unidadeB.Id,
+            new CriarAlocacaoDto(aluno.Id, new DateOnly(2026, 9, 1), null, EncerrarAlocacaoAtual: true));
+
+        var recusa = Assert.IsType<BadRequestObjectResult>(resposta.Result);
+        Assert.Equal("inicio_anterior_alocacao_atual", Codigo(recusa));
+
+        // Nada muda: a alocação atual segue ativa e nenhuma outra é criada.
+        var unica = Assert.Single(db.StudentAllocations.Where(a => a.StudentId == aluno.Id));
+        Assert.True(unica.Ativo);
+        Assert.Equal(unidadeA.Id, unica.LocationId);
+    }
+
+    [Fact]
+    public async Task Transferencia_no_mesmo_dia_do_inicio_da_atual_e_aceita()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidadeA = TestSupport.Unidade("UBS A");
+        var unidadeB = TestSupport.Unidade("UBS B");
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidadeA, unidadeB, aluno);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        var dia = new DateOnly(2026, 9, 10);
+        await controller.Alocar(unidadeA.Id, new CriarAlocacaoDto(aluno.Id, dia, null));
+
+        var resposta = await controller.Alocar(unidadeB.Id,
+            new CriarAlocacaoDto(aluno.Id, dia, null, EncerrarAlocacaoAtual: true));
+
+        Assert.Equal(unidadeB.Id, Corpo(resposta).UnidadeId);
+        var antiga = db.StudentAllocations.Single(a => a.LocationId == unidadeA.Id);
+        Assert.Equal(dia, antiga.EndDate);
+    }
+
+    [Fact]
+    public async Task Encerrar_com_data_fim_anterior_ao_inicio_e_recusado_com_o_motivo()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidade = TestSupport.Unidade();
+        var aluno = TestSupport.Aluno();
+        db.AddRange(unidade, aluno);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        await controller.Alocar(unidade.Id, new CriarAlocacaoDto(aluno.Id, new DateOnly(2026, 9, 10), null));
+
+        var resposta = await controller.Encerrar(unidade.Id, aluno.Id,
+            new EncerrarAlocacaoDto(new DateOnly(2026, 9, 1), null));
+
+        var recusa = Assert.IsType<BadRequestObjectResult>(resposta.Result);
+        Assert.Equal("fim_anterior_inicio", Codigo(recusa));
+        Assert.True(db.StudentAllocations.Single().Ativo);
+    }
+
+    [Fact]
+    public async Task Lista_geral_e_paginada_e_os_totais_contam_todas_as_paginas()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidade = TestSupport.Unidade();
+        var alunos = Enumerable.Range(1, 12).Select(i => TestSupport.Aluno($"Aluno {i:00}", $"9000{i:00}")).ToList();
+        db.Add(unidade);
+        db.AddRange(alunos);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        foreach (var a in alunos)
+            await controller.Alocar(unidade.Id, new CriarAlocacaoDto(a.Id, null, null));
+        await controller.Encerrar(unidade.Id, alunos[0].Id, null);
+
+        var primeira = Corpo(await controller.GetTodas(null, null, null, null, null, null, null, pagina: 1, tamanhoPagina: 10));
+        var segunda = Corpo(await controller.GetTodas(null, null, null, null, null, null, null, pagina: 2, tamanhoPagina: 10));
+
+        Assert.Equal(10, primeira.Itens.Count);
+        Assert.Equal(2, segunda.Itens.Count);
+        Assert.Equal(12, primeira.Total);
+        Assert.Equal(11, primeira.Ativas);
+        Assert.Empty(primeira.Itens.Select(i => i.Id).Intersect(segunda.Itens.Select(i => i.Id)));
+    }
+
+    [Fact]
+    public async Task Busca_por_nome_ou_rgm_alcanca_alocacoes_fora_da_pagina()
+    {
+        using var db = TestSupport.NovoContexto();
+        var unidade = TestSupport.Unidade();
+        var alunos = Enumerable.Range(1, 15).Select(i => TestSupport.Aluno($"Aluno {i:00}", $"7000{i:00}")).ToList();
+        alunos[14].FullName = "Yasmin Martins Andrade";
+        db.Add(unidade);
+        db.AddRange(alunos);
+        await db.SaveChangesAsync();
+
+        var controller = Montar(db, Guid.NewGuid());
+        foreach (var a in alunos)
+            await controller.Alocar(unidade.Id, new CriarAlocacaoDto(a.Id, null, null));
+
+        var porNome = Corpo(await controller.GetTodas(null, null, null, null, null, null, "yasmin", tamanhoPagina: 10));
+        var porRgm = Corpo(await controller.GetTodas(null, null, null, null, null, null, "700015", tamanhoPagina: 10));
+
+        Assert.Equal(alunos[14].Id, Assert.Single(porNome.Itens).EstagiarioId);
+        Assert.Equal(1, porNome.Total);
+        Assert.Equal(alunos[14].Id, Assert.Single(porRgm.Itens).EstagiarioId);
+    }
 }

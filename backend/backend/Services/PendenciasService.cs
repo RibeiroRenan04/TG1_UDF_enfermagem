@@ -24,85 +24,130 @@ namespace EstagioCheck.API.Services;
 /// </summary>
 public class PendenciasService(AppDbContext db, ProgramacaoService programacao)
 {
-    public async Task<List<PendencyDto>> CalcularAsync(Guid studentId, CancellationToken ct = default)
+    public async Task<List<PendencyDto>> CalcularAsync(Guid studentId, CancellationToken ct = default) =>
+        (await CalcularLoteAsync([studentId], ct))[studentId];
+
+    /// <summary>
+    /// Pendências de vários alunos com um número fixo de consultas. A tela do
+    /// preceptor e o relatório calculavam aluno por aluno — umas dez consultas
+    /// cada —, e com a turma inteira a resposta passava de minutos.
+    /// </summary>
+    public async Task<Dictionary<Guid, List<PendencyDto>>> CalcularLoteAsync(
+        IReadOnlyCollection<Guid> studentIds, CancellationToken ct = default)
     {
+        var resultado = studentIds.Distinct().ToDictionary(id => id, _ => new List<PendencyDto>());
+        var ids = resultado.Keys.ToList();
+        if (ids.Count == 0) return resultado;
+
         var vinculos = await db.GroupMemberships
             .AsNoTracking()
-            .Where(m => m.StudentId == studentId)
-            .Select(m => new { m.GroupId, m.CreatedAt })
+            .Where(m => ids.Contains(m.StudentId))
+            .Select(m => new { m.StudentId, m.GroupId, m.CreatedAt })
             .ToListAsync(ct);
-        if (vinculos.Count == 0) return [];
+        if (vinculos.Count == 0) return resultado;
 
         var groupIds = vinculos.Select(v => v.GroupId).Distinct().ToList();
 
         var escalas = (await db.RotationSchedules
                 .AsNoTracking()
                 .Where(s => groupIds.Contains(s.GroupId))
-                .Select(s => new { s.GroupId, s.StartDate, s.EndDate })
+                .Select(s => new { s.GroupId, s.StartDate, s.EndDate, s.Shift })
                 .ToListAsync(ct))
-            .Where(s => RotationSchedule.PeriodoValido(s.StartDate, s.EndDate))
+            .Where(s => RotationSchedule.PeriodoValido(s.StartDate, s.EndDate) && Turnos.Normalizar(s.Shift) != null)
             .ToList();
-        if (escalas.Count == 0) return [];
+        if (escalas.Count == 0) return resultado;
 
-        // Cada turma tem a sua janela: começa no maior entre o início do rodízio e
-        // a entrada do aluno naquela turma. Cursando duas, a varredura cobre da
-        // primeira janela aberta até a última fechada — o dia que não exigia nada
-        // de nenhuma delas é descartado adiante pela programação.
+        // Cada rodízio tem a sua janela, no turno dele: começa no maior entre o
+        // início do rodízio e a entrada do aluno naquela turma. Cursando duas turmas,
+        // o aluno tem janelas em turnos diferentes, e cada turno é cobrado à parte.
         // O vínculo é gravado em UTC; o dia do estágio é o de Brasília.
-        var janelas = vinculos
-            .Select(v => new
-            {
-                v.GroupId,
-                Entrada = DateOnly.FromDateTime(BrasiliaTime.DeUtc(v.CreatedAt))
-            })
+        var janelasPorAluno = vinculos
             .SelectMany(v => escalas
                 .Where(s => s.GroupId == v.GroupId)
-                .Select(s => new { Inicio = Maior(s.StartDate, v.Entrada), Fim = s.EndDate }))
+                .Select(s => new
+                {
+                    v.StudentId,
+                    Turno = Turnos.Normalizar(s.Shift)!,
+                    Inicio = Maior(s.StartDate, DateOnly.FromDateTime(BrasiliaTime.DeUtc(v.CreatedAt))),
+                    Fim = s.EndDate
+                }))
             .Where(j => j.Fim >= j.Inicio)
+            .GroupBy(j => j.StudentId)
+            .ToDictionary(g => g.Key, g => g.Select(j => (j.Turno, j.Inicio, j.Fim)).ToList());
+
+        var ontem = BrasiliaTime.Hoje.AddDays(-1);
+        var varreduras = janelasPorAluno
+            .Select(kv => (Aluno: kv.Key,
+                           Inicio: kv.Value.Min(j => j.Inicio),
+                           Fim: Menor(kv.Value.Max(j => j.Fim), ontem)))
+            .Where(v => v.Fim >= v.Inicio)
             .ToList();
-        if (janelas.Count == 0) return [];
+        if (varreduras.Count == 0) return resultado;
 
-        var inicio = janelas.Min(j => j.Inicio);
-        var fim = Menor(janelas.Max(j => j.Fim), BrasiliaTime.Hoje.AddDays(-1));
-        if (fim < inicio) return [];
+        var de = varreduras.Min(v => v.Inicio);
+        var ate = varreduras.Max(v => v.Fim);
+        var alunos = varreduras.Select(v => v.Aluno).ToList();
 
-        // Check-ins existentes, indexados por data: o dia remoto gera o mesmo par
-        // de registros do presencial, então a comparação vale para os dois.
-        var desde = inicio.ToDateTime(TimeOnly.MinValue);
+        // Check-ins existentes, indexados por aluno, data e turno — o turno do
+        // registro é o do rodízio vinculado; sem rodízio, o do horário (a mesma regra
+        // do ponto e do painel do professor). Indexar só pela data deixava o check-in
+        // da manhã "cobrir" o turno da tarde de quem cursa duas turmas. O dia remoto
+        // gera o mesmo par de registros do presencial, então a comparação vale para os dois.
+        var desde = de.ToDateTime(TimeOnly.MinValue);
         var checkIns = (await db.AttendanceRecords
                 .AsNoTracking()
-                .Where(r => r.StudentId == studentId && r.Type == "check_in" && r.RecordedAt >= desde)
-                .Select(r => r.RecordedAt)
+                .Where(r => alunos.Contains(r.StudentId) && r.Type == "check_in" && r.RecordedAt >= desde)
+                .Select(r => new { r.StudentId, r.RecordedAt, Turno = r.Schedule != null ? r.Schedule.Shift : null })
                 .ToListAsync(ct))
-            .Select(DateOnly.FromDateTime)
+            .Select(r => (r.StudentId, DateOnly.FromDateTime(r.RecordedAt),
+                          Turnos.Normalizar(r.Turno) ?? Turnos.DaHora(r.RecordedAt)))
             .ToHashSet();
 
-        var dias = await programacao.ObterIntervaloAsync(studentId, inicio, fim, ct: ct);
+        var lote = await programacao.CarregarLoteAsync(alunos, de, ate, ct);
 
-        return [.. dias
-            // Só o dia dentro de alguma janela conta: o rodízio de uma turma não
-            // cobra presença de antes de o aluno entrar nela.
-            .Where(dia => janelas.Any(j => dia.Data >= j.Inicio && dia.Data <= j.Fim))
-            .Where(dia => dia.ExigePonto && !checkIns.Contains(dia.Data))
-            .Select(dia => new PendencyDto
+        foreach (var (aluno, inicio, fim) in varreduras)
+        {
+            var janelas = janelasPorAluno[aluno];
+            var turnos = Turnos.Validos.Where(t => janelas.Any(j => j.Turno == t)).ToList();
+            var lista = resultado[aluno];
+
+            // Do mais recente para o mais antigo, a ordem que as telas exibem.
+            for (var data = fim; data >= inicio; data = data.AddDays(-1))
             {
-                PendencyDate = dia.Data,
-                ScheduleId = dia.ScheduleId,
-                LocationName = dia.Local?.Name ?? ModoAtividade.Rotulo(dia.Modo),
-                ExpectedHours = HorasEsperadas(dia)
-            })
-            .OrderByDescending(p => p.PendencyDate)];
+                foreach (var turno in turnos)
+                {
+                    // Só o dia dentro de alguma janela do turno conta: o rodízio de uma
+                    // turma não cobra presença de antes de o aluno entrar nela.
+                    if (!janelas.Any(j => j.Turno == turno && data >= j.Inicio && data <= j.Fim)) continue;
+
+                    // O dia resolvido no turno: com duas turmas, resolver sem turno
+                    // dependia da hora em que a tela era aberta.
+                    var dia = lote.NoTurno(aluno, data, turno);
+                    if (dia is not { ExigePonto: true } || checkIns.Contains((aluno, data, turno))) continue;
+
+                    lista.Add(new PendencyDto
+                    {
+                        PendencyDate = dia.Data,
+                        ScheduleId = dia.ScheduleId,
+                        LocationName = dia.Local?.Name ?? ModoAtividade.Rotulo(dia.Modo),
+                        ExpectedHours = HorasEsperadas(dia, turno)
+                    });
+                }
+            }
+        }
+
+        return resultado;
     }
 
     /// <summary>
-    /// Carga horária do dia. Vem da janela do turno da unidade; em dia remoto, da
-    /// carga informada pelo professor na atividade. Sem nenhuma das duas, 8 horas.
+    /// Carga horária do dia. Vem da janela do turno na unidade (a mesma do ponto);
+    /// em dia remoto, da carga informada pelo professor na atividade. Sem nenhuma
+    /// das duas, 8 horas.
     /// </summary>
-    private static double HorasEsperadas(ProgramacaoService.ProgramacaoDia dia)
+    private static double HorasEsperadas(ProgramacaoService.ProgramacaoDia dia, string turno)
     {
         if (dia.Local != null
-            && TimeSpan.TryParse(dia.Local.ShiftStart, out var inicio)
-            && TimeSpan.TryParse(dia.Local.ShiftEnd, out var fim))
+            && Turnos.JanelaNaUnidade(dia.Local.ShiftStart, dia.Local.ShiftEnd, turno) is var (inicio, fim))
             return (fim - inicio).TotalHours;
 
         if (dia.AtividadesRemotas.Count > 0)

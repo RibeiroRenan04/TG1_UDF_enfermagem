@@ -35,17 +35,24 @@ public class PreceptorController(AppDbContext db, PendenciasService pendenciasSe
             .Where(m => groupIds.Contains(m.GroupId))
             .ToListAsync();
 
+        // Primeiro rodízio de cada turma e pendências de todos os alunos de uma vez:
+        // aluno por aluno, a turma inteira levava minutos para abrir.
+        var primeiraEscalaPorTurma = (await db.RotationSchedules
+                .Where(s => groupIds.Contains(s.GroupId))
+                .Select(s => new { s.GroupId, s.Id, s.StartDate })
+                .ToListAsync())
+            .GroupBy(s => s.GroupId)
+            .ToDictionary(g => g.Key, g => (Guid?)g.OrderBy(s => s.StartDate).First().Id);
+
+        // Mesma regra do painel do aluno: programação do dia + vigência do rodízio.
+        var pendenciasPorAluno = await pendenciasService.CalcularLoteAsync(
+            [.. members.Select(m => m.StudentId)]);
+
         var result = new List<object>();
         foreach (var m in members)
         {
-            var primeiraEscala = await db.RotationSchedules
-                .Where(s => s.GroupId == m.GroupId)
-                .OrderBy(s => s.StartDate)
-                .Select(s => (Guid?)s.Id)
-                .FirstOrDefaultAsync();
-
-            // Mesma regra do painel do aluno: programação do dia + vigência do rodízio.
-            var pendencias = await pendenciasService.CalcularAsync(m.StudentId);
+            var primeiraEscala = primeiraEscalaPorTurma.GetValueOrDefault(m.GroupId);
+            var pendencias = pendenciasPorAluno[m.StudentId];
 
             result.Add(new
             {

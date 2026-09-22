@@ -41,6 +41,13 @@ public class UserGroupDto
     public Guid Id { get; init; }
     public string Code { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Turno da turma pelos seus rodízios ("manha" | "tarde" | "noite"). Nulo sem
+    /// rodízio ou com rodízios em turnos diferentes. Vem no login e no painel do
+    /// aluno, que são as telas que exibem a turma com o turno.
+    /// </summary>
+    public string? Shift { get; init; }
 }
 
 /// <summary>

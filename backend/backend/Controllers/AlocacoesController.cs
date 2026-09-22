@@ -193,6 +193,20 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
                     unidadeAtualNome = alocacaoDoTurno.Location.Name
                 });
 
+            // A anterior termina no dia em que a nova começa. Começar antes dela
+            // deixaria o fim antes do início, e o banco recusava com um erro genérico
+            // de "conflito de dados" que não dizia o que corrigir.
+            if (inicio < alocacaoDoTurno.StartDate)
+                return BadRequest(new
+                {
+                    message = $"A nova alocação começa em {inicio:dd/MM/yyyy}, antes do início da alocação atual "
+                            + $"em \"{alocacaoDoTurno.Location.Name}\" ({alocacaoDoTurno.StartDate:dd/MM/yyyy}). "
+                            + $"Informe uma data de início a partir de {alocacaoDoTurno.StartDate:dd/MM/yyyy}.",
+                    code = "inicio_anterior_alocacao_atual",
+                    turno,
+                    inicioAlocacaoAtual = alocacaoDoTurno.StartDate
+                });
+
             alocacaoDoTurno.Ativo = false;
             alocacaoDoTurno.EndDate = inicio;
             alocacaoDoTurno.UpdatedAt = BrasiliaTime.Agora;
@@ -286,9 +300,21 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
                 turnos = ativas.Select(a => a.Shift).ToList()
             });
 
+        // Mesma trava da transferência: o fim não pode vir antes do início.
+        var fim = dto?.DataFim ?? BrasiliaTime.Hoje;
+        if (fim < alocacao.StartDate)
+            return BadRequest(new
+            {
+                message = $"A data de término ({fim:dd/MM/yyyy}) é anterior ao início da alocação "
+                        + $"({alocacao.StartDate:dd/MM/yyyy}). Informe uma data a partir de "
+                        + $"{alocacao.StartDate:dd/MM/yyyy}.",
+                code = "fim_anterior_inicio",
+                inicioAlocacao = alocacao.StartDate
+            });
+
         // Encerrar preserva a linha: é o histórico de onde o aluno esteve.
         alocacao.Ativo = false;
-        alocacao.EndDate = dto?.DataFim ?? BrasiliaTime.Hoje;
+        alocacao.EndDate = fim;
         if (!string.IsNullOrWhiteSpace(dto?.Observacao))
             alocacao.Observacao = dto.Observacao.Trim();
         alocacao.UpdatedAt = BrasiliaTime.Agora;
@@ -305,19 +331,26 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
     // ── Tela geral de alocações ───────────────────────────────────────────────
     [HttpGet("alocacoes")]
     [Authorize(Roles = Roles.Gestao)]
-    public async Task<ActionResult<List<AlocacaoDto>>> GetTodas(
+    /// <summary>
+    /// Alocações filtradas, uma página por vez. A busca por nome ou RGM é feita
+    /// aqui, e não na tela: filtrar só a página carregada escondia quem estava nas
+    /// outras.
+    /// </summary>
+    public async Task<ActionResult<AlocacoesPaginaDto>> GetTodas(
         [FromQuery] Guid? unidadeId,
         [FromQuery] Guid? estagiarioId,
         [FromQuery] bool? ativo,
         [FromQuery] string? turno,
         [FromQuery] DateOnly? de,
-        [FromQuery] DateOnly? ate)
+        [FromQuery] DateOnly? ate,
+        [FromQuery] string? busca,
+        [FromQuery] int pagina = 1,
+        [FromQuery] int tamanhoPagina = 50)
     {
-        var query = db.StudentAllocations
-            .Include(a => a.Student)
-            .Include(a => a.Location)
-            .Include(a => a.CreatedBy)
-            .AsQueryable();
+        pagina = Math.Max(1, pagina);
+        tamanhoPagina = Math.Clamp(tamanhoPagina, 10, 200);
+
+        var query = db.StudentAllocations.AsQueryable();
 
         if (unidadeId.HasValue) query = query.Where(a => a.LocationId == unidadeId.Value);
         if (estagiarioId.HasValue) query = query.Where(a => a.StudentId == estagiarioId.Value);
@@ -327,14 +360,35 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         if (de.HasValue) query = query.Where(a => a.StartDate >= de.Value);
         if (ate.HasValue) query = query.Where(a => a.StartDate <= ate.Value);
 
+        var termo = busca?.Trim().ToLower();
+        if (!string.IsNullOrEmpty(termo))
+            query = query.Where(a => a.Student.FullName.ToLower().Contains(termo)
+                                  || (a.Student.Rgm != null && a.Student.Rgm.Contains(termo)));
+
+        var total = await query.CountAsync();
+        var ativas = await query.CountAsync(a => a.Ativo);
+
         var alocacoes = await query
+            .Include(a => a.Student)
+            .Include(a => a.Location)
+            .Include(a => a.CreatedBy)
             .OrderByDescending(a => a.Ativo)
             .ThenByDescending(a => a.StartDate)
             .ThenBy(a => a.Shift)
-            .Take(500)
+            .ThenBy(a => a.Student.FullName)
+            .ThenBy(a => a.Id)
+            .Skip((pagina - 1) * tamanhoPagina)
+            .Take(tamanhoPagina)
             .ToListAsync();
 
-        return Ok(alocacoes.Select(Map));
+        return Ok(new AlocacoesPaginaDto
+        {
+            Itens = [.. alocacoes.Select(Map)],
+            Total = total,
+            Ativas = ativas,
+            Pagina = pagina,
+            TamanhoPagina = tamanhoPagina
+        });
     }
 
     /// <summary>

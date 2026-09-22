@@ -34,10 +34,10 @@ public class CertificateService(AppDbContext db)
 
         var recsRaw = await db.AttendanceRecords
             .Where(r => r.StudentId == studentId)
-            .Select(r => new { r.Type, r.Status, r.RecordedAt })
+            .Select(r => new { r.Type, r.Status, r.RecordedAt, r.ScheduleId })
             .ToListAsync();
 
-        var recs = recsRaw.Select(r => new RegistroHora(r.Type, r.Status, r.RecordedAt));
+        var recs = recsRaw.Select(r => new RegistroHora(r.Type, r.Status, r.RecordedAt, r.ScheduleId));
         var completed = CalcularHorasAprovadas(recs);
         var pct = required > 0 ? Math.Min(100, completed / required * 100) : 0;
         var eligible = required > 0 && completed >= required;
@@ -87,13 +87,17 @@ public class CertificateService(AppDbContext db)
     }
 
     /// <summary>
-    /// Soma as horas de dias com par check_in/check_out, ambos aprovados. Pública
-    /// para o painel do professor usar a mesma conta do certificado.
+    /// Soma as horas de cada par check_in/check_out, ambos aprovados. Pública para o
+    /// painel do professor e o relatório usarem a mesma conta do certificado.
+    ///
+    /// O par é formado por dia <b>e por rodízio</b>. Só por dia, quem cursa duas
+    /// turmas (manhã na UBS e tarde no PIC) tinha a entrada da manhã casada com a
+    /// primeira saída do dia, e o turno da tarde não contava.
     /// </summary>
     public static double CalcularHorasAprovadas(IEnumerable<RegistroHora> registros)
     {
         var porDia = registros
-            .GroupBy(r => r.RecordedAt.Date)
+            .GroupBy(r => (r.RecordedAt.Date, r.ScheduleId))
             .Select(g => new
             {
                 In = g.Where(r => r.Type == "check_in" && r.Status == "aprovado")
@@ -125,5 +129,6 @@ public class CertificateService(AppDbContext db)
         return Convert.ToHexString(hash)[..10];
     }
 
-    public readonly record struct RegistroHora(string Type, string Status, DateTime RecordedAt);
+    /// <summary>Registro de ponto para a conta de horas; o rodízio separa os turnos do mesmo dia.</summary>
+    public readonly record struct RegistroHora(string Type, string Status, DateTime RecordedAt, Guid? ScheduleId = null);
 }
