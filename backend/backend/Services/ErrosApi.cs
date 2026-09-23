@@ -5,19 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EstagioCheck.API.Services;
 
-/// <summary>
-/// Formato único das respostas de erro da API:
-/// <c>{ message, field?, code?, errors? }</c>.
-///
-/// A tela mostra <c>message</c> no aviso e usa <c>errors</c> (campo → mensagens)
-/// para destacar os campos com problema. Antes, a validação automática do ASP.NET
-/// respondia no formato ProblemDetails (sem <c>message</c>) e as falhas não
-/// tratadas voltavam sem corpo — nos dois casos a tela caía no genérico
-/// "Erro ao salvar", sem dizer o que corrigir.
-/// </summary>
+/// <summary>Formato único dos erros: <c>{ message, field?, code?, errors? }</c> (<c>errors</c>: campo → mensagens).</summary>
 public static class ErrosApi
 {
-    /// <summary>Corpo de erro de negócio, opcionalmente amarrado a um campo do formulário.</summary>
     public static object Corpo(string message, string? field = null, string? code = null) => new
     {
         message,
@@ -26,11 +16,7 @@ public static class ErrosApi
         errors = field == null ? null : new Dictionary<string, string[]> { [field] = [message] }
     };
 
-    /// <summary>
-    /// Resposta 400 da validação automática (<c>[Required]</c>, <c>[Range]</c>, JSON
-    /// malformado). As mensagens do framework vêm em inglês e com o caminho do JSON
-    /// ("$.startDate"); aqui viram texto em português e o nome do campo da tela.
-    /// </summary>
+    /// <summary>400 da validação automática, com mensagens em português e o nome do campo da tela.</summary>
     public static IActionResult RespostaValidacao(ActionContext context)
     {
         var erros = new Dictionary<string, string[]>();
@@ -40,8 +26,7 @@ public static class ErrosApi
             if (entrada.Errors.Count == 0) continue;
 
             var campo = NomeCampo(chave);
-            // A chave com o nome do parâmetro ("dto") só diz que o corpo inteiro não
-            // pôde ser lido — o motivo real está nas chaves dos campos.
+            // A chave do parâmetro ("dto") só diz que o corpo não pôde ser lido; o motivo está nos campos.
             if (string.IsNullOrEmpty(campo) || EhParametroDaAction(context, chave)) continue;
 
             erros[campo] = [.. entrada.Errors.Select(e => Traduzir(e, campo)).Distinct()];
@@ -82,11 +67,7 @@ public static class ErrosApi
     }
 }
 
-/// <summary>
-/// Última barreira: exceção não tratada vira resposta com <c>message</c> legível,
-/// em vez de um 500 sem corpo. Falha de gravação por restrição do banco (registro
-/// duplicado, referência a item removido) sai como 409, que é o que ela é.
-/// </summary>
+/// <summary>Exceção não tratada vira <c>message</c> legível; violação de restrição do banco sai como 409.</summary>
 public class TratadorErrosApi(ILogger<TratadorErrosApi> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext http, Exception ex, CancellationToken ct)

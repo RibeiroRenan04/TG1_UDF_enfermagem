@@ -2,20 +2,12 @@ using EstagioCheck.API.Services;
 
 namespace EstagioCheck.API.Models;
 
-/// <summary>
-/// Unidade de saúde onde o estágio acontece (tabela "Locais").
-///
-/// É a mesma entidade usada pelo geofence do check-in: as coordenadas gravadas
-/// aqui — por geocodificação ou manualmente — são as que validam a presença do
-/// aluno. Por isso o módulo de Unidades de Saúde estende esta tabela em vez de
-/// criar uma segunda: duas fontes de coordenadas divergiriam com o tempo.
-/// </summary>
+/// <summary>Unidade de saúde (tabela "Locais"). As coordenadas daqui são as que validam o check-in.</summary>
 public class Location
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Logradouro. Ver também <see cref="EnderecoCompleto"/>.</summary>
     public string? Address { get; set; }
 
     public double Latitude { get; set; }
@@ -32,8 +24,6 @@ public class Location
     /// <summary>Código CNES quando importado via Busca Saúde DF.</summary>
     public string? CodigoCnes { get; set; }
 
-    // ── Cadastro da unidade de saúde ──────────────────────────────────────────
-
     /// <summary>Tipo da unidade: "UBS", "Hospital", "UPA", "Instituição de ensino"…</summary>
     public string? Tipo { get; set; }
 
@@ -42,7 +32,6 @@ public class Location
     public string? Bairro { get; set; }
     public string? Cidade { get; set; }
 
-    /// <summary>Sigla da unidade federativa, ex: "DF".</summary>
     public string? Uf { get; set; }
 
     public string? Cep { get; set; }
@@ -51,12 +40,8 @@ public class Location
     /// <summary>Unidade inativa não recebe novas alocações nem aparece nas listas padrão.</summary>
     public bool Ativo { get; set; } = true;
 
-    // ── Geocodificação ────────────────────────────────────────────────────────
-
-    /// <summary>De onde vieram as coordenadas. Ver <see cref="OrigemCoordenadas"/>.</summary>
     public string? OrigemCoordenadas { get; set; }
 
-    /// <summary>Situação da geocodificação. Ver <see cref="StatusGeocodificacao"/>.</summary>
     public string? StatusGeocodificacao { get; set; }
 
     /// <summary>Endereço que o provedor devolveu (display_name), para conferência.</summary>
@@ -67,25 +52,17 @@ public class Location
 
     public DateTime? GeocodificadoEm { get; set; }
 
-    /// <summary>
-    /// Lote da importação que criou a unidade. Serve para acompanhar o progresso
-    /// da geocodificação daquela planilha; nulo em cadastro manual.
-    /// </summary>
+    /// <summary>Lote da importação que criou a unidade; nulo em cadastro manual.</summary>
     public Guid? LoteImportacao { get; set; }
 
     public DateTime CreatedAt { get; set; } = BrasiliaTime.Agora;
     public DateTime UpdatedAt { get; set; } = BrasiliaTime.Agora;
 
-    // Navigation
     public ICollection<RotationSchedule> Schedules { get; set; } = [];
     public ICollection<AttendanceRecord> AttendanceRecords { get; set; } = [];
     public ICollection<StudentAllocation> Allocations { get; set; } = [];
 
-    /// <summary>
-    /// Endereço em uma linha, do jeito que é enviado ao geocodificador. Inclui o
-    /// número e a cidade porque são justamente eles que distinguem uma unidade de
-    /// outra na mesma via.
-    /// </summary>
+    /// <summary>Endereço em uma linha, como vai ao geocodificador: número e cidade distinguem unidades na mesma via.</summary>
     public string EnderecoCompleto
     {
         get
@@ -108,23 +85,15 @@ public class Location
     public bool TemCoordenadas => Latitude != 0 || Longitude != 0;
 
     /// <summary>
-    /// Localização em que o ponto pode confiar: há coordenadas e elas foram
-    /// confirmadas (geocodificação com sucesso, CNES ou definição manual). É o
-    /// mesmo critério da tela de revisão — o que está lá pendente, em revisão ou
-    /// não encontrado não serve para validar o raio do check-in.
-    /// Status nulo é cadastro anterior ao módulo de geocodificação, que sempre
-    /// nasceu com coordenadas digitadas.
+    /// Há coordenadas confirmadas (geocodificação com sucesso, CNES ou manual). Status nulo é
+    /// cadastro anterior ao módulo, que sempre nasceu com coordenadas digitadas.
     /// </summary>
     public bool LocalizacaoConfirmada =>
         TemCoordenadas
         && (StatusGeocodificacao is null || StatusGeocodificacao == Models.StatusGeocodificacao.Sucesso);
 }
 
-/// <summary>
-/// Regra única de coordenada aceitável para uma unidade, usada por todo caminho
-/// de cadastro (formulário, revisão manual, importação, CNES). Sem ela, cada
-/// tela validava de um jeito — e (0, 0) chegou a ser gravado como "sucesso".
-/// </summary>
+/// <summary>Regra única de coordenada aceitável, usada por todo caminho de cadastro.</summary>
 public static class Coordenadas
 {
     /// <summary>Motivo da recusa, ou <c>null</c> quando o par é aceitável.</summary>
@@ -142,12 +111,8 @@ public static class Coordenadas
 }
 
 /// <summary>
-/// Código CNES no formato oficial: 7 dígitos, com zeros à esquerda.
-///
-/// A API do CNES devolve o código como número, e o "Buscar no CNES" o gravava sem
-/// os zeros ("10731"); a planilha oficial traz "0010731". Os dois são a mesma
-/// unidade, mas não se reconheciam — e a checagem de duplicidade por CNES
-/// deixava passar a unidade repetida.
+/// CNES com 7 dígitos e zeros à esquerda. A API do CNES devolve número ("10731") e a
+/// planilha oficial traz "0010731": sem padronizar, a checagem de duplicidade falhava.
 /// </summary>
 public static class Cnes
 {
@@ -164,15 +129,11 @@ public static class Cnes
 
     public static string Formatar(long codigo) => codigo.ToString($"D{Digitos}");
 
-    /// <summary>
-    /// As grafias com que o código pode estar gravado: a oficial e a antiga, sem
-    /// os zeros. Serve para achar a unidade até que todo cadastro esteja padronizado.
-    /// </summary>
+    /// <summary>Grafias possíveis no banco (oficial e sem zeros), até todo cadastro estar padronizado.</summary>
     public static string[] Variantes(string codigoNormalizado) =>
         [codigoNormalizado, codigoNormalizado.TrimStart('0')];
 }
 
-/// <summary>Situação da geocodificação de uma unidade.</summary>
 public static class StatusGeocodificacao
 {
     public const string Pendente = "pendente";
@@ -189,7 +150,6 @@ public static class StatusGeocodificacao
     public static bool Valido(string? valor) => valor != null && Todos.Contains(valor);
 }
 
-/// <summary>De onde vieram as coordenadas de uma unidade.</summary>
 public static class OrigemCoordenadas
 {
     public const string Nominatim = "NOMINATIM";

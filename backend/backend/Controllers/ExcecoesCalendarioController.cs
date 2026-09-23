@@ -9,14 +9,7 @@ using System.Security.Claims;
 
 namespace EstagioCheck.API.Controllers;
 
-/// <summary>
-/// Calendário de exceções: feriados, recessos, estágios cancelados, trocas de
-/// local, dias que viraram remotos, atividades especiais e reposições.
-///
-/// A exceção é cadastrada uma vez com a abrangência certa (faculdade, turma,
-/// rodízio ou um aluno) e a programação de cada data a aplica sozinha —
-/// não é preciso mexer aluno por aluno.
-/// </summary>
+/// <summary>A exceção é cadastrada uma vez com a abrangência certa e a programação a aplica sozinha.</summary>
 [ApiController]
 [Route("api/excecoes-calendario")]
 [Authorize]
@@ -100,11 +93,7 @@ public class ExcecoesCalendarioController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    // ── Validação ─────────────────────────────────────────────────────────────
-    /// <summary>
-    /// Confere o tipo, a abrangência e o alvo correspondente. Cada abrangência exige
-    /// o seu alvo: sem isso a exceção alcançaria a faculdade inteira sem querer.
-    /// </summary>
+    /// <summary>Cada abrangência exige o seu alvo: sem isso a exceção alcançaria a faculdade inteira.</summary>
     private async Task<string?> ValidarAsync(CriarExcecaoCalendarioDto dto)
     {
         if (!TipoExcecao.Valido(dto.Type)) return "Tipo de exceção inválido.";
@@ -138,7 +127,6 @@ public class ExcecoesCalendarioController(AppDbContext db) : ControllerBase
                 break;
         }
 
-        // A troca de local só faz sentido com o local de destino.
         if (dto.Type == TipoExcecao.TrocaLocal)
         {
             if (!dto.LocationId.HasValue)
@@ -161,8 +149,7 @@ public class ExcecoesCalendarioController(AppDbContext db) : ControllerBase
         excecao.StartDate = dto.StartDate;
         excecao.EndDate = dto.EndDate ?? dto.StartDate;
         excecao.Shift = Turnos.Normalizar(dto.Shift);
-        // O alvo acompanha a abrangência: guardar os outros deixaria vínculos mortos
-        // que confundem a listagem e a resolução da programação.
+        // Só o alvo da abrangência é guardado: os outros seriam vínculos mortos.
         excecao.GroupId = dto.Scope == AbrangenciaExcecao.Turma ? dto.GroupId : null;
         excecao.ScheduleId = dto.Scope == AbrangenciaExcecao.Rodizio ? dto.ScheduleId : null;
         excecao.StudentId = dto.Scope == AbrangenciaExcecao.Aluno ? dto.StudentId : null;

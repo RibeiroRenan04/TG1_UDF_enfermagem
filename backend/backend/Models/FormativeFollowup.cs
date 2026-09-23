@@ -1,6 +1,7 @@
+using EstagioCheck.API.Services;
+
 namespace EstagioCheck.API.Models;
 
-/// <summary>Acompanhamento formativo (ficha qualitativa de desempenho em estágio).</summary>
 public class FormativeFollowup
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -15,7 +16,6 @@ public class FormativeFollowup
     public DateOnly? FollowUpStart { get; set; }
     public DateOnly? FollowUpEnd { get; set; }
 
-    // ── Dimensões comportamentais (escala de frequência) ──────────────────────
     // Postura profissional e ética
     public string? PosturaPontualidade { get; set; }
     public string? PosturaEtica { get; set; }
@@ -36,14 +36,12 @@ public class FormativeFollowup
     public string? ParticipacaoAprendizado { get; set; }
     public string? ParticipacaoAutocritica { get; set; }
 
-    // ── Campos descritivos ────────────────────────────────────────────────────
     public string? Potencialidades { get; set; }
     public string? AspectosAprimorar { get; set; }
     public string? SituacoesRelevantes { get; set; }
     public string? ObservacoesDocente { get; set; }
     public string? EvolucaoSemanal { get; set; }
 
-    // ── Status e assinaturas ──────────────────────────────────────────────────
     /// <summary>"rascunho" | "finalizado_preceptor" | "finalizado_aluno"</summary>
     public string Status { get; set; } = "rascunho";
 
@@ -57,10 +55,9 @@ public class FormativeFollowup
     public string? StudentSignedIp { get; set; }
     public Guid? StudentSignedUserId { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = BrasiliaTime.Agora;
+    public DateTime UpdatedAt { get; set; } = BrasiliaTime.Agora;
 
-    // Navigation
     public ApplicationUser Student { get; set; } = null!;
     public ApplicationUser Preceptor { get; set; } = null!;
     public RotationSchedule? Schedule { get; set; }

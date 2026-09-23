@@ -8,12 +8,7 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// Contagem de dias sem registro. O painel chegou a mostrar "5740 dias de estágio
-/// sem registro": a varredura não tinha limite de vigência e aceitava rodízio com
-/// data inválida. Estes testes fixam a janela — do rodízio e da entrada do aluno na
-/// turma até ontem — e o sábado programado.
-/// </summary>
+/// <summary>Janela da contagem: do rodízio e da entrada do aluno na turma até ontem, mais o sábado programado.</summary>
 public class PendenciasTests
 {
     private static DateOnly Hoje => BrasiliaTime.Hoje;
@@ -47,7 +42,7 @@ public class PendenciasTests
             {
                 StudentId = aluno.Id,
                 GroupId = grupo.Id,
-                CreatedAt = DateTime.UtcNow.AddDays(-diasNaTurma)
+                CreatedAt = BrasiliaTime.Agora.AddDays(-diasNaTurma)
             });
         await db.SaveChangesAsync();
 
@@ -133,7 +128,6 @@ public class PendenciasTests
     }
 }
 
-/// <summary>Validação das datas do rodízio e retorno do campo com problema.</summary>
 public class RodizioValidacaoTests
 {
     private static async Task<(AppDbContext Db, CreateScheduleDto Dto)> MontarAsync(

@@ -4,20 +4,14 @@ using System.Text.RegularExpressions;
 
 namespace EstagioCheck.API.Services.Geocoding;
 
-/// <summary>Gera a chave usada para consultar e gravar o cache de geocodificação.</summary>
 public interface IAddressNormalizer
 {
-    /// <summary>
-    /// Reduz o endereço a uma forma canônica: sem acentos, em minúsculas, sem
-    /// pontuação e sem espaços repetidos. "SGAN 906, Brasília - DF" e
-    /// "SGAN 906 Brasilia DF" viram a mesma chave.
-    /// </summary>
+    /// <summary>"SGAN 906, Brasília - DF" e "SGAN 906 Brasilia DF" viram a mesma chave.</summary>
     string Normalizar(string? endereco);
 
-    /// <summary>Padroniza o CEP em "00000-000"; devolve nulo se não tiver 8 dígitos.</summary>
+    /// <summary>"00000-000"; nulo se não tiver 8 dígitos.</summary>
     string? NormalizarCep(string? cep);
 
-    /// <summary>Sigla da UF em maiúsculas; devolve nulo se não tiver 2 letras.</summary>
     string? NormalizarUf(string? uf);
 }
 
@@ -26,8 +20,7 @@ public partial class AddressNormalizer : IAddressNormalizer
     [GeneratedRegex(@"\s+")]
     private static partial Regex EspacosRepetidos();
 
-    // Mantém letras, dígitos e espaço. A pontuação some porque só varia a escrita
-    // do mesmo endereço; o número é preservado, pois distingue unidades na mesma via.
+    // O número é preservado: distingue unidades na mesma via.
     [GeneratedRegex(@"[^a-z0-9 ]")]
     private static partial Regex ForaDoAlfabeto();
 

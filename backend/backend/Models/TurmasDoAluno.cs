@@ -1,27 +1,18 @@
 namespace EstagioCheck.API.Models;
 
 /// <summary>
-/// Leitura resumida dos vínculos de turma de um aluno.
-///
-/// Desde que o aluno passou a poder cursar mais de um rodízio ao mesmo tempo,
-/// "a turma do aluno" deixou de ser uma pergunta com resposta única. Onde a tela
-/// ainda mostra uma turma só (menu lateral, certificado, busca por RGM), vale a
-/// <see cref="Principal"/>; onde cabe a lista inteira, usam-se os demais
-/// utilitários daqui — para nenhuma tela inventar a sua própria regra.
+/// Regra única para "a turma do aluno", que pode cursar mais de um rodízio. Onde a tela mostra
+/// uma só, vale a <see cref="Principal"/>.
 /// </summary>
 public static class TurmasDoAluno
 {
-    /// <summary>
-    /// Turma principal: a de vínculo mais antigo — aquela em que o aluno foi
-    /// matriculado primeiro. Empate desempata pelo código da turma.
-    /// </summary>
+    /// <summary>A de vínculo mais antigo; empate pelo código.</summary>
     public static GroupMembership? Principal(IEnumerable<GroupMembership>? vinculos) =>
         vinculos?
             .OrderBy(m => m.CreatedAt)
             .ThenBy(m => m.Group?.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
 
-    /// <summary>Ids de todas as turmas do aluno — base das consultas de rodízio.</summary>
     public static List<Guid> Ids(IEnumerable<GroupMembership>? vinculos) =>
         [.. (vinculos ?? []).Select(m => m.GroupId).Distinct()];
 
@@ -31,13 +22,7 @@ public static class TurmasDoAluno
             .OrderBy(m => m.CreatedAt)
             .ThenBy(m => m.Group?.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)];
 
-    /// <summary>Códigos das turmas em um rótulo só: "T01, T02". Nulo sem vínculo.</summary>
-    /// <summary>
-    /// Turno da turma, tirado dos rodízios dela: o turno único que todos têm, ou
-    /// <c>null</c> quando a turma ainda não tem rodízio ou tem rodízios em turnos
-    /// diferentes. É o que a tela mostra ao lado da turma — antes ela exibia o turno
-    /// cadastrado do aluno, e o PIC da tarde aparecia como "(Manhã)".
-    /// </summary>
+    /// <summary>Turno único dos rodízios da turma; <c>null</c> sem rodízio ou com turnos diferentes.</summary>
     public static string? Turno(StudentGroup? turma)
     {
         var turnos = (turma?.Schedules ?? [])
@@ -49,6 +34,20 @@ public static class TurmasDoAluno
         return turnos.Count == 1 ? turnos[0] : null;
     }
 
+    /// <summary>
+    /// Turmas que ainda contam para o aluno: sem rodízio (aguardando alocação) ou com rodízio que
+    /// termina hoje ou depois. Se todas já encerraram, mostra todas para o aluno não ficar sem turma.
+    /// </summary>
+    public static List<GroupMembership> Vigentes(IEnumerable<GroupMembership>? vinculos, DateOnly hoje)
+    {
+        var todos = Ordenados(vinculos);
+        var vigentes = todos
+            .Where(m => m.Group == null || m.Group.Schedules.Count == 0 || m.Group.Schedules.Any(s => s.EndDate >= hoje))
+            .ToList();
+        return vigentes.Count > 0 ? vigentes : todos;
+    }
+
+    /// <summary>Códigos das turmas em um rótulo só: "T01, T02". Nulo sem vínculo.</summary>
     public static string? Codigos(IEnumerable<GroupMembership>? vinculos)
     {
         var codigos = Ordenados(vinculos)

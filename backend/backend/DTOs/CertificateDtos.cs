@@ -1,6 +1,5 @@
 namespace EstagioCheck.API.DTOs;
 
-/// <summary>Dados do certificado de carga horária de estágio de um aluno.</summary>
 public class CertificateDto
 {
     public Guid StudentId { get; init; }
@@ -8,7 +7,6 @@ public class CertificateDto
     public string? Rgm { get; init; }
     public string? GroupName { get; init; }
 
-    /// <summary>Horas efetivamente cumpridas (registros aprovados).</summary>
     public double CompletedHours { get; init; }
 
     /// <summary>Carga horária exigida (soma dos rodízios do grupo).</summary>
@@ -16,7 +14,6 @@ public class CertificateDto
 
     public double ProgressPercent { get; init; }
 
-    /// <summary>Verdadeiro quando o aluno atingiu a carga horária exigida.</summary>
     public bool Eligible { get; init; }
 
     public string? PeriodLabel { get; init; }

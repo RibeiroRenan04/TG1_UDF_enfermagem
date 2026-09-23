@@ -5,21 +5,12 @@ using Microsoft.EntityFrameworkCore;
 namespace EstagioCheck.API.Services;
 
 /// <summary>
-/// Responde à pergunta que passou a comandar o ponto: <b>onde o aluno deveria estar
-/// e qual atividade deveria realizar naquele dia?</b>
-///
-/// O registro de ponto deixa de ser um evento isolado e passa a ser consequência da
-/// programação: é ela que diz se o dia é presencial (validação por localização),
-/// remoto (validação por código) ou sem atividade (nenhuma obrigação de ponto).
-///
-/// A programação de uma data sai de três camadas, nesta ordem:
-/// 1. o rodízio do grupo no período e turno;
-/// 2. a regra do dia da semana daquele rodízio (segunda→UBS, sexta→faculdade…);
-/// 3. as exceções do calendário, da mais específica para a mais genérica.
+/// Onde o aluno deveria estar e o que deveria fazer num dia. Camadas, nesta ordem:
+/// rodízio do grupo no período e turno → regra do dia da semana → exceções do
+/// calendário (da mais específica para a mais genérica).
 /// </summary>
 public class ProgramacaoService(AppDbContext db)
 {
-    /// <summary>Programação de um dia para um aluno.</summary>
     public record ProgramacaoDia
     {
         public required DateOnly Data { get; init; }
@@ -31,7 +22,6 @@ public class ProgramacaoService(AppDbContext db)
         /// <summary>"localizacao" | "codigo" | "nenhuma".</summary>
         public required string Validacao { get; init; }
 
-        /// <summary>Há ponto a registrar neste dia.</summary>
         public bool ExigePonto => Modo != ModoAtividade.SemAtividade;
 
         public Guid? ScheduleId { get; init; }
@@ -42,36 +32,26 @@ public class ProgramacaoService(AppDbContext db)
         /// <summary>Por que o dia ficou assim ("Feriado: Independência", "Fim de semana").</summary>
         public string? Motivo { get; init; }
 
-        // ── Exceção aplicada, quando houver ───────────────────────────────────
         public Guid? ExcecaoId { get; init; }
         public string? TipoExcecao { get; init; }
         public string? AbrangenciaExcecao { get; init; }
 
-        /// <summary>Atividades remotas do dia em que o aluno pode registrar presença.</summary>
         public List<RemoteActivity> AtividadesRemotas { get; init; } = [];
 
         /// <summary>Atividades remotas do dia em que ele já registrou participação.</summary>
         public List<Guid> AtividadesConcluidas { get; init; } = [];
     }
 
-    /// <summary>
-    /// Tudo o que a resolução de um intervalo precisa, lido de uma vez só. As
-    /// pendências percorrem um semestre inteiro dia a dia; carregar por dia
-    /// transformaria uma abertura do painel em centenas de consultas.
-    /// </summary>
+    /// <summary>Carregado de uma vez: as pendências percorrem o semestre dia a dia.</summary>
     internal sealed record Contexto(
         ApplicationUser? Aluno,
-        /// <summary>Todas as turmas do aluno: ele pode cursar mais de um rodízio ao mesmo tempo.</summary>
         List<Guid> GroupIds,
         List<RotationSchedule> Escalas,
         List<CalendarException> Excecoes,
         List<RemoteActivity> Atividades,
         HashSet<Guid> Participacoes);
 
-    /// <summary>
-    /// Programação do aluno na data e turno pedidos. Turno nulo usa o do rodízio do
-    /// dia e, na falta dele, o turno correspondente ao horário atual.
-    /// </summary>
+    /// <summary>Turno nulo usa o do rodízio do dia e, na falta dele, o do horário atual.</summary>
     public async Task<ProgramacaoDia> ObterAsync(Guid studentId, DateOnly data, string? turno = null,
         CancellationToken ct = default)
     {
@@ -79,10 +59,6 @@ public class ProgramacaoService(AppDbContext db)
         return Resolver(contexto, data, turno);
     }
 
-    /// <summary>
-    /// Programação de cada dia de um intervalo — base do calendário do aluno e do
-    /// cálculo de pendências.
-    /// </summary>
     public async Task<List<ProgramacaoDia>> ObterIntervaloAsync(Guid studentId, DateOnly de, DateOnly ate,
         string? turno = null, CancellationToken ct = default)
     {
@@ -97,12 +73,7 @@ public class ProgramacaoService(AppDbContext db)
     private async Task<Contexto> CarregarAsync(Guid studentId, DateOnly de, DateOnly ate, CancellationToken ct) =>
         (await CarregarContextosAsync([studentId], de, ate, ct)).Contextos[studentId];
 
-    /// <summary>
-    /// Programação de vários alunos num intervalo, lida em cinco consultas no
-    /// total — em vez de cinco por aluno. É o que permite ao painel do professor
-    /// saber quem deveria estar em estágio em cada dia sem abrir centenas de
-    /// consultas. A resolução de cada dia é a mesma do check-in.
-    /// </summary>
+    /// <summary>Programação de vários alunos em cinco consultas no total, não cinco por aluno.</summary>
     public async Task<ProgramacaoLote> CarregarLoteAsync(
         IReadOnlyCollection<Guid> studentIds, DateOnly de, DateOnly ate, CancellationToken ct = default)
     {
@@ -110,7 +81,6 @@ public class ProgramacaoService(AppDbContext db)
         return new ProgramacaoLote(contextos, entradas);
     }
 
-    /// <summary>Programação já carregada de um grupo de alunos, resolvida em memória.</summary>
     public sealed class ProgramacaoLote
     {
         private readonly Dictionary<Guid, Contexto> _contextos;
@@ -122,11 +92,7 @@ public class ProgramacaoService(AppDbContext db)
             _entradas = entradas;
         }
 
-        /// <summary>
-        /// O dia do aluno naquele turno, ou <c>null</c> quando ele não tem rodízio
-        /// no turno — ou ainda não estava na turma do rodízio naquela data (a
-        /// turma não cobra presença de antes de o aluno entrar nela).
-        /// </summary>
+        /// <summary><c>null</c> sem rodízio no turno ou antes de o aluno entrar na turma.</summary>
         public ProgramacaoDia? NoTurno(Guid studentId, DateOnly data, string turno)
         {
             if (!_contextos.TryGetValue(studentId, out var ctx)) return null;
@@ -208,10 +174,9 @@ public class ProgramacaoService(AppDbContext db)
                 participacoes.GetValueOrDefault(id) ?? []);
         }
 
-        // O vínculo é gravado em UTC; o dia do estágio é o de Brasília.
         var entradas = vinculos
             .GroupBy(v => (v.StudentId, v.GroupId))
-            .ToDictionary(g => g.Key, g => DateOnly.FromDateTime(BrasiliaTime.DeUtc(g.Min(v => v.CreatedAt))));
+            .ToDictionary(g => g.Key, g => DateOnly.FromDateTime(g.Min(v => v.CreatedAt)));
 
         return (contextos, entradas);
     }
@@ -224,9 +189,7 @@ public class ProgramacaoService(AppDbContext db)
                      ?? Turnos.Normalizar(escalas.Count == 1 ? escalas[0].Shift : null)
                      ?? Turnos.DaHora(BrasiliaTime.Agora);
 
-        // Com o turno pedido explicitamente, só vale a escala daquele turno: antes a
-        // única escala do dia respondia por qualquer turno, e quem tinha rodízio só à
-        // noite aparecia com programação também de manhã (reposição de sábado).
+        // Com turno explícito, só vale a escala daquele turno.
         var escala = escalas.FirstOrDefault(s => Turnos.Normalizar(s.Shift) == turnoAlvo)
                   ?? (Turnos.Normalizar(turno) == null && escalas.Count == 1 ? escalas[0] : null);
 
@@ -249,7 +212,6 @@ public class ProgramacaoService(AppDbContext db)
         };
     }
 
-    // ── 1 e 2: rodízio e regra do dia da semana ───────────────────────────────
     private static ProgramacaoDia MontarBase(RotationSchedule? escala, DateOnly data, string turno)
     {
         var fimDeSemana = data.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
@@ -268,8 +230,7 @@ public class ProgramacaoService(AppDbContext db)
 
         var regra = escala.Days.FirstOrDefault(d => d.DayOfWeek == (int)data.DayOfWeek);
 
-        // Sem regra cadastrada o rodízio vale como antes: dia útil presencial no
-        // local principal, fim de semana sem atividade.
+        // Sem regra cadastrada: dia útil presencial no local principal, fim de semana sem atividade.
         var modo = regra != null
             ? ModoAtividade.Normalizar(regra.Mode) ?? ModoAtividade.Presencial
             : fimDeSemana ? ModoAtividade.SemAtividade : ModoAtividade.Presencial;
@@ -292,12 +253,7 @@ public class ProgramacaoService(AppDbContext db)
         };
     }
 
-    // ── 3: exceções do calendário ─────────────────────────────────────────────
-    /// <summary>
-    /// Exceção que vale para o aluno naquela data. Havendo mais de uma, vence a de
-    /// abrangência mais específica (aluno, rodízio, turma, faculdade) e,
-    /// no empate, a cadastrada por último.
-    /// </summary>
+    /// <summary>Vence a exceção mais específica (aluno, rodízio, turma, faculdade); no empate, a mais recente.</summary>
     private static CalendarException? ExcecaoAplicavel(
         Contexto ctx, Guid? scheduleId, DateOnly data, string turno) =>
         ctx.Excecoes
@@ -347,8 +303,6 @@ public class ProgramacaoService(AppDbContext db)
                 Local = null
             };
 
-        // A unidade da exceção vem carregada com ela (Include), então a troca de
-        // local não custa uma consulta a mais por dia.
         if (x.Type == Models.TipoExcecao.TrocaLocal)
             return marcado with
             {

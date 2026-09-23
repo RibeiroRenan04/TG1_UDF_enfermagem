@@ -5,13 +5,8 @@ using Microsoft.EntityFrameworkCore;
 namespace EstagioCheck.API.Services.Geocoding;
 
 /// <summary>
-/// Geocodifica uma unidade de saúde aplicando as regras de negócio em volta do
-/// provedor: consulta o cache antes, respeita coordenadas definidas à mão e grava
-/// o resultado (inclusive os "não encontrado", que também não valem nova consulta).
-///
-/// Todo o resto da aplicação passa por aqui, nunca direto pelo
-/// <see cref="IGeocodingService"/> — é o que mantém a política de uso do provedor
-/// em um só lugar.
+/// Regras em volta do provedor: cache, respeito às coordenadas manuais e gravação do resultado
+/// (inclusive "não encontrado"). O resto da aplicação nunca chama o <see cref="IGeocodingService"/> direto.
 /// </summary>
 public class UnitGeocoder(
     AppDbContext db,
@@ -19,7 +14,6 @@ public class UnitGeocoder(
     IAddressNormalizer normalizer,
     ILogger<UnitGeocoder> logger)
 {
-    /// <summary>Resultado de uma tentativa de geocodificar uma unidade.</summary>
     public record Resultado(
         string Status,
         bool Sucesso,
@@ -31,12 +25,8 @@ public class UnitGeocoder(
         bool VeioDoCache);
 
     /// <summary>
-    /// Geocodifica a unidade e grava o resultado nela.
-    ///
-    /// <paramref name="forcar"/> ignora o cache e as coordenadas já existentes —
-    /// é a ação "geocodificar novamente" do administrador. Mesmo assim, coordenadas
-    /// de origem MANUAL só são sobrescritas com <paramref name="sobrescreverManual"/>,
-    /// para que uma reimportação nunca desfaça uma correção feita à mão.
+    /// <paramref name="forcar"/> ignora cache e coordenadas atuais; ainda assim, as de origem MANUAL
+    /// só são sobrescritas com <paramref name="sobrescreverManual"/>.
     /// </summary>
     public async Task<Resultado> GeocodificarAsync(
         Location unidade,
@@ -67,16 +57,10 @@ public class UnitGeocoder(
                 "Endereço insuficiente para localizar a unidade.", false);
         }
 
-        // A chave do cache é o ENDEREÇO normalizado, não a consulta inteira: o nome
-        // da unidade entra na consulta para ajudar o provedor a acertar o ponto, mas
-        // duas unidades no mesmo endereço (anexos de um complexo, por exemplo) devem
-        // compartilhar a mesma coordenada em vez de gerar duas consultas ao serviço
-        // público. À precisão de um geofence de centenas de metros, o mesmo endereço
-        // é o mesmo lugar.
+        // Cache por endereço, não pela consulta inteira: unidades no mesmo endereço compartilham coordenada.
         var chave = normalizer.Normalizar(unidade.EnderecoCompleto);
 
-        // Sem endereço só resta o nome, que é fraco demais para servir de chave
-        // compartilhada: nesse caso consultamos sem passar pelo cache.
+        // Só com o nome a chave seria fraca demais para compartilhar.
         var podeUsarCache = !string.IsNullOrWhiteSpace(chave);
 
         // 1) Cache: evita repetir a mesma consulta ao provedor.
@@ -111,7 +95,6 @@ public class UnitGeocoder(
             }
         }
 
-        // 2) Provedor.
         GeocodingResult? resultado;
         try
         {
@@ -119,8 +102,7 @@ public class UnitGeocoder(
         }
         catch (GeocodingException ex)
         {
-            // Falha de comunicação não é "endereço inexistente": não vai para o cache,
-            // a unidade fica com status "erro" e o administrador tenta de novo depois.
+            // Falha de comunicação não é "endereço inexistente": não vai para o cache.
             logger.LogWarning(ex, "Falha ao geocodificar a unidade {Unidade}.", unidade.Name);
             return Aplicar(unidade, StatusGeocodificacao.Erro, null,
                 ex.LimiteExcedido
@@ -147,11 +129,7 @@ public class UnitGeocoder(
         return Aplicar(unidade, status, resultado, resultado.MotivoDuvida, true);
     }
 
-    /// <summary>
-    /// Consulta usada no provedor. Leva nome, endereço, cidade e UF: só o nome
-    /// costuma cair no centro da cidade, e só a via não distingue duas unidades
-    /// no mesmo logradouro.
-    /// </summary>
+    /// <summary>Nome + endereço + cidade + UF: só o nome cai no centro da cidade, só a via não distingue unidades.</summary>
     public static string MontarConsulta(Location unidade)
     {
         var partes = new List<string>();

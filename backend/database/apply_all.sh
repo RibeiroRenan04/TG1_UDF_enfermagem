@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
-# Aplica o schema completo do EstágioCheck em um banco PostgreSQL vazio.
+# Aplica o schema completo do EstágioCheck em um banco PostgreSQL (13+).
 #
 #   ./apply_all.sh "postgresql://usuario:senha@host:5432/postgres"
 #
 # Executa migration.sql (schema base) e depois os scripts numerados, na ordem.
-# Para no primeiro erro — um script que falha no meio deixa o banco pela metade,
-# e seguir adiante só empilharia erros em cima do primeiro.
+# Para no primeiro erro — cada script roda numa transação, então o que falha
+# não deixa o banco pela metade, e seguir adiante só empilharia erros.
 #
-# Os scripts não são idempotentes (exceto o 005): use apenas em banco vazio.
-# Para um banco onde a API já rodou, o schema base já existe — nesse caso pule
-# o migration.sql e aplique só os numerados. Veja o README.md deste diretório.
+# Todos os scripts são idempotentes: serve para banco vazio, para um banco em
+# que a API já criou o schema base (o migration.sql detecta e pula) e para
+# completar um banco que parou no meio do caminho. Veja o README.md.
 
 set -euo pipefail
 

@@ -10,23 +10,16 @@ using System.Security.Claims;
 namespace EstagioCheck.API.Controllers;
 
 /// <summary>
-/// Atividades remotas e o registro de presença por código.
-///
-/// Nos dias em que a turma fica em casa, a presença não pode depender de
-/// localização. O professor cria a atividade, o sistema gera o código e o aluno
-/// registra a participação informando-o. O código sozinho não basta: o registro
-/// confere o grupo autorizado, a janela de horário, a atividade em aberto, a
-/// participação ainda não feita e, quando exigida, a tarefa entregue.
+/// Presença remota por código. O código sozinho não basta: o registro confere grupo,
+/// janela de horário, atividade em aberto, participação única e, se exigida, a tarefa.
 /// </summary>
 [ApiController]
 [Route("api/atividades-remotas")]
 [Authorize]
 public class AtividadesRemotasController(AppDbContext db) : ControllerBase
 {
-    // ── Professor ─────────────────────────────────────────────────────────────
-    /// <summary>Atividades remotas cadastradas, com o código de presença.</summary>
     [HttpGet]
-    [Authorize(Roles = Roles.AcompanhamentoEGestao)]
+    [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<List<AtividadeRemotaDto>>> GetAll(
         [FromQuery] Guid? groupId,
         [FromQuery] DateOnly? de,
@@ -54,7 +47,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [Authorize(Roles = Roles.AcompanhamentoEGestao)]
+    [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<AtividadeRemotaDto>> Get(Guid id)
     {
         var atividade = await CarregarAsync(id);
@@ -102,8 +95,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
             .FirstOrDefaultAsync(a => a.Id == id);
         if (atividade == null) return NotFound();
 
-        // Alterar grupo, data ou janela depois que alunos já registraram presença
-        // invalidaria participações que estavam corretas quando foram feitas.
+        // Com presenças registradas, mudar grupo, data ou janela invalidaria participações corretas.
         if (atividade.Participations.Count > 0 &&
             (atividade.GroupId != dto.GroupId || atividade.ActivityDate != dto.ActivityDate))
             return Conflict(new
@@ -135,10 +127,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         return Ok(Map((await CarregarAsync(id))!));
     }
 
-    /// <summary>
-    /// Encerra a atividade antes do fim da janela. O código deixa de valer na hora;
-    /// as participações já registradas permanecem.
-    /// </summary>
+    /// <summary>O código deixa de valer na hora; as participações já registradas permanecem.</summary>
     [HttpPatch("{id}/encerrar")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<AtividadeRemotaDto>> Encerrar(Guid id)
@@ -153,10 +142,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         return Ok(Map((await CarregarAsync(id))!));
     }
 
-    /// <summary>
-    /// Gera outro código para a atividade. Serve para quando o código vazou para
-    /// alunos de fora do grupo autorizado.
-    /// </summary>
+    /// <summary>Para quando o código vazou para alunos de fora do grupo.</summary>
     [HttpPatch("{id}/novo-codigo")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<AtividadeRemotaDto>> NovoCodigo(Guid id)
@@ -194,9 +180,8 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Quem já registrou participação — a lista de presença do dia remoto.</summary>
     [HttpGet("{id}/participacoes")]
-    [Authorize(Roles = Roles.AcompanhamentoEGestao)]
+    [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<List<ParticipacaoAtividadeDto>>> GetParticipacoes(Guid id)
     {
         if (!await db.RemoteActivities.AnyAsync(a => a.Id == id))
@@ -221,11 +206,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         return Ok(participacoes);
     }
 
-    // ── Aluno ─────────────────────────────────────────────────────────────────
-    /// <summary>
-    /// Atividades remotas do aluno no período. Não traz o código: é ele que o
-    /// professor entrega à parte para comprovar o acesso.
-    /// </summary>
+    /// <summary>Não traz o código: o professor o entrega à parte.</summary>
     [HttpGet("minhas")]
     public async Task<ActionResult<List<AtividadeRemotaAlunoDto>>> Minhas(
         [FromQuery] DateOnly? de, [FromQuery] DateOnly? ate)
@@ -249,12 +230,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         return Ok(atividades.Select(a => MapParaAluno(a, participacoes.GetValueOrDefault(a.Id))));
     }
 
-    /// <summary>
-    /// Registra a presença remota a partir do código.
-    ///
-    /// A resposta explica o motivo de cada recusa: o aluno precisa saber se digitou
-    /// o código errado, se o prazo acabou ou se a atividade não é do grupo dele.
-    /// </summary>
+    /// <summary>Cada recusa explica o motivo (código errado, prazo encerrado, grupo de outro aluno).</summary>
     [HttpPost("registrar-presenca")]
     [Authorize(Roles = Roles.Aluno)]
     public async Task<ActionResult<PresencaRemotaResultadoDto>> RegistrarPresenca(
@@ -275,8 +251,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
                 code = "sem_turma"
             });
 
-        // A busca varre as atividades do período em torno de hoje e compara o código
-        // normalizado: o aluno pode digitar sem o hífen ou em minúsculas.
+        // Compara o código normalizado: o aluno pode digitar sem hífen ou em minúsculas.
         var candidatas = await db.RemoteActivities
             .Where(a => a.ActivityDate >= BrasiliaTime.Hoje.AddDays(-1)
                      && a.ActivityDate <= BrasiliaTime.Hoje.AddDays(1))
@@ -293,8 +268,6 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
                 code = "codigo_invalido"
             });
 
-        // Um código de outro grupo existe, mas não é do aluno: a mensagem precisa
-        // dizer isso, e não "código inválido".
         var atividade = atividades.FirstOrDefault(a => turmas.Contains(a.GroupId));
         if (atividade == null)
             return StatusCode(StatusCodes.Status403Forbidden, new
@@ -347,9 +320,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
                 taskType = atividade.TaskType
             });
 
-        // O ponto da atividade remota entra na mesma tabela do presencial, sem local
-        // e sem coordenadas: é o que faz a carga horária remota contar no mesmo
-        // cálculo de horas do estágio, sem inventar uma segunda fonte de presença.
+        // O ponto remoto vai para a mesma tabela do presencial, para contar no mesmo cálculo de horas.
         var (entrada, saida) = MontarPonto(atividade, userId, resposta);
         db.AttendanceRecords.Add(entrada);
         db.AttendanceRecords.Add(saida);
@@ -379,12 +350,7 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         });
     }
 
-    // ── Apoio ─────────────────────────────────────────────────────────────────
-    /// <summary>
-    /// Par de registros que credita a carga horária da atividade. A saída fica na
-    /// carga horária informada pelo professor, não no relógio: a atividade remota é
-    /// avaliada pela entrega, não pelo tempo que o aluno passou com a tela aberta.
-    /// </summary>
+    /// <summary>A saída fica na carga horária informada, não no relógio: a atividade é avaliada pela entrega.</summary>
     private static (AttendanceRecord entrada, AttendanceRecord saida) MontarPonto(
         RemoteActivity atividade, Guid studentId, string? resposta)
     {
@@ -414,10 +380,6 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         return (Registro("check_in", inicio), Registro("check_out", fim));
     }
 
-    /// <summary>
-    /// Confere a atividade antes de gravar. Devolve a mensagem e o campo do
-    /// formulário com problema — a tela destaca o campo — ou <c>null</c> se válida.
-    /// </summary>
     private async Task<(string Mensagem, string Campo)?> ValidarAsync(CriarAtividadeRemotaDto dto)
     {
         var grupo = await db.StudentGroups
@@ -456,7 +418,6 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         if (dto.RequiresTask && !TipoTarefaRemota.Valido(dto.TaskType))
             return ("Selecione o tipo da tarefa complementar.", "taskType");
 
-        // Sem instruções o aluno não sabe o que entregar para comprovar a atividade.
         if (dto.RequiresTask && string.IsNullOrWhiteSpace(dto.TaskInstructions))
             return ("O campo 'Instruções da tarefa' é obrigatório quando a tarefa complementar está ativa.",
                 "taskInstructions");
@@ -464,10 +425,6 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
         return null;
     }
 
-    /// <summary>
-    /// Código livre naquela data. O sorteio pode repetir; o laço garante que duas
-    /// atividades do mesmo dia nunca disputem o mesmo código.
-    /// </summary>
     private async Task<string> GerarCodigoUnicoAsync(DateOnly data)
     {
         for (var tentativa = 0; tentativa < 20; tentativa++)
@@ -499,10 +456,6 @@ public class AtividadesRemotasController(AppDbContext db) : ControllerBase
             .ToDictionaryAsync(p => p.RemoteActivityId);
     }
 
-    /// <summary>
-    /// Turmas do aluno. São várias porque ele pode cursar mais de um rodízio ao
-    /// mesmo tempo — a atividade remota de qualquer uma delas é dele.
-    /// </summary>
     private async Task<List<Guid>> TurmasDoAlunoAsync(Guid studentId) =>
         await db.GroupMemberships
             .Where(m => m.StudentId == studentId)

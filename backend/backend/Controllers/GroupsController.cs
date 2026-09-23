@@ -16,10 +16,6 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
     private static readonly string[] TurnosValidos = ["manha", "tarde", "noite"];
     private static readonly string[] AtividadesValidas = ["gestao", "pic", "assistencia", "outro"];
 
-    /// <summary>
-    /// Falha de validação amarrada ao campo do formulário, para a tela destacar
-    /// exatamente o que precisa ser corrigido.
-    /// </summary>
     private sealed record ErroValidacao(
         string Mensagem,
         string? Campo = null,
@@ -29,16 +25,15 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
     [HttpGet]
     public async Task<ActionResult<List<GroupDto>>> GetAll()
     {
-        var groups = await db.StudentGroups
-            .Include(g => g.Memberships)
+        // A contagem sai do banco; antes cada vínculo de cada turma era carregado só para ser contado.
+        return Ok(await db.StudentGroups.AsNoTracking()
             .OrderBy(g => g.Code)
-            .ToListAsync();
-
-        return Ok(groups.Select(g => new GroupDto
-        {
-            Id = g.Id, Code = g.Code, Name = g.Name, Description = g.Description,
-            MemberCount = g.Memberships.Count
-        }));
+            .Select(g => new GroupDto
+            {
+                Id = g.Id, Code = g.Code, Name = g.Name, Description = g.Description,
+                MemberCount = g.Memberships.Count
+            })
+            .ToListAsync());
     }
 
     [HttpPost]
@@ -72,9 +67,6 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         return NoContent();
     }
 
-    /// <summary>
-    /// Alunos vinculados à turma. Permite conferir o vínculo antes de alocar o rodízio.
-    /// </summary>
     [HttpGet("{id}/members")]
     public async Task<ActionResult<List<GroupMemberDto>>> GetMembers(Guid id)
     {
@@ -99,14 +91,7 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         return Ok(members);
     }
 
-    /// <summary>
-    /// Vincula um aluno à turma sem mexer nas outras turmas dele — é assim que o
-    /// mesmo discente cursa dois módulos de estágio no mesmo período. Repetir a
-    /// chamada não cria vínculo duplicado.
-    ///
-    /// A única recusa é a agenda impossível: outro rodízio dele no mesmo turno,
-    /// nos mesmos dias da semana e com período sobreposto.
-    /// </summary>
+    /// <summary>Não mexe nas outras turmas do aluno e repetir não duplica. Só a agenda impossível é recusada.</summary>
     [HttpPost("{id}/members/{studentId}")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> AddMember(Guid id, Guid studentId)
@@ -132,14 +117,8 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
     }
 
     /// <summary>
-    /// Vincula e desvincula vários alunos desta turma numa única chamada — a
-    /// turma inteira de uma vez, marcada no modal por semestre e turno.
-    ///
-    /// Antes a tela disparava uma requisição por aluno: 100 alunos eram 100
-    /// chamadas, e a primeira recusa interrompia o resto no meio, deixando parte
-    /// gravada e parte não. Aqui o que é válido é gravado junto, e cada aluno
-    /// recusado (agenda incompatível, perfil errado) volta com o motivo.
-    /// As outras turmas dos alunos não são tocadas.
+    /// Vincula e desvincula em lote: o que é válido é gravado junto e cada recusa volta
+    /// com o motivo. As outras turmas dos alunos não são tocadas.
     /// </summary>
     [HttpPut("{id}/members")]
     [Authorize(Roles = Roles.Supervisor)]
@@ -199,10 +178,6 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
             [.. recusados.OrderBy(r => r.Nome, StringComparer.CurrentCultureIgnoreCase)]));
     }
 
-    /// <summary>
-    /// Desvincula o aluno desta turma. As demais turmas dele seguem intactas, e o
-    /// histórico de presença do rodízio não é apagado.
-    /// </summary>
     [HttpDelete("{id}/members/{studentId}")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> RemoveMember(Guid id, Guid studentId)
@@ -218,11 +193,10 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         return NoContent();
     }
 
-    // ── Schedules ──────────────────────────────────────────────────────────────
     [HttpGet("schedules")]
     public async Task<ActionResult<List<ScheduleDto>>> GetSchedules()
     {
-        var schedules = await db.RotationSchedules
+        var schedules = await db.RotationSchedules.AsNoTracking()
             .Include(s => s.Group)
             .Include(s => s.Location)
             .Include(s => s.Preceptor)
@@ -233,11 +207,10 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         return Ok(schedules.Select(MapSchedule));
     }
 
-    /// <summary>Escalas de rodízio de uma turma específica.</summary>
     [HttpGet("{groupId}/schedules")]
     public async Task<ActionResult<List<ScheduleDto>>> GetSchedulesByGroup(Guid groupId)
     {
-        var schedules = await db.RotationSchedules
+        var schedules = await db.RotationSchedules.AsNoTracking()
             .Include(s => s.Group)
             .Include(s => s.Location)
             .Include(s => s.Preceptor)
@@ -271,7 +244,7 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         };
 
         db.RotationSchedules.Add(schedule);
-        AplicarDias(schedule, dto.Days);
+        AplicarDias(schedule, await ComSextaNaUdfAsync(dto.Days));
         await db.SaveChangesAsync();
 
         return Ok(MapSchedule(await RecarregarAsync(schedule.Id)));
@@ -302,7 +275,7 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
 
         // A programação semanal é reconciliada dia a dia: enviar a lista vazia
         // volta o rodízio ao padrão (todo dia útil presencial no local principal).
-        ReconciliarDias(schedule, dto.Days);
+        ReconciliarDias(schedule, await ComSextaNaUdfAsync(dto.Days));
 
         await SalvarProgramacaoAsync();
 
@@ -323,12 +296,6 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
     private ObjectResult Falha(ErroValidacao erro) =>
         StatusCode(erro.Status, ErrosApi.Corpo(erro.Mensagem, erro.Campo, erro.Codigo));
 
-    // ── Validação da alocação ─────────────────────────────────────────────────
-    /// <summary>
-    /// Confere os dados da alocação do rodízio: turma existente e com alunos
-    /// vinculados, local, preceptor responsável, datas e carga horária.
-    /// Devolve o erro (com o campo afetado) ou <c>null</c> quando tudo está válido.
-    /// </summary>
     private async Task<ErroValidacao?> ValidarAlocacaoAsync(CreateScheduleDto dto, Guid? scheduleIdAtual = null)
     {
         var group = await db.StudentGroups
@@ -338,7 +305,6 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         if (group == null)
             return new("Turma não encontrada.", "groupId");
 
-        // Os alunos precisam estar vinculados à turma antes da alocação.
         if (group.Memberships.Count == 0)
             return new($"A turma {group.Code} não possui alunos vinculados. "
                      + "Vincule os alunos à turma antes de alocar o rodízio.", "groupId");
@@ -346,8 +312,6 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         if (!await db.Locations.AnyAsync(l => l.Id == dto.LocationId))
             return new("Local de estágio não encontrado.", "locationId");
 
-        // O responsável precisa ter perfil de preceptor: é ele quem realiza o
-        // acompanhamento formativo dos alunos alocados neste rodízio.
         var preceptor = await db.Users.FirstOrDefaultAsync(u => u.Id == dto.PreceptorId);
         if (preceptor == null)
             return new("Preceptor não encontrado.", "preceptorId");
@@ -389,12 +353,7 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         return await ValidarDiasAsync(dto.Days);
     }
 
-    /// <summary>
-    /// Datas do rodízio. Campo de data vazio chega como 01/01/0001 (o
-    /// <c>[Required]</c> não pega <c>DateOnly</c>), e um ano digitado errado
-    /// passava direto — foi assim que o painel do aluno chegou a contar milhares
-    /// de dias sem registro.
-    /// </summary>
+    /// <summary>Data vazia chega como 01/01/0001 (<c>[Required]</c> não pega <c>DateOnly</c>).</summary>
     private static ErroValidacao? ValidarDatas(DateOnly inicio, DateOnly fim)
     {
         if (inicio == default)
@@ -417,10 +376,6 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         return null;
     }
 
-    /// <summary>
-    /// Confere a programação semanal: um dia da semana aparece uma vez só, o modo
-    /// é conhecido e o local informado existe. Sem dias, o rodízio segue no padrão.
-    /// </summary>
     private async Task<ErroValidacao?> ValidarDiasAsync(List<CriarDiaRodizioDto>? dias)
     {
         if (dias == null || dias.Count == 0) return null;
@@ -437,6 +392,11 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
             if (modo == null)
                 return new($"Tipo de atividade inválido em {DiasSemana.Rotulo(dia.DayOfWeek)}.", "days");
 
+            if (modo == ModoAtividade.Presencial && dia.DayOfWeek == DiasSemana.Sexta
+                && await LocalDaSextaAsync() == null)
+                return new("Às sextas o estágio presencial é na UDF, mas nenhuma unidade está marcada como "
+                         + "instituição de ensino. Marque-a em Unidades de saúde ou deixe a sexta como remota.", "days");
+
             if (modo == ModoAtividade.Presencial && dia.LocationId.HasValue
                 && !await db.Locations.AnyAsync(l => l.Id == dia.LocationId.Value))
                 return new($"Local informado em {DiasSemana.Rotulo(dia.DayOfWeek)} não foi encontrado.", "days");
@@ -445,10 +405,25 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         return null;
     }
 
-    /// <summary>
-    /// Grava a programação semanal. O local só é guardado no dia presencial: em um
-    /// dia remoto ou sem atividade ele não significa nada e só confundiria a tela.
-    /// </summary>
+    /// <summary>Unidade das sextas: a instituição de ensino (UDF — Laboratórios de Enfermagem).</summary>
+    private Task<Location?> LocalDaSextaAsync() =>
+        db.Locations
+            .Where(l => l.IsInstitution && l.Ativo)
+            .OrderBy(l => l.Name)
+            .FirstOrDefaultAsync();
+
+    /// <summary>Sexta presencial é sempre na UDF, seja qual for o local enviado.</summary>
+    private async Task<List<CriarDiaRodizioDto>?> ComSextaNaUdfAsync(List<CriarDiaRodizioDto>? dias)
+    {
+        if (dias == null) return null;
+        var udf = await LocalDaSextaAsync();
+        return [.. dias.Select(d => d.DayOfWeek == DiasSemana.Sexta
+                                    && ModoAtividade.Normalizar(d.Mode) == ModoAtividade.Presencial && udf != null
+            ? d with { LocationId = udf.Id }
+            : d)];
+    }
+
+    /// <summary>O local só é guardado no dia presencial.</summary>
     private static void AplicarDias(RotationSchedule schedule, List<CriarDiaRodizioDto>? dias)
     {
         if (dias == null) return;
@@ -468,15 +443,8 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
     }
 
     /// <summary>
-    /// Ajusta a programação já gravada à que veio do formulário: o dia que
-    /// permanece é atualizado, o que saiu é removido e o que entrou é inserido.
-    ///
-    /// Antes a edição apagava todos os dias e inseria todos de novo. Salvar duas
-    /// vezes em sequência (o clique duplo no botão) fazia a segunda gravação
-    /// tentar apagar linhas que a primeira já tinha apagado; o EF trata "apaguei
-    /// zero linhas" como edição concorrente e a tela acusava alteração por outra
-    /// pessoa, sem que ninguém mais estivesse editando. Atualizando o que já
-    /// existe, a segunda gravação apenas repete o mesmo resultado.
+    /// Atualiza, remove e insere só o que mudou. Apagar e reinserir tudo fazia o clique
+    /// duplo acusar edição concorrente (o EF trata "apaguei zero linhas" como conflito).
     /// </summary>
     private void ReconciliarDias(RotationSchedule schedule, List<CriarDiaRodizioDto>? dias)
     {
@@ -504,13 +472,8 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
     }
 
     /// <summary>
-    /// Grava a alocação tolerando a linha que sumiu entre a leitura e a escrita.
-    ///
-    /// Sem token de versão nas entidades, a única origem de
-    /// <see cref="DbUpdateConcurrencyException"/> aqui é um DELETE que não
-    /// encontrou a linha — ou seja, alguém já a removeu e o estado desejado já
-    /// vale. Isso não é conflito de edição: desistimos só daquela remoção e
-    /// gravamos o resto, em vez de recusar a alocação inteira.
+    /// Sem token de versão, a única <see cref="DbUpdateConcurrencyException"/> possível é um
+    /// DELETE de linha já removida: o estado desejado já vale, então gravamos o resto.
     /// </summary>
     private async Task SalvarProgramacaoAsync()
     {
@@ -548,10 +511,7 @@ public class GroupsController(AppDbContext db, ConflitoTurmasService conflitos) 
         Days = [.. s.Days.OrderBy(d => d.DayOfWeek == 0 ? 7 : d.DayOfWeek).Select(d => MapDia(d, s))]
     };
 
-    /// <summary>
-    /// O dia herda o local principal do rodízio quando nenhum outro foi informado —
-    /// é o que a tela mostra e o que a programação usa para validar o ponto.
-    /// </summary>
+    /// <summary>Sem local próprio, o dia herda o local principal do rodízio.</summary>
     private static DiaRodizioDto MapDia(RotationDaySchedule d, RotationSchedule s) => new()
     {
         DayOfWeek = d.DayOfWeek,

@@ -5,10 +5,6 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// Indicadores da tela de irregularidades: a fila de decisão, onde ela emperra e
-/// os padrões que apontam a causa (tipo, unidade, aluno recorrente).
-/// </summary>
 public class IrregularidadesPainelTests
 {
     private static readonly DateTime Agora = BrasiliaTime.Agora;

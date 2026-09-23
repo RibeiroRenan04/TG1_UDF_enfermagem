@@ -4,13 +4,8 @@ using System.Threading.Channels;
 namespace EstagioCheck.API.Services.Geocoding;
 
 /// <summary>
-/// Fila das unidades que ainda precisam ser geocodificadas, com o andamento de
-/// cada importação.
-///
-/// A geocodificação em massa não pode acontecer dentro da requisição HTTP: a
-/// política do Nominatim é de ~1 req/s, então 100 unidades levam quase dois
-/// minutos. A importação enfileira e responde na hora; o
-/// <see cref="GeocodingBackgroundService"/> consome no ritmo permitido.
+/// A ~1 req/s, 100 unidades levam quase dois minutos: a importação enfileira e responde na hora,
+/// e o <see cref="GeocodingBackgroundService"/> consome no ritmo permitido.
 /// </summary>
 public class GeocodingQueue
 {
@@ -21,7 +16,6 @@ public class GeocodingQueue
 
     public ChannelReader<Guid> Reader => _fila.Reader;
 
-    /// <summary>Enfileira uma unidade. Vinculada a um lote quando veio de importação.</summary>
     public void Enfileirar(Guid unidadeId, Guid? loteId = null)
     {
         if (loteId.HasValue)
@@ -32,7 +26,6 @@ public class GeocodingQueue
         _fila.Writer.TryWrite(unidadeId);
     }
 
-    /// <summary>Registra o desfecho de uma unidade no lote.</summary>
     public void Concluir(Guid? loteId, string status)
     {
         if (!loteId.HasValue) return;
@@ -43,7 +36,6 @@ public class GeocodingQueue
     public ProgressoImportacao? ObterProgresso(Guid loteId) =>
         _progresso.TryGetValue(loteId, out var p) ? p : null;
 
-    /// <summary>Descarta lotes antigos para a memória não crescer sem limite.</summary>
     public void LimparConcluidos(TimeSpan idade)
     {
         var limite = DateTime.UtcNow - idade;
@@ -52,7 +44,6 @@ public class GeocodingQueue
                 _progresso.TryRemove(id, out _);
     }
 
-    /// <summary>Contadores de um lote de importação, para a barra de progresso.</summary>
     public class ProgressoImportacao
     {
         private readonly object _trava = new();

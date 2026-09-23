@@ -1,10 +1,6 @@
 namespace EstagioCheck.API.Models;
 
-/// <summary>
-/// Turnos do estágio. O turno é a unidade de controle do ponto: cada aluno tem,
-/// no máximo, um check-in e um check-out por turno, e pode estar alocado em
-/// unidades diferentes em turnos diferentes — nunca duas vezes no mesmo turno.
-/// </summary>
+/// <summary>O turno é a unidade de controle do ponto e da alocação.</summary>
 public static class Turnos
 {
     public const string Manha = "manha";
@@ -15,10 +11,7 @@ public static class Turnos
 
     public static bool Valido(string? turno) => turno != null && Validos.Contains(turno);
 
-    /// <summary>
-    /// Normaliza a entrada para o identificador canônico ("Manhã", "MATUTINO" →
-    /// "manha"). Devolve <c>null</c> quando o texto não corresponde a um turno.
-    /// </summary>
+    /// <summary>"Manhã", "MATUTINO" → "manha"; <c>null</c> quando não é um turno.</summary>
     public static string? Normalizar(string? turno) => turno?.Trim().ToLowerInvariant() switch
     {
         "manha" or "manhã" or "matutino" => Manha,
@@ -35,10 +28,8 @@ public static class Turnos
     public static string DaHora(DateTime momento) => DaHora(momento.Hour);
 
     /// <summary>
-    /// Janela de horário padrão de cada turno. Usada quando o horário cadastrado na
-    /// unidade é de outro turno — a unidade guarda um horário só (em geral o da
-    /// manhã), e medir o ponto da tarde contra ele marcava todo registro como
-    /// "fora do turno".
+    /// A unidade guarda um horário só (em geral o da manhã): medir o ponto da tarde contra ele
+    /// marcava tudo como "fora do turno". Os outros turnos usam esta janela.
     /// </summary>
     public static (TimeSpan Inicio, TimeSpan Fim) JanelaPadrao(string turno) => Normalizar(turno) switch
     {
@@ -47,10 +38,6 @@ public static class Turnos
         _ => (new TimeSpan(7, 0, 0), new TimeSpan(13, 0, 0))
     };
 
-    /// <summary>
-    /// Janela que vale para o ponto de um turno na unidade: o horário cadastrado
-    /// quando ele começa naquele turno; senão, a janela padrão do turno.
-    /// </summary>
     public static (TimeSpan Inicio, TimeSpan Fim)? JanelaNaUnidade(string? inicioUnidade, string? fimUnidade, string turno)
     {
         if (TimeSpan.TryParse(inicioUnidade, out var inicio) && TimeSpan.TryParse(fimUnidade, out var fim)

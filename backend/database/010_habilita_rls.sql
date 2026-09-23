@@ -1,27 +1,13 @@
--- =============================================================================
---  Migration 010 – Row Level Security
---
---  Liga RLS em todas as tabelas, igualando o que já vale em produção.
---
---  POR QUE ISSO É PRECISO:
---  O Supabase expõe cada tabela do schema "public" pela API REST (PostgREST).
---  Sem RLS, qualquer um com a publishable key e a URL do projeto lê e escreve
---  todas as linhas — inclusive "Usuarios" e os registros de ponto.
---
---  POR QUE NÃO QUEBRA A APLICAÇÃO:
---  A API não usa o SDK do Supabase. Ela conecta direto no PostgreSQL via Npgsql
---  (ConnectionStrings__DefaultConnection), com o papel "postgres", que ignora RLS.
---  O acesso que o RLS fecha é só o da API REST, que a aplicação não utiliza.
---
---  POR QUE NÃO HÁ POLÍTICAS:
---  De propósito. RLS ligado e nenhuma política significa "ninguém acessa por
---  este caminho", que é exatamente o desejado: o único acesso legítimo é o do
---  backend, pela conexão direta. O linter do Supabase reporta isso como INFO
---  ("RLS Enabled No Policy"), e produção carrega o mesmo aviso.
---
---  Só crie políticas aqui se algum dia um cliente passar a falar com o Supabase
---  diretamente. Hoje nenhum fala.
--- =============================================================================
+-- 010 – liga RLS em todas as tabelas. O Supabase expõe o schema "public" pela API REST; sem RLS,
+-- quem tem a publishable key lê e escreve tudo. A API conecta direto como "postgres" (ignora RLS),
+-- e nenhuma política é criada de propósito: o único acesso legítimo é o do backend.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS "MigracoesAplicadas" (
+    "Nome"       TEXT        PRIMARY KEY,
+    "AplicadaEm" TIMESTAMP   NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo')
+);
 
 ALTER TABLE "public"."__EFMigrationsHistory"        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."Usuarios"                     ENABLE ROW LEVEL SECURITY;
@@ -42,3 +28,8 @@ ALTER TABLE "public"."DiasRodizio"                  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."AtividadesRemotas"            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."ParticipacoesAtividadeRemota" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."ExcecoesCalendario"           ENABLE ROW LEVEL SECURITY;
+
+INSERT INTO "MigracoesAplicadas" ("Nome") VALUES ('010_habilita_rls')
+ON CONFLICT ("Nome") DO NOTHING;
+
+COMMIT;

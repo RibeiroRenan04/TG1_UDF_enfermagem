@@ -3,22 +3,15 @@ using EstagioCheck.API.Services;
 namespace EstagioCheck.API.Models;
 
 /// <summary>
-/// Exceção do calendário: a data em que a programação normal do rodízio não vale.
-/// Feriado, recesso, estágio cancelado, troca de local, dia que virou remoto,
-/// atividade especial ou reposição.
-///
-/// A exceção nunca é gravada aluno a aluno: ela tem uma abrangência (faculdade,
-/// turma, rodízio ou um aluno específico) e a programação de cada data aplica a
-/// mais específica que alcança aquele aluno.
+/// Data em que a programação normal não vale. Nunca é gravada aluno a aluno: tem uma
+/// abrangência, e a programação aplica a mais específica que alcança o aluno.
 /// </summary>
 public class CalendarException
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    /// <summary>Tipo da exceção. Ver <see cref="TipoExcecao"/>.</summary>
     public string Type { get; set; } = TipoExcecao.Feriado;
 
-    /// <summary>Abrangência. Ver <see cref="AbrangenciaExcecao"/>.</summary>
     public string Scope { get; set; } = AbrangenciaExcecao.Faculdade;
 
     public DateOnly StartDate { get; set; }
@@ -29,12 +22,10 @@ public class CalendarException
     /// <summary>Restringe a exceção a um turno; nulo vale para todos.</summary>
     public string? Shift { get; set; }
 
-    // ── Alvo, conforme a abrangência ──────────────────────────────────────────
     public Guid? GroupId { get; set; }
     public Guid? ScheduleId { get; set; }
     public Guid? StudentId { get; set; }
 
-    // ── Substituição da programação ───────────────────────────────────────────
     /// <summary>Unidade que passa a valer quando o tipo é troca de local.</summary>
     public Guid? LocationId { get; set; }
 
@@ -47,7 +38,6 @@ public class CalendarException
     public DateTime CreatedAt { get; set; } = BrasiliaTime.Agora;
     public DateTime UpdatedAt { get; set; } = BrasiliaTime.Agora;
 
-    // Navigation
     public StudentGroup? Group { get; set; }
     public RotationSchedule? Schedule { get; set; }
     public ApplicationUser? Student { get; set; }
@@ -58,7 +48,6 @@ public class CalendarException
     public bool AlcancaData(DateOnly data) => StartDate <= data && data <= EndDate;
 }
 
-/// <summary>O que a exceção faz com a programação daquela data.</summary>
 public static class TipoExcecao
 {
     public const string Feriado = "feriado";
@@ -90,11 +79,7 @@ public static class TipoExcecao
     };
 }
 
-/// <summary>
-/// Quem a exceção alcança. A ordem em <see cref="Especificidade"/> resolve o
-/// empate: a exceção do aluno vence a do rodízio, que vence a da turma, e assim
-/// por diante.
-/// </summary>
+/// <summary>Empate resolvido por <see cref="Especificidade"/>: aluno vence rodízio, que vence turma…</summary>
 public static class AbrangenciaExcecao
 {
     public const string Faculdade = "faculdade";
@@ -106,7 +91,6 @@ public static class AbrangenciaExcecao
 
     public static bool Valida(string? escopo) => escopo != null && Todas.Contains(escopo);
 
-    /// <summary>Quanto maior, mais específica — e mais forte na hora de decidir o dia.</summary>
     public static int Especificidade(string? escopo) => escopo switch
     {
         Aluno => 3,

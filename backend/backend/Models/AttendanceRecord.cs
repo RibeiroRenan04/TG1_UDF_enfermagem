@@ -9,17 +9,12 @@ public class AttendanceRecord
     public Guid? ScheduleId { get; set; }
     public Guid? LocationId { get; set; }
 
-    /// <summary>
-    /// Atividade remota que originou o ponto. Preenchida, o registro veio do código
-    /// de presença e não do geofence — é o que distingue os dois na hora de exibir
-    /// e de auditar.
-    /// </summary>
+    /// <summary>Preenchida, o ponto veio do código de presença e não do geofence.</summary>
     public Guid? RemoteActivityId { get; set; }
 
     /// <summary>"check_in" | "check_out"</summary>
     public string Type { get; set; } = "check_in";
 
-    /// <summary>Horário do registro no fuso de Brasília (GMT-3), o fuso oficial do estágio.</summary>
     public DateTime RecordedAt { get; set; } = BrasiliaTime.Agora;
     public double Latitude { get; set; }
     public double Longitude { get; set; }
@@ -35,7 +30,6 @@ public class AttendanceRecord
     public DateTime? ValidatedAt { get; set; }
     public DateTime CreatedAt { get; set; } = BrasiliaTime.Agora;
 
-    // Navigation
     public ApplicationUser Student { get; set; } = null!;
     public RotationSchedule? Schedule { get; set; }
     public Location? Location { get; set; }

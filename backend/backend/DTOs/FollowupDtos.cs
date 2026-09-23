@@ -20,7 +20,6 @@ public class FollowupDto
     public DateOnly? FollowUpStart { get; init; }
     public DateOnly? FollowUpEnd { get; init; }
 
-    // Dimensões
     public string? PosturaPontualidade { get; init; }
     public string? PosturaEtica { get; init; }
     public string? PosturaResponsabilidade { get; init; }
@@ -34,14 +33,12 @@ public class FollowupDto
     public string? ParticipacaoAprendizado { get; init; }
     public string? ParticipacaoAutocritica { get; init; }
 
-    // Descritivos
     public string? Potencialidades { get; init; }
     public string? AspectosAprimorar { get; init; }
     public string? SituacoesRelevantes { get; init; }
     public string? ObservacoesDocente { get; init; }
     public string? EvolucaoSemanal { get; init; }
 
-    // Status / assinaturas
     public string Status { get; init; } = string.Empty;
     public DateTime? PreceptorSignedAt { get; init; }
     public string? PreceptorSignedName { get; init; }
@@ -51,11 +48,7 @@ public class FollowupDto
     public DateTime UpdatedAt { get; init; }
 }
 
-/// <summary>
-/// Retorno da busca de aluno por RGM. Traz os dados já cadastrados no sistema
-/// (período, turno, semestre, turma e escala vigente) para preenchimento
-/// automático do relatório, reduzindo digitação e divergência de dados.
-/// </summary>
+/// <summary>Dados já cadastrados do aluno, para preencher o relatório sem digitação.</summary>
 public class StudentLookupDto
 {
     public Guid StudentId { get; init; }
@@ -75,10 +68,6 @@ public class StudentLookupDto
     public DateOnly? FollowUpEnd { get; init; }
 }
 
-/// <summary>
-/// Rodízio do preceptor com os alunos alocados nele. Serve para o preceptor
-/// escolher o aluno pela lista da turma, em vez de digitar o RGM de cabeça.
-/// </summary>
 public class ScheduleStudentsDto
 {
     public Guid ScheduleId { get; init; }
@@ -92,16 +81,11 @@ public class ScheduleStudentsDto
     public string? LocationName { get; init; }
     public DateOnly StartDate { get; init; }
     public DateOnly EndDate { get; init; }
-    /// <summary>Rodízio vigente hoje — destacado na lista.</summary>
     public bool Current { get; init; }
-    /// <summary>Alunos alocados, já com o contexto do rodízio preenchido.</summary>
     public List<StudentLookupDto> Students { get; init; } = [];
 }
 
-/// <summary>
-/// Criação do acompanhamento. Herda os campos avaliativos de <see cref="UpdateFollowupDto"/>
-/// para que o preceptor consiga salvar cabeçalho e conteúdo em uma única requisição.
-/// </summary>
+/// <summary>Herda os campos avaliativos para salvar cabeçalho e conteúdo numa requisição só.</summary>
 public class CreateFollowupDto : UpdateFollowupDto
 {
     [Required] public Guid StudentId { get; init; }

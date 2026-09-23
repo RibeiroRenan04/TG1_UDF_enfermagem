@@ -3,20 +3,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EstagioCheck.API.Services.Geocoding;
 
-/// <summary>
-/// Consome a fila de geocodificação fora do ciclo das requisições HTTP.
-///
-/// Processa uma unidade por vez — o ritmo real é imposto pelo
-/// <see cref="NominatimGeocodingService"/>, que respeita o intervalo mínimo entre
-/// requisições. Uma falha em uma unidade nunca derruba o serviço: a unidade fica
-/// com status "erro" e o administrador reprocessa quando quiser.
-/// </summary>
+/// <summary>Uma unidade por vez; uma falha deixa a unidade com status "erro" e nunca derruba o serviço.</summary>
 public class GeocodingBackgroundService(
     GeocodingQueue fila,
     IServiceScopeFactory scopeFactory,
     ILogger<GeocodingBackgroundService> logger) : BackgroundService
 {
-    /// <summary>Lotes concluídos são esquecidos depois disso.</summary>
     private static readonly TimeSpan RetencaoDoProgresso = TimeSpan.FromHours(6);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -35,7 +27,6 @@ public class GeocodingBackgroundService(
             }
             catch (Exception ex)
             {
-                // Nunca deixar a fila morrer por causa de uma unidade.
                 logger.LogError(ex, "Erro inesperado ao geocodificar a unidade {UnidadeId}.", unidadeId);
             }
 

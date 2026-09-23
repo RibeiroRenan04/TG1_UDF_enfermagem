@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace EstagioCheck.API.DTOs;
 
-/// <summary>Exceção do calendário: a data em que a programação normal não vale.</summary>
 public class ExcecaoCalendarioDto
 {
     public Guid Id { get; init; }
@@ -28,7 +27,6 @@ public class ExcecaoCalendarioDto
 
     public string Description { get; init; } = string.Empty;
 
-    /// <summary>A exceção dispensa o aluno de bater ponto naquele dia.</summary>
     public bool DispensaPonto { get; init; }
 
     public string? CreatedByName { get; init; }

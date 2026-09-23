@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace EstagioCheck.API.DTOs;
 
-/// <summary>Unidade de saúde na listagem e no detalhe.</summary>
 public class UnidadeSaudeDto
 {
     public Guid Id { get; init; }
@@ -34,14 +33,12 @@ public class UnidadeSaudeDto
     public string? CodigoCnes { get; init; }
     public bool Ativo { get; init; }
 
-    /// <summary>Estagiários com alocação ativa nesta unidade.</summary>
     public int EstagiariosAtivos { get; init; }
 
     public DateTime CriadoEm { get; init; }
     public DateTime AtualizadoEm { get; init; }
 }
 
-// ── Cadastro manual ───────────────────────────────────────────────────────────
 public record CriarUnidadeSaudeDto(
     [Required(ErrorMessage = "Informe o nome da unidade."), MaxLength(200)] string Nome,
     [MaxLength(100)] string? Tipo,
@@ -81,14 +78,12 @@ public record AtualizarUnidadeSaudeDto(
     bool? Ativo
 );
 
-/// <summary>Ajuste manual das coordenadas na tela de revisão.</summary>
 public record DefinirCoordenadasDto(
     [Required, Range(-90, 90, ErrorMessage = "Latitude fora do intervalo válido.")] double Latitude,
     [Required, Range(-180, 180, ErrorMessage = "Longitude fora do intervalo válido.")] double Longitude,
     [MaxLength(500)] string? Observacao
 );
 
-// ── Geocodificação ────────────────────────────────────────────────────────────
 public class GeocodificacaoRespostaDto
 {
     public bool Sucesso { get; init; }
@@ -101,7 +96,6 @@ public class GeocodificacaoRespostaDto
     public bool VeioDoCache { get; init; }
 }
 
-/// <summary>Prévia de um endereço avulso, antes de salvar a unidade.</summary>
 public record PreverEnderecoDto(
     [MaxLength(200)] string? Nome,
     [MaxLength(300)] string? Endereco,
@@ -112,7 +106,6 @@ public record PreverEnderecoDto(
     [MaxLength(10)] string? Cep
 );
 
-// ── Importação ────────────────────────────────────────────────────────────────
 public class ImportPreviewLinhaDto
 {
     public int Linha { get; init; }
@@ -129,7 +122,6 @@ public class ImportPreviewLinhaDto
 
 public class ImportPreviewDto
 {
-    /// <summary>Token da prévia, devolvido na confirmação para importar o mesmo conteúdo.</summary>
     public Guid PreviewId { get; init; }
     public int TotalLinhas { get; init; }
     public int Validas { get; init; }
@@ -138,7 +130,6 @@ public class ImportPreviewDto
     /// <summary>Erros do arquivo como um todo; se houver, nada pode ser importado.</summary>
     public List<string> Erros { get; init; } = [];
     public List<ImportPreviewLinhaDto> Linhas { get; init; } = [];
-    /// <summary>Só é possível confirmar quando há ao menos uma linha aproveitável.</summary>
     public bool PodeConfirmar { get; init; }
 }
 

@@ -7,11 +7,8 @@ using Microsoft.Extensions.Caching.Memory;
 namespace EstagioCheck.API.Services.Import;
 
 /// <summary>
-/// Orquestra a importação: lê a planilha, detecta duplicidades, guarda a prévia
-/// e, na confirmação, cria/atualiza as unidades e as enfileira para geocodificação.
-///
-/// A gravação só acontece na confirmação. A prévia fica em memória por tempo curto,
-/// para o usuário conferir antes de qualquer escrita no banco.
+/// Lê a planilha, detecta duplicidades e guarda a prévia em memória; só a confirmação
+/// grava no banco e enfileira a geocodificação.
 /// </summary>
 public class UnidadeImportService(
     AppDbContext db,
@@ -21,12 +18,10 @@ public class UnidadeImportService(
     IMemoryCache cache,
     ILogger<UnidadeImportService> logger)
 {
-    /// <summary>Prazo para confirmar uma prévia antes de precisar reenviar o arquivo.</summary>
     private static readonly TimeSpan ValidadeDaPrevia = TimeSpan.FromMinutes(30);
 
     private static string ChaveDaPrevia(Guid id) => $"import_unidades_{id}";
 
-    /// <summary>Lê e valida a planilha, sem gravar nada.</summary>
     public async Task<(UnidadeImportResult resultado, Guid previewId)> GerarPreviaAsync(
         Stream conteudo, string nomeArquivo, CancellationToken ct)
     {
@@ -60,11 +55,8 @@ public class UnidadeImportService(
     public void DescartarPrevia(Guid previewId) => cache.Remove(ChaveDaPrevia(previewId));
 
     /// <summary>
-    /// Cria as unidades da prévia e as enfileira para geocodificação.
-    ///
-    /// Duplicadas são ignoradas por padrão. Com <paramref name="atualizarDuplicadas"/>
-    /// o cadastro é atualizado, mas coordenadas de origem MANUAL nunca são perdidas:
-    /// uma correção feita à mão vale mais que o endereço de uma planilha.
+    /// Duplicadas são ignoradas por padrão. Com <paramref name="atualizarDuplicadas"/> o cadastro
+    /// é atualizado, mas coordenadas de origem MANUAL nunca são perdidas.
     /// </summary>
     public async Task<(Guid loteId, int criadas, int atualizadas, int ignoradas, int enfileiradas)>
         ConfirmarAsync(UnidadeImportResult previa, bool atualizarDuplicadas, CancellationToken ct)
@@ -84,13 +76,10 @@ public class UnidadeImportService(
 
                 AtualizarCadastro(existente, linha);
 
-                // Coordenada da planilha vale mais que a geocodificada, mas nunca
-                // passa por cima de uma correção feita à mão.
                 if (linha.TemCoordenadas && !existente.CoordenadaManual)
                 {
                     AplicarCoordenadasDaPlanilha(existente, linha, loteId);
                 }
-                // Endereço mudou → as coordenadas antigas não valem mais, exceto as manuais.
                 else if (linha.EnderecoAlterado && !existente.CoordenadaManual)
                 {
                     existente.Latitude = 0;
@@ -129,8 +118,6 @@ public class UnidadeImportService(
             db.Locations.Add(unidade);
             criadas++;
 
-            // Com coordenadas na planilha a unidade já nasce localizada; sem elas,
-            // vai para a fila do geocodificador como antes.
             if (linha.TemCoordenadas) AplicarCoordenadasDaPlanilha(unidade, linha, loteId);
             else paraGeocodificar.Add(unidade.Id);
         }
@@ -149,14 +136,9 @@ public class UnidadeImportService(
         return (loteId, criadas, atualizadas, ignoradas, paraGeocodificar.Count);
     }
 
-    // ── Duplicidade ───────────────────────────────────────────────────────────
     /// <summary>
-    /// Marca as linhas que já existem no banco.
-    ///
-    /// Nome sozinho não basta: "UBS 1" existe em várias regiões. A chave junta nome,
-    /// logradouro, número e cidade normalizados — específica o bastante para não
-    /// confundir duas unidades legítimas de nome parecido, e tolerante à variação de
-    /// acento e pontuação entre planilhas.
+    /// Nome sozinho não basta ("UBS 1" existe em várias regiões): a chave junta nome, logradouro,
+    /// número e cidade normalizados.
     /// </summary>
     private async Task MarcarDuplicadasAsync(UnidadeImportResult resultado, CancellationToken ct)
     {
@@ -174,11 +156,8 @@ public class UnidadeImportService(
             indice.TryAdd(chave, e.Id);
         }
 
-        // O código CNES identifica a unidade sozinho, mesmo com nome ou endereço
-        // escritos de outro jeito — e tem índice único no banco: sem esta checagem,
-        // reimportar a mesma unidade derrubava a confirmação inteira.
-        // Normalizado dos dois lados: cadastros antigos gravaram o código sem os
-        // zeros à esquerda ("10731"), a planilha oficial traz "0010731".
+        // O CNES identifica a unidade sozinho e tem índice único: sem esta checagem, reimportar
+        // a mesma unidade derrubava a confirmação. Normalizado dos dois lados ("10731" x "0010731").
         var porCnes = existentes
             .Select(e => new { e.Id, Cnes = Cnes.Normalizar(e.CodigoCnes) })
             .Where(e => e.Cnes != null)
@@ -254,11 +233,7 @@ public class UnidadeImportService(
         unidade.CodigoCnes = linha.CodigoCnes ?? unidade.CodigoCnes;
     }
 
-    /// <summary>
-    /// Grava as coordenadas que vieram na planilha. A unidade fica localizada sem
-    /// passar pelo geocodificador; a origem é "OUTRO" porque não é o Nominatim
-    /// nem uma correção manual (e é o que a restrição do banco aceita).
-    /// </summary>
+    /// <summary>Origem "OUTRO": não é o Nominatim nem correção manual (e é o que a restrição do banco aceita).</summary>
     private static void AplicarCoordenadasDaPlanilha(Location unidade, UnidadeImportRow linha, Guid loteId)
     {
         unidade.Latitude = linha.Latitude!.Value;

@@ -27,13 +27,8 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
         return loc == null ? NotFound() : Ok(Map(loc));
     }
 
-    // Cadastro e edição de unidades ficam só em /api/unidades-saude (formulário,
-    // importação e revisão de localização), onde as coordenadas são validadas e
-    // ganham status de geocodificação. Os antigos POST/PUT/DELETE daqui gravavam
-    // coordenadas sem conferência nenhuma e já não eram usados por tela alguma —
-    // eram uma porta aberta para uma unidade com raio num lugar qualquer.
+    // Cadastro e edição de unidades ficam em /api/unidades-saude, onde as coordenadas são validadas.
 
-    // ── Busca Saúde DF (CNES / OpenDataSUS) ──────────────────────────────────
     /// <summary>Pesquisa unidades de saúde do DF via API pública do CNES (default: UBS).</summary>
     [HttpGet("busca-saude")]
     [Authorize(Roles = Roles.Supervisor)]
@@ -46,7 +41,6 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
         return Ok(results);
     }
 
-    /// <summary>Importa um estabelecimento do CNES como local de estágio.</summary>
     [HttpPost("import-from-busca-saude")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<LocationDto>> ImportFromBuscaSaude(
@@ -62,11 +56,8 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
         if (alreadyExists)
             return Conflict(new { message = "Estabelecimento já importado." });
 
-        // O estabelecimento entra como unidade de saúde comum: "instituição" é a
-        // instituição de ensino, marcada só nela — é o que a regra de sexta-feira
-        // do ponto verifica. Marcar toda UBS como instituição anulava a regra.
-        // Coordenada do CNES fora do intervalo (ou 0, 0) não conta: a unidade entra
-        // pendente e vai para a revisão, em vez de nascer "confirmada" num lugar errado.
+            // "Instituição" é só a de ensino (regra de sexta-feira do ponto). Coordenada inválida do
+            // CNES não conta: a unidade entra pendente de revisão.
         var temCoordenadas = Coordenadas.Validar(dto.Latitude, dto.Longitude) == null;
 
         var loc = new Location
@@ -83,8 +74,7 @@ public class LocationsController(AppDbContext db, BuscaSaudeService buscaSaude) 
             Tipo = "UBS",
             Uf = "DF",
             Ativo = true,
-            // As coordenadas vêm do CNES, não do Nominatim: registramos a origem
-            // para a tela de unidades não pedir revisão do que já está conferido.
+            // Origem registrada para a tela não pedir revisão do que já veio conferido do CNES.
             OrigemCoordenadas = temCoordenadas ? Models.OrigemCoordenadas.Outro : null,
             StatusGeocodificacao = temCoordenadas
                 ? Models.StatusGeocodificacao.Sucesso

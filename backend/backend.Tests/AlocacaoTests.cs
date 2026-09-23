@@ -1,3 +1,4 @@
+using EstagioCheck.API.Services;
 using EstagioCheck.API.Controllers;
 using EstagioCheck.API.DTOs;
 using EstagioCheck.API.Models;
@@ -8,16 +9,12 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// Regras de alocação de estagiários. As verificações que importam ficam na API,
-/// não na tela: é a API que recusa perfil errado e alocação dupla.
-/// </summary>
 public class AlocacaoTests
 {
     private static AlocacoesController Montar(
         EstagioCheck.API.Data.AppDbContext db, Guid usuarioId, string papel = Roles.Supervisor)
     {
-        var controller = new AlocacoesController(db, TestSupport.Logger<AlocacoesController>());
+        var controller = new AlocacoesController(db, TestSupport.Logger<AlocacoesController>(), new EscopoPreceptorService(db));
         var identidade = new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, usuarioId.ToString()),
@@ -37,10 +34,7 @@ public class AlocacaoTests
     private static T Corpo<T>(ActionResult<T> resultado) where T : class =>
         (T)((ObjectResult)resultado.Result!).Value!;
 
-    /// <summary>
-    /// Listagens devolvem o resultado de um Select (avaliação preguiçosa), não um
-    /// List: materializa antes de conferir.
-    /// </summary>
+    /// <summary>Listagens devolvem um Select preguiçoso: materializa antes de conferir.</summary>
     private static List<AlocacaoDto> Lista(ActionResult<List<AlocacaoDto>> resultado) =>
         ((IEnumerable<AlocacaoDto>)((ObjectResult)resultado.Result!).Value!).ToList();
 
@@ -292,7 +286,6 @@ public class AlocacaoTests
         Assert.Equal(2, todas.Count);
     }
 
-    // ── Alocação por turno ────────────────────────────────────────────────────
     [Fact]
     public async Task Aluno_pode_ser_alocado_em_unidades_diferentes_em_turnos_diferentes()
     {
@@ -490,8 +483,6 @@ public class AlocacaoTests
         var controller = Montar(db, Guid.NewGuid());
         await controller.Alocar(unidadeA.Id, new CriarAlocacaoDto(aluno.Id, new DateOnly(2026, 9, 10), null));
 
-        // Antes, a anterior era encerrada com fim antes do início e o banco devolvia
-        // um "conflito de dados" genérico.
         var resposta = await controller.Alocar(unidadeB.Id,
             new CriarAlocacaoDto(aluno.Id, new DateOnly(2026, 9, 1), null, EncerrarAlocacaoAtual: true));
 

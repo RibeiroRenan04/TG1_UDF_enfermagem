@@ -7,92 +7,98 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EstagioCheck.API.Services;
 
-/// <summary>
-/// Módulo de Certificação e Controle de Carga Horária (TGI 1.3.9).
-/// Calcula as horas cumpridas (registros aprovados) frente à carga exigida e
-/// determina a elegibilidade do aluno ao certificado. Cálculo sob demanda — sem
-/// persistência — reutilizando a mesma lógica de pares check_in/check_out dos relatórios.
-/// </summary>
+/// <summary>Horas aprovadas frente à carga exigida e elegibilidade ao certificado, calculadas sob demanda.</summary>
 public class CertificateService(AppDbContext db)
 {
-    /// <summary>Monta o certificado de um aluno. Retorna null se o id não for de um aluno.</summary>
-    public async Task<CertificateDto?> ObterAsync(Guid studentId)
-    {
-        var student = await db.Users
-            .FirstOrDefaultAsync(u => u.Id == studentId && u.Role == "aluno");
-        if (student == null) return null;
+    /// <summary><c>null</c> se o id não for de um aluno.</summary>
+    public async Task<CertificateDto?> ObterAsync(Guid studentId) =>
+        (await MontarAsync([studentId])).FirstOrDefault();
 
-        // O aluno pode cursar mais de uma turma ao mesmo tempo: o certificado soma
-        // a carga horária de todos os rodízios em que ele está.
-        var vinculos = await db.GroupMemberships
-            .Include(m => m.Group).ThenInclude(g => g.Schedules).ThenInclude(s => s.Location)
-            .Where(m => m.StudentId == studentId)
-            .ToListAsync();
-
-        var schedules = vinculos.SelectMany(m => m.Group.Schedules).ToList();
-        var required = schedules.Sum(s => s.RequiredHours);
-
-        var recsRaw = await db.AttendanceRecords
-            .Where(r => r.StudentId == studentId)
-            .Select(r => new { r.Type, r.Status, r.RecordedAt, r.ScheduleId })
-            .ToListAsync();
-
-        var recs = recsRaw.Select(r => new RegistroHora(r.Type, r.Status, r.RecordedAt, r.ScheduleId));
-        var completed = CalcularHorasAprovadas(recs);
-        var pct = required > 0 ? Math.Min(100, completed / required * 100) : 0;
-        var eligible = required > 0 && completed >= required;
-
-        var locais = schedules
-            .Select(s => s.Location.Name)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(n => n)
-            .ToList();
-
-        return new CertificateDto
-        {
-            StudentId = student.Id,
-            StudentName = student.FullName,
-            Rgm = student.Rgm,
-            GroupName = vinculos.Count == 0
-                ? null
-                : string.Join(", ", TurmasDoAluno.Ordenados(vinculos).Select(m => m.Group.Name)),
-            CompletedHours = Math.Round(completed, 1),
-            RequiredHours = required,
-            ProgressPercent = Math.Round(pct, 1),
-            Eligible = eligible,
-            PeriodLabel = MontarPeriodo(schedules),
-            Locations = locais,
-            Institution = student.Institution,
-            IssuedAt = BrasiliaTime.Agora,
-            VerificationCode = GerarCodigo(student.Id, completed)
-        };
-    }
-
-    /// <summary>Lista os certificados de todos os alunos vinculados a um grupo.</summary>
+    /// <summary>Certificados de todos os alunos vinculados a alguma turma.</summary>
     public async Task<List<CertificateDto>> ListarAsync()
     {
-        var studentIds = await db.GroupMemberships
+        var studentIds = await db.GroupMemberships.AsNoTracking()
             .Select(m => m.StudentId)
             .Distinct()
             .ToListAsync();
 
-        var certificados = new List<CertificateDto>();
-        foreach (var id in studentIds)
-        {
-            var cert = await ObterAsync(id);
-            if (cert != null) certificados.Add(cert);
-        }
-
-        return certificados.OrderBy(c => c.StudentName).ToList();
+        return await MontarAsync(studentIds);
     }
 
     /// <summary>
-    /// Soma as horas de cada par check_in/check_out, ambos aprovados. Pública para o
-    /// painel do professor e o relatório usarem a mesma conta do certificado.
-    ///
-    /// O par é formado por dia <b>e por rodízio</b>. Só por dia, quem cursa duas
-    /// turmas (manhã na UBS e tarde no PIC) tinha a entrada da manhã casada com a
-    /// primeira saída do dia, e o turno da tarde não contava.
+    /// Monta os certificados de vários alunos com quatro consultas no total, qualquer que seja o
+    /// número de alunos. Antes a lista chamava <see cref="ObterAsync"/> aluno por aluno (três
+    /// consultas cada) e a tela de certificados não terminava de carregar.
+    /// </summary>
+    private async Task<List<CertificateDto>> MontarAsync(List<Guid> studentIds)
+    {
+        if (studentIds.Count == 0) return [];
+
+        var alunos = await db.Users.AsNoTracking()
+            .Where(u => studentIds.Contains(u.Id) && u.Role == Roles.Aluno)
+            .Select(u => new { u.Id, u.FullName, u.Rgm, u.Institution })
+            .ToListAsync();
+
+        var vinculos = await db.GroupMemberships.AsNoTracking()
+            .Where(m => studentIds.Contains(m.StudentId))
+            .Select(m => new { m.StudentId, m.GroupId, m.CreatedAt, m.Group.Code, m.Group.Name })
+            .ToListAsync();
+
+        var grupoIds = vinculos.Select(v => v.GroupId).Distinct().ToList();
+        var rodiziosPorGrupo = (await db.RotationSchedules.AsNoTracking()
+                .Where(s => grupoIds.Contains(s.GroupId))
+                .Select(s => new { s.GroupId, s.RequiredHours, s.StartDate, s.EndDate, Local = s.Location.Name })
+                .ToListAsync())
+            .ToLookup(s => s.GroupId);
+
+        // Só o par aprovado conta hora; filtrar no banco evita trazer o ponto inteiro da faculdade.
+        var registrosPorAluno = (await db.AttendanceRecords.AsNoTracking()
+                .Where(r => studentIds.Contains(r.StudentId) && r.Status == "aprovado")
+                .Select(r => new { r.StudentId, r.Type, r.Status, r.RecordedAt, r.ScheduleId })
+                .ToListAsync())
+            .ToLookup(r => r.StudentId, r => new RegistroHora(r.Type, r.Status, r.RecordedAt, r.ScheduleId));
+
+        var vinculosPorAluno = vinculos.ToLookup(v => v.StudentId);
+        var emissao = BrasiliaTime.Agora;
+
+        return [.. alunos.Select(aluno =>
+        {
+            var meus = vinculosPorAluno[aluno.Id].ToList();
+            var rodizios = meus.SelectMany(v => rodiziosPorGrupo[v.GroupId]).ToList();
+            var exigidas = rodizios.Sum(s => s.RequiredHours);
+            var cumpridas = CalcularHorasAprovadas(registrosPorAluno[aluno.Id]);
+
+            var turmas = TurmasDoAluno.Ordenados(meus.Select(v => new GroupMembership
+            {
+                GroupId = v.GroupId,
+                CreatedAt = v.CreatedAt,
+                Group = new StudentGroup { Id = v.GroupId, Code = v.Code, Name = v.Name }
+            }));
+
+            return new CertificateDto
+            {
+                StudentId = aluno.Id,
+                StudentName = aluno.FullName,
+                Rgm = aluno.Rgm,
+                GroupName = turmas.Count == 0 ? null : string.Join(", ", turmas.Select(m => m.Group.Name)),
+                CompletedHours = Math.Round(cumpridas, 1),
+                RequiredHours = exigidas,
+                ProgressPercent = Math.Round(exigidas > 0 ? Math.Min(100, cumpridas / exigidas * 100) : 0, 1),
+                Eligible = exigidas > 0 && cumpridas >= exigidas,
+                PeriodLabel = rodizios.Count == 0
+                    ? null
+                    : $"{rodizios.Min(s => s.StartDate):dd/MM/yyyy} a {rodizios.Max(s => s.EndDate):dd/MM/yyyy}",
+                Locations = [.. rodizios.Select(s => s.Local).Distinct(StringComparer.OrdinalIgnoreCase).Order()],
+                Institution = aluno.Institution,
+                IssuedAt = emissao,
+                VerificationCode = GerarCodigo(aluno.Id, cumpridas)
+            };
+        }).OrderBy(c => c.StudentName)];
+    }
+
+    /// <summary>
+    /// Pares check_in/check_out aprovados, formados por dia e por rodízio: só por dia, quem cursa
+    /// duas turmas tinha a entrada da manhã casada com a saída da tarde.
     /// </summary>
     public static double CalcularHorasAprovadas(IEnumerable<RegistroHora> registros)
     {
@@ -114,14 +120,6 @@ public class CertificateService(AppDbContext db)
         return horas;
     }
 
-    private static string? MontarPeriodo(List<Models.RotationSchedule> schedules)
-    {
-        if (schedules.Count == 0) return null;
-        var inicio = schedules.Min(s => s.StartDate);
-        var fim = schedules.Max(s => s.EndDate);
-        return $"{inicio:dd/MM/yyyy} a {fim:dd/MM/yyyy}";
-    }
-
     private static string GerarCodigo(Guid studentId, double horas)
     {
         var bruto = $"{studentId:N}|{horas:0.0}";
@@ -129,6 +127,5 @@ public class CertificateService(AppDbContext db)
         return Convert.ToHexString(hash)[..10];
     }
 
-    /// <summary>Registro de ponto para a conta de horas; o rodízio separa os turnos do mesmo dia.</summary>
     public readonly record struct RegistroHora(string Type, string Status, DateTime RecordedAt, Guid? ScheduleId = null);
 }

@@ -4,7 +4,7 @@ public class GeoService
 {
     private const double EarthRadiusMeters = 6_371_000;
 
-    /// <summary>Calcula distância em metros entre dois pontos usando Haversine.</summary>
+    /// <summary>Distância em metros (Haversine).</summary>
     public double HaversineMeters(double lat1, double lon1, double lat2, double lon2)
     {
         var dLat = ToRad(lat2 - lat1);

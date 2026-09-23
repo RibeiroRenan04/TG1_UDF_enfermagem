@@ -10,12 +10,7 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// Regras do código de presença da atividade remota. O código comprova que o aluno
-/// acessou a atividade dentro do prazo — mas sozinho ele não autoriza nada: o
-/// registro confere ainda o grupo, a janela, a atividade em aberto, a participação
-/// única e a tarefa exigida.
-/// </summary>
+/// <summary>O código sozinho não autoriza: o registro confere grupo, janela, atividade aberta, participação única e tarefa.</summary>
 public class AtividadeRemotaTests
 {
     private sealed record Cenario(
@@ -45,10 +40,7 @@ public class AtividadeRemotaTests
         return controller;
     }
 
-    /// <summary>
-    /// Atividade de hoje com a janela aberta em volta do relógio, para o teste não
-    /// depender da hora em que roda.
-    /// </summary>
+    /// <summary>Janela aberta em volta do relógio, para o teste não depender da hora em que roda.</summary>
     private static async Task<Cenario> MontarAsync(
         bool exigeTarefa = false, string? tipoTarefa = null, bool ativa = true)
     {
@@ -66,8 +58,9 @@ public class AtividadeRemotaTests
             GroupId = grupo.Id,
             ProfessorId = professor.Id,
             ActivityDate = DateOnly.FromDateTime(agora),
-            StartTime = TimeOnly.FromDateTime(agora.AddHours(-1)),
-            EndTime = TimeOnly.FromDateTime(agora.AddHours(1)),
+            // Presa ao dia: perto da meia-noite, "agora ± 1h" viraria uma janela invertida.
+            StartTime = agora.Hour >= 1 ? TimeOnly.FromDateTime(agora.AddHours(-1)) : TimeOnly.MinValue,
+            EndTime = agora.Hour < 23 ? TimeOnly.FromDateTime(agora.AddHours(1)) : new TimeOnly(23, 59, 59),
             EstimatedHours = 2,
             PresenceCode = "ENF-7K92",
             RequiresTask = exigeTarefa,
@@ -85,7 +78,6 @@ public class AtividadeRemotaTests
     private static RegistrarPresencaRemotaDto Codigo(string codigo, string? resposta = null) =>
         new(codigo, resposta);
 
-    // ── Caminho feliz ─────────────────────────────────────────────────────────
     [Fact]
     public async Task Codigo_valido_registra_participacao_e_credita_horas()
     {
@@ -133,7 +125,6 @@ public class AtividadeRemotaTests
         Assert.IsType<OkObjectResult>(resposta.Result);
     }
 
-    // ── Recusas ───────────────────────────────────────────────────────────────
     [Fact]
     public async Task Codigo_inexistente_e_recusado()
     {
@@ -246,7 +237,6 @@ public class AtividadeRemotaTests
         Assert.IsType<BadRequestObjectResult>(resposta.Result);
     }
 
-    // ── Gestão da atividade ───────────────────────────────────────────────────
     [Fact]
     public async Task Atividade_com_participacoes_nao_pode_ser_excluida()
     {

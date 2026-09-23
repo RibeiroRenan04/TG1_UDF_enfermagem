@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace EstagioCheck.API.DTOs;
 
-/// <summary>Atividade remota como o professor a enxerga, com o código de presença.</summary>
 public class AtividadeRemotaDto
 {
     public Guid Id { get; init; }
@@ -26,7 +25,6 @@ public class AtividadeRemotaDto
     public string? TaskInstructions { get; init; }
     public bool Ativo { get; init; }
 
-    /// <summary>A janela do código está aberta agora.</summary>
     public bool Aberta { get; init; }
 
     /// <summary>Situação em uma palavra: "agendada" | "aberta" | "encerrada".</summary>
@@ -37,10 +35,7 @@ public class AtividadeRemotaDto
     public DateTime CreatedAt { get; init; }
 }
 
-/// <summary>
-/// Atividade remota como o aluno a enxerga. Nunca traz o código de presença: é
-/// justamente ele que o professor entrega à parte para comprovar o acesso.
-/// </summary>
+/// <summary>Nunca traz o código de presença: o professor o entrega à parte.</summary>
 public class AtividadeRemotaAlunoDto
 {
     public Guid Id { get; init; }
@@ -55,16 +50,13 @@ public class AtividadeRemotaAlunoDto
     public string? TaskTypeLabel { get; init; }
     public string? TaskInstructions { get; init; }
 
-    /// <summary>A janela está aberta e o código é aceito agora.</summary>
     public bool Aberta { get; init; }
     public string Situacao { get; init; } = string.Empty;
 
-    /// <summary>O aluno já registrou participação nesta atividade.</summary>
     public bool JaRegistrada { get; init; }
     public DateTime? RegistradaEm { get; init; }
 }
 
-/// <summary>Participação de um aluno, exibida ao professor.</summary>
 public class ParticipacaoAtividadeDto
 {
     public Guid Id { get; init; }
@@ -90,16 +82,11 @@ public record CriarAtividadeRemotaDto(
     string? TaskInstructions
 );
 
-/// <summary>
-/// Registro de presença remota. O código comprova o acesso dentro do prazo; a
-/// resposta, quando a atividade exige tarefa, comprova a realização.
-/// </summary>
 public record RegistrarPresencaRemotaDto(
     [Required(ErrorMessage = "Informe o código de presença.")] string Code,
     [MaxLength(4000)] string? TaskResponse
 );
 
-/// <summary>Resposta do registro de presença remota.</summary>
 public class PresencaRemotaResultadoDto
 {
     public Guid ParticipationId { get; init; }

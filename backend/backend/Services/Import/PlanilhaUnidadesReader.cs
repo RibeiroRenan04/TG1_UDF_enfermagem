@@ -5,19 +5,11 @@ using EstagioCheck.API.Services.Geocoding;
 
 namespace EstagioCheck.API.Services.Import;
 
-/// <summary>
-/// Lê e valida a planilha de unidades de saúde (.xlsx ou .csv).
-///
-/// A leitura é puramente estrutural: o conteúdo das células é tratado como texto,
-/// nunca como fórmula, e nada é executado. O arquivo não é gravado em disco — é
-/// lido do fluxo e descartado.
-/// </summary>
+/// <summary>Leitura só estrutural: células são texto, nunca fórmula, e o arquivo não vai para o disco.</summary>
 public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<PlanilhaUnidadesReader> logger)
 {
-    /// <summary>Teto de linhas por planilha, para uma importação não travar o servidor.</summary>
     public const int MaxLinhas = 2000;
 
-    /// <summary>Tamanho máximo do arquivo enviado.</summary>
     public const long MaxBytes = 5 * 1024 * 1024;
 
     public static readonly string[] ExtensoesAceitas = [".xlsx", ".csv"];
@@ -25,14 +17,9 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
     /// <summary>Assinatura de um .xlsx (ZIP): "PK\x03\x04".</summary>
     private static readonly byte[] AssinaturaZip = [0x50, 0x4B, 0x03, 0x04];
 
-    /// <summary>Colunas obrigatórias no cabeçalho.</summary>
     public static readonly string[] ColunasObrigatorias = ["nome"];
 
-    /// <summary>Cabeçalho oficial do modelo distribuído aos usuários.</summary>
-    /// <remarks>
-    /// Latitude, Longitude e CodigoCnes são opcionais. Com as coordenadas preenchidas
-    /// a unidade já entra localizada, sem passar pela geocodificação por endereço.
-    /// </remarks>
+    /// <summary>Latitude, Longitude e CodigoCnes são opcionais.</summary>
     public static readonly string[] ColunasModelo =
     [
         "Nome", "Tipo", "Endereco", "Numero", "Complemento", "Bairro", "Cidade", "UF", "CEP", "Telefone",
@@ -95,7 +82,6 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
         return resultado;
     }
 
-    // ── .xlsx ─────────────────────────────────────────────────────────────────
     private List<UnidadeImportRow> LerXlsx(Stream conteudo, UnidadeImportResult resultado)
     {
         using var workbook = new XLWorkbook(conteudo);
@@ -136,7 +122,6 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
             var valores = new Dictionary<string, string>();
             for (var i = 0; i < cabecalho.Count; i++)
             {
-                // GetString devolve o valor exibido; fórmulas nunca são avaliadas aqui.
                 var celula = linhaPlanilha.Cell(i + 1);
                 valores[cabecalho[i]] = celula.GetString().Trim();
             }
@@ -150,7 +135,6 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
         return linhas;
     }
 
-    // ── .csv ──────────────────────────────────────────────────────────────────
     private List<UnidadeImportRow> LerCsv(Stream conteudo, UnidadeImportResult resultado)
     {
         using var leitor = new StreamReader(conteudo, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
@@ -187,7 +171,6 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
 
             if (valores.Values.All(string.IsNullOrWhiteSpace)) continue;
 
-            // +1 porque a primeira linha do arquivo é o cabeçalho.
             linhas.Add(MontarLinha(valores, i + 1));
         }
 
@@ -223,7 +206,6 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
         return colunas;
     }
 
-    // ── Validação ─────────────────────────────────────────────────────────────
     private bool ValidarCabecalho(List<string> cabecalho, UnidadeImportResult resultado)
     {
         var faltando = ColunasObrigatorias.Where(c => !cabecalho.Contains(c)).ToList();
@@ -269,10 +251,8 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
     }
 
     /// <summary>
-    /// Coordenadas opcionais. Lidas do valor cru, sem <see cref="Sanitizar"/>: toda
-    /// latitude do Brasil é negativa, e o sanitizador prefixa com apóstrofo o que
-    /// começa com "-" (proteção contra fórmula), o que estragaria o número. Aceita
-    /// ponto ou vírgula decimal, como o Excel em português grava.
+    /// Lidas do valor cru: o <see cref="Sanitizar"/> prefixa com apóstrofo o que começa com "-",
+    /// e toda latitude do Brasil é negativa. Aceita ponto ou vírgula decimal.
     /// </summary>
     private static void LerCoordenadas(UnidadeImportRow linha, Dictionary<string, string> valores)
     {
@@ -306,7 +286,6 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
         else if (linha.Nome.Length > 200)
             linha.Erros.Add("Nome da unidade excede 200 caracteres.");
 
-        // Sem endereço nem cidade não há como geocodificar nada de útil.
         if (string.IsNullOrWhiteSpace(linha.Endereco) && string.IsNullOrWhiteSpace(linha.Cidade))
             linha.Erros.Add("Informe ao menos o endereço ou a cidade da unidade.");
 
@@ -327,8 +306,6 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
         if (linha.Endereco?.Length > 300) linha.Erros.Add("Endereço excede 300 caracteres.");
         if (linha.Cidade?.Length > 100) linha.Erros.Add("Cidade excede 100 caracteres.");
         if (linha.Telefone?.Length > 30) linha.Erros.Add("Telefone excede 30 caracteres.");
-        // CNES no formato oficial de 7 dígitos: "10731" e "0010731" são a mesma
-        // unidade e precisam casar na checagem de duplicidade.
         if (!string.IsNullOrWhiteSpace(linha.CodigoCnes))
         {
             var cnes = Cnes.Normalizar(linha.CodigoCnes);
@@ -336,24 +313,19 @@ public class PlanilhaUnidadesReader(IAddressNormalizer normalizer, ILogger<Plani
             else linha.CodigoCnes = cnes;
         }
 
-        // Coordenada pela metade não localiza nada: ou vêm as duas, ou nenhuma.
         if (linha.Latitude.HasValue != linha.Longitude.HasValue)
             linha.Erros.Add("Informe latitude e longitude juntas, ou deixe as duas em branco.");
         else if (linha.TemCoordenadas && Coordenadas.Validar(linha.Latitude!.Value, linha.Longitude!.Value) is { } erro)
             linha.Erros.Add(erro);
     }
 
-    /// <summary>
-    /// Remove caracteres de controle e neutraliza células que o Excel interpretaria
-    /// como fórmula ao reabrir o arquivo exportado (injeção de fórmula em CSV).
-    /// </summary>
+    /// <summary>Remove caracteres de controle e neutraliza injeção de fórmula em CSV.</summary>
     private static string Sanitizar(string valor)
     {
         var limpo = new string(valor.Where(c => !char.IsControl(c) || c == ' ').ToArray()).Trim();
         return limpo.Length > 0 && "=+-@".Contains(limpo[0]) ? "'" + limpo : limpo;
     }
 
-    /// <summary>Chave do cabeçalho: minúscula, sem acento, sem espaço nem pontuação.</summary>
     private string Chave(string cabecalho) => normalizer.Normalizar(cabecalho).Replace(" ", string.Empty);
 
     private static bool ComecaCom(Stream stream, byte[] assinatura)

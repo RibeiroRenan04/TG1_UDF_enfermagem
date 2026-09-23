@@ -9,20 +9,13 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// Travas do registro de ponto definidas na reunião de 06/09/2026:
-///   • a descrição das atividades é obrigatória no check-out;
-///   • no máximo 1 check-in e 1 check-out por turno para cada aluno.
-///
-/// O turno de um registro vem da escala vinculada; sem escala, do horário do
-/// próprio registro.
-/// </summary>
+/// <summary>Descrição obrigatória no check-out e no máximo 1 check-in e 1 check-out por turno.</summary>
 public class PontoTurnoTests
 {
     private static AttendanceController Montar(
         EstagioCheck.API.Data.AppDbContext db, Guid usuarioId, string papel = Roles.Aluno)
     {
-        var controller = new AttendanceController(db, new GeoService(), new ProgramacaoService(db));
+        var controller = new AttendanceController(db, new GeoService(), new ProgramacaoService(db), new EscopoPreceptorService(db));
         var identidade = new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, usuarioId.ToString()),
@@ -39,15 +32,10 @@ public class PontoTurnoTests
         return controller;
     }
 
-    /// <summary>Unidade localizada onde os pontos destes testes são registrados.</summary>
     private static readonly Guid UnidadeId = Guid.Parse("7b1d2c3e-0000-4000-8000-000000000001");
     private const double LatUnidade = -15.7401, LonUnidade = -47.8829;
 
-    /// <summary>
-    /// Registro em cima da unidade, dentro do raio. O ponto sem unidade deixou de
-    /// ser aceito (ele passava sem checagem de distância nenhuma), então a regra
-    /// de turno é isolada da de distância registrando exatamente no local.
-    /// </summary>
+    /// <summary>Registro exatamente no local, para isolar a regra de turno da de distância.</summary>
     private static CreateAttendanceDto Ponto(string tipo, Guid? escalaId = null, string? descricao = null) =>
         new(LatUnidade, LonUnidade, tipo, escalaId, UnidadeId, descricao, null, null);
 
@@ -65,7 +53,6 @@ public class PontoTurnoTests
         return (db, aluno);
     }
 
-    // ── Descrição obrigatória no check-out ────────────────────────────────────
     [Fact]
     public async Task Check_out_sem_descricao_e_recusado()
     {
@@ -108,7 +95,6 @@ public class PontoTurnoTests
             Ponto("check_out", descricao: "  Acompanhamento de curativos e triagem.  "));
 
         Assert.IsType<OkObjectResult>(resposta.Result);
-        // O texto é gravado sem os espaços das pontas.
         Assert.Equal("Acompanhamento de curativos e triagem.",
             db.AttendanceRecords.Single(r => r.Type == "check_out").ActivitiesDescription);
     }
@@ -124,7 +110,6 @@ public class PontoTurnoTests
         Assert.IsType<OkObjectResult>(resposta.Result);
     }
 
-    // ── 1 check-in e 1 check-out por turno ────────────────────────────────────
     [Fact]
     public async Task Segundo_check_in_no_mesmo_turno_e_recusado()
     {
@@ -195,8 +180,7 @@ public class PontoTurnoTests
         var (db, aluno) = await ComAlunoAsync();
         using var _ = db;
 
-        // Check-in aberto de ontem: antes, a tela ficava presa em "check-out"
-        // para sempre porque a consulta olhava só o último registro do aluno.
+        // Check-in aberto de ontem não pode prender a tela em "check-out".
         db.AttendanceRecords.Add(new AttendanceRecord
         {
             StudentId = aluno.Id,
@@ -211,7 +195,6 @@ public class PontoTurnoTests
         Assert.IsType<OkObjectResult>(resposta.Result);
     }
 
-    // ── Situação do turno exposta para a tela ─────────────────────────────────
     [Fact]
     public async Task Status_do_turno_acompanha_o_que_ja_foi_registrado()
     {
@@ -237,7 +220,6 @@ public class PontoTurnoTests
         Assert.NotNull(aposSaida.BlockedReason);
     }
 
-    // ── Apoio ─────────────────────────────────────────────────────────────────
     private static async Task<Guid> EscalaAsync(EstagioCheck.API.Data.AppDbContext db, string turno)
     {
         var unidade = TestSupport.Unidade($"Unidade {turno}");

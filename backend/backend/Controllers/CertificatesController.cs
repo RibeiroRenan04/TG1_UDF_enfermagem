@@ -10,9 +10,8 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class CertificatesController(CertificateService certificates) : ControllerBase
+public class CertificatesController(CertificateService certificates, EscopoPreceptorService escopoPreceptor) : ControllerBase
 {
-    /// <summary>Certificado de carga horária do próprio aluno autenticado.</summary>
     [HttpGet("me")]
     public async Task<ActionResult<CertificateDto>> GetMine()
     {
@@ -23,7 +22,6 @@ public class CertificatesController(CertificateService certificates) : Controlle
         return cert == null ? NotFound() : Ok(cert);
     }
 
-    /// <summary>Lista os certificados de todos os alunos (visão da gestão).</summary>
     [HttpGet]
     [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<List<CertificateDto>>> GetAll()
@@ -31,11 +29,16 @@ public class CertificatesController(CertificateService certificates) : Controlle
         return Ok(await certificates.ListarAsync());
     }
 
-    /// <summary>Certificado de carga horária de um aluno específico.</summary>
     [HttpGet("{studentId}")]
     [Authorize(Roles = Roles.AcompanhamentoEGestao)]
     public async Task<ActionResult<CertificateDto>> GetByStudent(Guid studentId)
     {
+        if (User.IsInRole(Roles.Preceptor))
+        {
+            var eu = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);
+            if (!(await escopoPreceptor.CarregarAsync(eu)).Alunos.Contains(studentId)) return Forbid();
+        }
+
         var cert = await certificates.ObterAsync(studentId);
         return cert == null ? NotFound() : Ok(cert);
     }

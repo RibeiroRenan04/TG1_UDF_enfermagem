@@ -12,7 +12,8 @@ namespace EstagioCheck.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoService programacao)
+public class AttendanceController(
+    AppDbContext db, GeoService geo, ProgramacaoService programacao, EscopoPreceptorService escopoPreceptor)
     : ControllerBase
 {
     [HttpGet]
@@ -30,8 +31,13 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
 
         if (role == "aluno")
             query = query.Where(r => r.StudentId == userId);
-        else if (studentId.HasValue)
-            query = query.Where(r => r.StudentId == studentId.Value);
+        else
+        {
+            if (role == Roles.Preceptor)
+                query = EscopoPreceptorService.FiltrarPontos(query, await escopoPreceptor.CarregarAsync(userId));
+            if (studentId.HasValue)
+                query = query.Where(r => r.StudentId == studentId.Value);
+        }
 
         var recs = await query
             .Include(r => r.Schedule)
@@ -40,17 +46,11 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
             .Take(limit)
             .ToListAsync();
 
-        // A tela precisa saber, ponto a ponto, se já existe contestação em curso:
-        // é o que desabilita o botão de irregularidade e evita o envio duplicado.
         var irregularidades = await IrregularidadesPorPontoAsync(recs.Select(r => r.Id).ToList());
 
         return Ok(recs.Select(r => Map(r, irregularidades.GetValueOrDefault(r.Id))));
     }
 
-    /// <summary>
-    /// Irregularidade mais recente de cada registro de ponto informado. Uma única
-    /// consulta alimenta a trava de duplicidade da lista inteira.
-    /// </summary>
     private async Task<Dictionary<Guid, PointIrregularity>> IrregularidadesPorPontoAsync(List<Guid> recordIds)
     {
         if (recordIds.Count == 0) return new Dictionary<Guid, PointIrregularity>();
@@ -65,12 +65,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
             .ToDictionary(g => g.Key, g => g.First());
     }
 
-    /// <summary>
-    /// Escala ativa <b>já resolvida pela programação do dia</b>: a unidade devolvida
-    /// é a que vale hoje, considerando a regra do dia da semana e as exceções do
-    /// calendário — e não mais o local fixo do rodízio. Em um dia remoto ou sem
-    /// atividade não há local, e a resposta traz apenas o modo e o motivo.
-    /// </summary>
+    /// <summary>Escala ativa já resolvida pela programação do dia (regra semanal + exceções do calendário).</summary>
     [HttpGet("active-schedule")]
     public async Task<ActionResult<ActiveScheduleDto?>> GetActiveSchedule()
     {
@@ -112,11 +107,6 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         });
     }
 
-    /// <summary>
-    /// Check-in em aberto <b>no turno corrente</b>. Antes esta consulta olhava
-    /// apenas o último registro do aluno, então um check-in de dias atrás deixava
-    /// a tela presa em "check-out" para sempre.
-    /// </summary>
     [HttpGet("open-check-in")]
     public async Task<ActionResult> GetOpenCheckIn()
     {
@@ -131,11 +121,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         return Ok(null);
     }
 
-    /// <summary>
-    /// Situação do ponto no turno corrente: o que já foi registrado e o que ainda
-    /// está liberado. É a trava de segurança da tela — no máximo 1 check-in e
-    /// 1 check-out por turno, a mesma regra que o POST aplica.
-    /// </summary>
+    // Mesma trava do POST: no máximo 1 check-in e 1 check-out por turno.
     [HttpGet("shift-status")]
     public async Task<ActionResult<ShiftPointStatusDto>> GetShiftStatus()
     {
@@ -154,18 +140,12 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         if (dto.Type != "check_in" && dto.Type != "check_out")
             return BadRequest(new { message = "Tipo inválido." });
 
-        // Horário oficial do estágio (GMT-3). Ver Services/BrasiliaTime.cs.
         var agora = BrasiliaTime.Agora;
 
-        // A programação do dia manda no ponto: só há registro por localização em dia
-        // presencial. Dia remoto se comprova pelo código da atividade e feriado não
-        // gera obrigação nenhuma — aceitar um ponto aqui produziria presença numa
-        // data em que o aluno não deveria estar em lugar algum.
+        // Ponto por localização só em dia presencial; dia remoto se comprova pelo código da atividade.
         var dia = await programacao.ObterAsync(userId, DateOnly.FromDateTime(agora));
 
-        // Aluno ainda sem rodízio nem exceção não tem programação a contrariar: ele
-        // registra na unidade que escolher na tela — mas, como todo ponto, só
-        // dentro do raio dela (validado logo abaixo).
+        // Sem programação, o aluno escolhe a unidade na tela (ainda sujeito ao raio).
         var temProgramacao = dia.ScheduleId.HasValue || dia.ExcecaoId.HasValue;
 
         if (temProgramacao && dia.Modo == ModoAtividade.SemAtividade)
@@ -187,8 +167,6 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
                 mode = dia.Modo
             });
 
-        // A descrição das atividades é o registro do que o aluno fez no turno:
-        // sem ela o check-out não é aceito, nem pela tela nem pela API.
         var descricao = dto.ActivitiesDescription?.Trim();
         if (dto.Type == "check_out" && string.IsNullOrWhiteSpace(descricao))
             return BadRequest(new
@@ -225,9 +203,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
 
         var aluno = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
 
-        // Validação inteligente: geolocalização (distância) + janela de horário do turno.
-        // A unidade que vale é a da programação do dia — uma troca de local ou uma
-        // sexta na faculdade mudam o destino sem que a tela precise saber disso.
+        // A unidade que vale é a da programação do dia, não o local fixo do rodízio.
         var location = dia.Local
             ?? (dto.LocationId.HasValue ? await db.Locations.FindAsync(dto.LocationId.Value) : null);
 
@@ -240,8 +216,6 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
                 locationId = dia.Local.Id,
                 locationName = dia.Local.Name
             });
-        // O ponto só existe dentro do raio de uma unidade. Sem unidade para comparar,
-        // não há raio — antes o registro passava sem checagem de distância nenhuma.
         if (location == null)
             return BadRequest(new
             {
@@ -251,9 +225,8 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
                 code = "sem_unidade"
             });
 
-        // Unidade sem localização confirmada (não encontrada, em revisão, pendente)
-        // tem coordenadas (0, 0) ou duvidosas: medir o raio contra elas recusava o
-        // aluno com "você está a 5.000 km", culpando-o por um erro de cadastro.
+        // Sem localização confirmada as coordenadas são (0, 0) ou duvidosas: medir o raio
+        // culparia o aluno por um erro de cadastro.
         if (!location.LocalizacaoConfirmada)
             return BadRequest(new
             {
@@ -264,9 +237,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
                 locationName = location.Name
             });
 
-        // Fora do raio o ponto não é registrado: o aluno precisa estar na unidade.
-        // Quem tem um motivo legítimo (GPS falhando, atendimento externo) abre uma
-        // irregularidade para análise, em vez de gravar um ponto inválido.
+        // Fora do raio não há registro; motivo legítimo vira irregularidade para análise.
         {
             var distancia = geo.HaversineMeters(dto.Latitude, dto.Longitude, location.Latitude, location.Longitude);
             var precisaoGps = ToleranciaGps(dto.AccuracyMeters);
@@ -293,8 +264,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
             location, dto.Latitude, dto.Longitude, dto.AccuracyMeters, agora,
             dto.Type, turno, aluno?.AllowLateArrival == true, temProgramacaoSemanal);
 
-        // Foto do registro: guardamos o data URI completo (MVP). Limite de ~5 MB
-        // para proteger o banco; o frontend já comprime a imagem antes de enviar.
+        // Limite de ~5 MB; o frontend já comprime a imagem.
         const int MaxFotoChars = 7_000_000;
         string? photoUrl = null;
         if (!string.IsNullOrEmpty(dto.PhotoBase64) && dto.PhotoBase64.Length <= MaxFotoChars)
@@ -318,8 +288,6 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
 
         db.AttendanceRecords.Add(record);
 
-        // Registro irregular abre automaticamente a ocorrência do fluxo de análise:
-        // o preceptor toma ciência e observa, mas quem decide é o professor.
         if (status == "irregular")
         {
             db.PointIrregularities.Add(new PointIrregularity
@@ -345,11 +313,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         return Ok(Map(record));
     }
 
-    /// <summary>
-    /// Validação manual do registro de ponto. Exclusiva do professor: o preceptor
-    /// acompanha e observa a ocorrência (ver IrregularitiesController), mas não
-    /// aprova nem altera a situação de um registro.
-    /// </summary>
+    /// <summary>Exclusiva do professor: o preceptor só observa a ocorrência.</summary>
     [HttpPatch("{id}/validate")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<AttendanceRecordDto>> Validate(Guid id, [FromBody] ValidateAttendanceDto dto)
@@ -375,37 +339,18 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         return Ok(Map(record));
     }
 
-    // Tolerância (minutos) aplicada à janela do turno antes de marcar como pendente.
     private const int ToleranciaTurnoMin = 30;
 
-    /// <summary>Maior desconto, em metros, que a imprecisão do GPS pode dar à distância.</summary>
     public const double ToleranciaGpsMaximaMetros = 50;
 
-    /// <summary>
-    /// Quanto da precisão informada pelo aparelho é descontado da distância. A
-    /// precisão vem do próprio celular e não tinha limite: um aparelho que dissesse
-    /// "precisão de 10 km" passava em qualquer raio. Valor negativo ou ausente
-    /// não desconta nada.
-    /// </summary>
+    /// <summary>Teto para o desconto da precisão do aparelho: sem ele, "precisão de 10 km" passava em qualquer raio.</summary>
     public static double ToleranciaGps(double? precisaoInformada) =>
         Math.Clamp(precisaoInformada.GetValueOrDefault(0), 0, ToleranciaGpsMaximaMetros);
 
     /// <summary>
-    /// Validação inteligente do registro: combina distância (geofence, ajustada pela precisão do GPS),
-    /// janela de horário do turno e a regra de sexta-feira (registro na instituição de ensino).
-    /// - Sem local definido → "pendente". Não acontece no registro: o POST já
-    ///   recusa ponto sem unidade ou com unidade sem localização confirmada.
-    /// - Fora do raio OU sexta-feira fora da instituição → "irregular".
-    /// - Dentro do raio, porém fora do horário do turno → "pendente".
-    /// - Dentro do raio e dentro do horário → "aprovado".
-    ///
-    /// Alunos com permissão de atraso previamente autorizada não são penalizados por
-    /// chegar depois do início do turno; a carga horária do dia continua sendo exigida,
-    /// pois o cálculo de horas usa o par check-in/check-out.
-    ///
-    /// A regra de sexta-feira é o padrão de quem ainda não cadastrou a programação
-    /// semanal do rodízio. Com ela cadastrada, quem decide o local de cada dia é a
-    /// programação — inclusive uma sexta que aconteça na própria unidade.
+    /// Fora do raio, ou sexta fora da instituição (só sem programação semanal) → "irregular";
+    /// dentro do raio mas fora da janela do turno → "pendente"; senão → "aprovado".
+    /// A permissão de atraso só dispensa a chegada tardia.
     /// </summary>
     private (string status, string? reason, double? distance) AvaliarRegistro(
         Location? location, double lat, double lon, double? accuracyMeters, DateTime recordedAt,
@@ -417,14 +362,12 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
         var distance = geo.HaversineMeters(lat, lon, location.Latitude, location.Longitude);
         var motivos = new List<string>();
 
-        // Distância efetiva considera a margem de erro do GPS (mais tolerante).
         var precisao = ToleranciaGps(accuracyMeters);
         var distanciaEfetiva = Math.Max(0, distance - precisao);
         var foraDoRaio = distanciaEfetiva > location.RadiusMeters;
         if (foraDoRaio)
             motivos.Add($"Fora do raio ({distance:0}m, precisão GPS ±{precisao:0}m; limite {location.RadiusMeters}m)");
 
-        // recordedAt já chega no horário de Brasília (ver BrasiliaTime).
         var horaLocal = recordedAt.TimeOfDay;
         var foraDoTurno = false;
         // A janela é a do turno do registro: o horário da unidade vale para o turno
@@ -436,7 +379,6 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
             // A permissão de atraso libera apenas a chegada tardia (o limite inferior
             // do turno); chegar antes ou sair depois continua fora da janela.
             var depoisDoFim = horaLocal > fim + tol;
-            // O atraso só faz sentido na chegada: o check-out acontece no fim do turno.
             var atrasado = tipo == "check_in" && !antesDoInicio && !depoisDoFim
                         && horaLocal > inicio + tol;
 
@@ -452,7 +394,6 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
             }
         }
 
-        // Regra de sexta-feira: o registro deve ser feito na instituição de ensino.
         var sextaForaInstituicao = !temProgramacaoSemanal
             && recordedAt.DayOfWeek == DayOfWeek.Friday && !location.IsInstitution;
         if (sextaForaInstituicao)
@@ -467,12 +408,7 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
 
     private static string ShiftFromHour(int h) => Turnos.DaHora(h);
 
-    // ── Turno do ponto ────────────────────────────────────────────────────────
-    /// <summary>
-    /// Turno a que um registro pertence: o da escala vinculada quando existe —
-    /// é ela que define o horário oficial do aluno — e, na falta dela, o turno
-    /// correspondente ao horário do registro.
-    /// </summary>
+    /// <summary>Turno da escala vinculada; sem escala, o turno do horário do registro.</summary>
     private async Task<string> TurnoDoRegistroAsync(Guid? scheduleId, DateTime momento)
     {
         if (scheduleId.HasValue)
@@ -491,7 +427,6 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
 
     private sealed record RegistroDoTurno(Guid Id, string Tipo, DateTime RegistradoEm);
 
-    /// <summary>Registros do aluno naquele dia e naquele turno.</summary>
     private async Task<List<RegistroDoTurno>> RegistrosDoTurnoAsync(Guid studentId, DateOnly dia, string turno)
     {
         var inicio = dia.ToDateTime(TimeOnly.MinValue);
@@ -514,10 +449,6 @@ public class AttendanceController(AppDbContext db, GeoService geo, ProgramacaoSe
             .Select(r => new RegistroDoTurno(r.Id, r.Type, r.RecordedAt))];
     }
 
-    /// <summary>
-    /// Situação do ponto do aluno no turno corrente — a mesma trava aplicada no
-    /// POST, exposta para a tela desabilitar o que já foi registrado.
-    /// </summary>
     private async Task<ShiftPointStatusDto> MontarStatusDoTurnoAsync(Guid studentId)
     {
         var agora = BrasiliaTime.Agora;

@@ -8,12 +8,11 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 
-// Npgsql: garante que DateTime seja tratado como UTC (timestamptz no PostgreSQL)
+// DateTime vai ao banco sem conversão de fuso: todo horário já está em Brasília (BrasiliaTime).
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Porta dinâmica (Railway injeta a variável PORT) ───────────────────────────
 // Só sobrescreve a URL quando rodando no Railway; localmente usa o launchSettings.json.
 var railwayPort = Environment.GetEnvironmentVariable("PORT");
 if (!string.IsNullOrEmpty(railwayPort))
@@ -21,11 +20,9 @@ if (!string.IsNullOrEmpty(railwayPort))
     builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
 }
 
-// ── Database ─────────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// ── JWT Authentication ────────────────────────────────────────────────────────
 var jwtKey = builder.Configuration["Jwt:Key"]
     ?? throw new InvalidOperationException("JWT Key is not configured.");
 
@@ -47,24 +44,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// ── Services ─────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<GeoService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<CertificateService>();
 builder.Services.AddScoped<BuscaSaudeService>();
-// Programação do dia: é ela que decide se o ponto é validado por localização,
-// por código de atividade remota ou se o dia não gera obrigação nenhuma.
 builder.Services.AddScoped<ProgramacaoService>();
-// O aluno pode cursar mais de uma turma: este serviço recusa apenas a agenda
-// impossível (mesmo turno, mesmos dias da semana, períodos sobrepostos).
 builder.Services.AddScoped<ConflitoTurmasService>();
-// Indicadores do painel do professor: programação de todos os alunos em lote.
 builder.Services.AddScoped<PainelGestaoService>();
 builder.Services.AddScoped<IrregularidadesPainelService>();
 
-// ── Geocodificação de unidades de saúde ───────────────────────────────────────
 // Toda a aplicação depende de IGeocodingService: trocar o Nominatim por outro
 // provedor é substituir esta única linha de registro.
 builder.Services.Configure<GeocodingOptions>(
@@ -75,8 +65,7 @@ builder.Services.AddScoped<UnitGeocoder>();
 builder.Services.AddScoped<PlanilhaUnidadesReader>();
 builder.Services.AddScoped<UnidadeImportService>();
 
-// Fila e processamento em segundo plano: a geocodificação em massa respeita o
-// limite de ~1 req/s do Nominatim e por isso nunca roda dentro da requisição HTTP.
+// A geocodificação em massa roda em segundo plano para respeitar o limite de ~1 req/s do Nominatim.
 builder.Services.AddSingleton<GeocodingQueue>();
 builder.Services.AddHostedService<GeocodingBackgroundService>();
 // O User-Agent identifica a aplicação, como exige a política de uso do Nominatim.
@@ -100,7 +89,6 @@ builder.Services.AddHttpClient("BuscaSaude", client =>
 });
 builder.Services.AddHttpContextAccessor();
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
 var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
     ?? ["http://localhost:4200"];
 
@@ -111,16 +99,13 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod()
               .AllowCredentials()));
 
-// Pendências de registro: fonte única do painel, dos relatórios e do preceptor.
 builder.Services.AddScoped<PendenciasService>();
+builder.Services.AddScoped<EscopoPreceptorService>();
 
-// ── Erros ─────────────────────────────────────────────────────────────────────
-// Toda resposta de erro sai como { message, errors? }: a tela mostra o motivo
-// real em vez de "Erro ao salvar". Ver ErrosApi.
+// Toda resposta de erro sai como { message, errors? } (ver ErrosApi).
 builder.Services.AddExceptionHandler<TratadorErrosApi>();
 builder.Services.AddProblemDetails();
 
-// ── Controllers + Swagger ─────────────────────────────────────────────────────
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(o => o.InvalidModelStateResponseFactory = ErrosApi.RespostaValidacao);
 builder.Services.AddEndpointsApiExplorer();
@@ -146,10 +131,8 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Primeiro da pipeline: qualquer exceção vira { message, code } (TratadorErrosApi).
 app.UseExceptionHandler();
 
-// ── Auto-migrate on startup ───────────────────────────────────────────────────
 var connStr = app.Configuration.GetConnectionString("DefaultConnection");
 if (!string.IsNullOrWhiteSpace(connStr))
 {
@@ -158,7 +141,6 @@ if (!string.IsNullOrWhiteSpace(connStr))
     db.Database.Migrate();
 }
 
-// ── Swagger (disponível em todos os ambientes) ────────────────────────────────
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -168,7 +150,6 @@ app.UseCors("Angular");
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ── Health checks ─────────────────────────────────────────────────────────────
 app.MapGet("/", () => "API ONLINE");
 app.MapGet("/health", () => Results.Ok("Healthy"));
 

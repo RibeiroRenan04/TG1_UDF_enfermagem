@@ -5,12 +5,7 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// A programação do dia é a nova pergunta do sistema: onde o aluno deveria estar e
-/// o que deveria fazer. Estes testes cobrem as três camadas que a compõem — o
-/// rodízio, a regra do dia da semana e as exceções do calendário — e a ordem em que
-/// uma vence a outra.
-/// </summary>
+/// <summary>Rodízio, regra do dia da semana e exceções do calendário, e a ordem em que uma vence a outra.</summary>
 public class ProgramacaoTests
 {
     // 07/09/2026 é uma segunda-feira; 11/09/2026, uma sexta.
@@ -59,7 +54,6 @@ public class ProgramacaoTests
 
     private static ProgramacaoService Servico(AppDbContext db) => new(db);
 
-    // ── Rodízio sem programação semanal ───────────────────────────────────────
     [Fact]
     public async Task Sem_programacao_semanal_dia_util_e_presencial_no_local_principal()
     {
@@ -80,8 +74,7 @@ public class ProgramacaoTests
         var c = await MontarAsync();
         using var _ = c.Db;
 
-        // O aluno só tem rodízio de manhã: a noite dele não tem programação. Antes a
-        // única escala do dia respondia por qualquer turno pedido.
+        // O aluno só tem rodízio de manhã: a noite dele não tem programação.
         var dia = await Servico(c.Db).ObterAsync(c.Aluno.Id, Segunda, Turnos.Noite);
 
         Assert.Null(dia.ScheduleId);
@@ -114,7 +107,6 @@ public class ProgramacaoTests
         Assert.False(dia.ExigePonto);
     }
 
-    // ── Programação por dia da semana ─────────────────────────────────────────
     [Fact]
     public async Task Sexta_programada_na_faculdade_muda_o_local_do_dia()
     {
@@ -193,7 +185,6 @@ public class ProgramacaoTests
         Assert.Empty(dia.AtividadesConcluidas);
     }
 
-    // ── Exceções do calendário ────────────────────────────────────────────────
     [Fact]
     public async Task Feriado_da_faculdade_dispensa_o_ponto()
     {
@@ -296,11 +287,7 @@ public class ProgramacaoTests
         Assert.Equal(TipoExcecao.Reposicao, dia.TipoExcecao);
     }
 
-    /// <summary>
-    /// A abrangência "curso" foi removida — o sistema atende só a Enfermagem, e
-    /// nela "curso" era o mesmo que "faculdade". Uma exceção gravada com escopo
-    /// desconhecido não pode alcançar ninguém por acidente.
-    /// </summary>
+    /// <summary>Exceção com escopo desconhecido (ex.: o antigo "curso") não alcança ninguém.</summary>
     [Fact]
     public async Task Excecao_com_abrangencia_desconhecida_nao_alcanca_o_aluno()
     {
@@ -346,7 +333,6 @@ public class ProgramacaoTests
         Assert.Equal(ModoAtividade.Presencial, manha.Modo);
     }
 
-    // ── Aluno sem rodízio ─────────────────────────────────────────────────────
     [Fact]
     public async Task Aluno_sem_rodizio_fica_sem_programacao()
     {

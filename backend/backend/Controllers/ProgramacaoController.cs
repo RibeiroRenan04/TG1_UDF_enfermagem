@@ -9,13 +9,7 @@ using System.Security.Claims;
 
 namespace EstagioCheck.API.Controllers;
 
-/// <summary>
-/// Programação diária do aluno: onde ele deveria estar e o que deveria fazer.
-///
-/// A tela de ponto consulta este endpoint antes de qualquer coisa — é ele que diz
-/// se o dia pede localização, se pede o código de uma atividade remota ou se não
-/// há ponto a registrar.
-/// </summary>
+/// <summary>A tela de ponto consulta isto antes de tudo: localização, código remoto ou nada a registrar.</summary>
 [ApiController]
 [Route("api/programacao")]
 [Authorize]
@@ -35,10 +29,6 @@ public class ProgramacaoController(AppDbContext db, ProgramacaoService programac
         return Ok(Map(dia, await ParticipacoesAsync(aluno, [dia])));
     }
 
-    /// <summary>
-    /// Programação de um intervalo — o calendário do aluno, já com feriados,
-    /// dias remotos e trocas de local aplicados.
-    /// </summary>
     [HttpGet("periodo")]
     public async Task<ActionResult<List<ProgramacaoDiaDto>>> GetPeriodo(
         [FromQuery] DateOnly de,
@@ -49,8 +39,7 @@ public class ProgramacaoController(AppDbContext db, ProgramacaoService programac
         if (ate < de)
             return BadRequest(new { message = "A data final não pode ser anterior à inicial." });
 
-        // Um intervalo grande vira uma consulta por dia: 92 dias cobrem um semestre
-        // inteiro em partes e mantêm a resposta barata.
+        // Limite de 92 dias: um semestre inteiro vem em partes.
         if (de.AddDays(92) < ate)
             return BadRequest(new { message = "Consulte no máximo 92 dias por vez." });
 
@@ -63,10 +52,6 @@ public class ProgramacaoController(AppDbContext db, ProgramacaoService programac
         return Ok(dias.Select(dia => Map(dia, participacoes)));
     }
 
-    /// <summary>
-    /// Participações do aluno nas atividades que aparecem no período, em uma
-    /// consulta só — o intervalo pode cobrir um semestre inteiro.
-    /// </summary>
     private async Task<Dictionary<Guid, RemoteActivityParticipation>> ParticipacoesAsync(
         Guid studentId, IEnumerable<ProgramacaoService.ProgramacaoDia> dias)
     {
@@ -79,10 +64,7 @@ public class ProgramacaoController(AppDbContext db, ProgramacaoService programac
             .ToDictionaryAsync(p => p.RemoteActivityId);
     }
 
-    /// <summary>
-    /// Aluno consultado. O aluno só enxerga a própria programação; os demais perfis
-    /// precisam informar de quem é.
-    /// </summary>
+    /// <summary>O aluno só enxerga a própria programação; os demais perfis informam de quem é.</summary>
     private async Task<Guid?> ResolverAlunoAsync(Guid? studentId)
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)

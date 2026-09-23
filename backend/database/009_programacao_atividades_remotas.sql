@@ -1,49 +1,29 @@
--- =============================================================================
---  Migration 009 – Programação do dia, atividades remotas e exceções
---
---  Muda a pergunta que comanda o ponto. Até aqui o sistema perguntava "onde o
---  aluno está?"; agora pergunta "onde ele DEVERIA estar e o que DEVERIA fazer
---  naquele dia?" — e o ponto passa a ser consequência dessa programação.
---
---  • PROGRAMAÇÃO SEMANAL DO RODÍZIO ("DiasRodizio")
---    O rodízio deixa de ter um único local para todo o período. Cada dia da
---    semana ganha um modo (presencial, remoto ou sem atividade) e, quando
---    presencial, o seu local — "segunda a quinta na UBS, sexta na faculdade"
---    vira cadastro, não uma regra fixa no código. Um rodízio sem nenhuma linha
---    aqui continua valendo como antes: dia útil presencial no local principal.
---
---  • ATIVIDADES REMOTAS ("AtividadesRemotas" e "ParticipacoesAtividadeRemota")
---    Nos dias em que a turma fica em casa a presença não pode depender de
---    localização. O professor cria a atividade, o sistema gera o código
---    ("ENF-7K92") e o aluno registra a participação informando-o dentro da
---    janela. O índice único de participação é a trava de "um uso por aluno".
---
---  • EXCEÇÕES DO CALENDÁRIO ("ExcecoesCalendario")
---    Feriado, recesso, estágio cancelado, dia que virou remoto, troca de local,
---    atividade especial e reposição. A exceção é cadastrada UMA vez com a sua
---    abrangência (faculdade, curso, turma, rodízio ou aluno) e a programação a
---    aplica sozinha — não é preciso mexer aluno por aluno.
---
---  • PONTO DA ATIVIDADE REMOTA ("RegistrosPresenca"."IdAtividadeRemota")
---    O ponto remoto entra na MESMA tabela do presencial, sem local e sem
---    coordenadas. É o que faz a carga horária remota contar no mesmo cálculo de
---    horas, em vez de criar uma segunda fonte de presença que divergiria.
---
---  Compatível com PostgreSQL (Supabase / Railway). O script é idempotente:
---  pode ser executado mais de uma vez sem quebrar.
--- =============================================================================
+-- 009 – programação semanal do rodízio, atividades remotas com código de presença, exceções do
+-- calendário e ponto remoto na mesma tabela do presencial (para contar no mesmo cálculo de horas).
 
 BEGIN;
 
--- ─────────────────────────────────────────────────────────────────────────────
---  1) Curso do aluno — alcance das exceções de abrangência "curso"
--- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE "Usuarios"
-    ADD COLUMN IF NOT EXISTS "Curso" VARCHAR(150) NULL;
+CREATE TABLE IF NOT EXISTS "MigracoesAplicadas" (
+    "Nome"       TEXT        PRIMARY KEY,
+    "AplicadaEm" TIMESTAMP   NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo')
+);
 
--- ─────────────────────────────────────────────────────────────────────────────
---  2) Programação por dia da semana do rodízio
--- ─────────────────────────────────────────────────────────────────────────────
+-- 1) Curso do aluno (não volta se o 012 já o removeu)
+DO $migracao$
+BEGIN
+    IF to_regclass('public."ExcecoesCalendario"') IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'public'
+                         AND table_name   = 'ExcecoesCalendario'
+                         AND column_name  = 'Curso') THEN
+        RETURN;
+    END IF;
+
+    ALTER TABLE "Usuarios"
+        ADD COLUMN IF NOT EXISTS "Curso" VARCHAR(150) NULL;
+END $migracao$;
+
+-- 2) Programação por dia da semana do rodízio
 CREATE TABLE IF NOT EXISTS "DiasRodizio" (
     "IdDiaRodizio" UUID         PRIMARY KEY,
     "IdEscala"     UUID         NOT NULL,
@@ -51,14 +31,14 @@ CREATE TABLE IF NOT EXISTS "DiasRodizio" (
     "Modo"         VARCHAR(20)  NOT NULL DEFAULT 'presencial',
     "IdLocal"      UUID         NULL,
     "Observacoes"  TEXT         NULL,
-    "CriadoEm"     TIMESTAMP    NOT NULL DEFAULT NOW(),
+    "CriadoEm"     TIMESTAMP    NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
     CONSTRAINT "FK_DiasRodizio_Escala"
         FOREIGN KEY ("IdEscala") REFERENCES "EscalasRodizio" ("IdEscala") ON DELETE CASCADE,
     CONSTRAINT "FK_DiasRodizio_Local"
         FOREIGN KEY ("IdLocal") REFERENCES "Locais" ("IdLocal") ON DELETE RESTRICT
 );
 
--- 0 = domingo … 6 = sábado, o mesmo número que o .NET usa em DayOfWeek.
+-- 0 = domingo … 6 = sábado, como DayOfWeek do .NET.
 ALTER TABLE "DiasRodizio" DROP CONSTRAINT IF EXISTS "CK_DiasRodizio_DiaSemana";
 ALTER TABLE "DiasRodizio"
     ADD CONSTRAINT "CK_DiasRodizio_DiaSemana" CHECK ("DiaSemana" BETWEEN 0 AND 6);
@@ -68,13 +48,10 @@ ALTER TABLE "DiasRodizio"
     ADD CONSTRAINT "CK_DiasRodizio_Modo"
     CHECK ("Modo" IN ('presencial', 'remoto', 'sem_atividade'));
 
--- Um rodízio tem, no máximo, uma regra por dia da semana.
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_DiasRodizio_EscalaDia"
     ON "DiasRodizio" ("IdEscala", "DiaSemana");
 
--- ─────────────────────────────────────────────────────────────────────────────
---  3) Atividades remotas
--- ─────────────────────────────────────────────────────────────────────────────
+-- 3) Atividades remotas
 CREATE TABLE IF NOT EXISTS "AtividadesRemotas" (
     "IdAtividadeRemota" UUID          PRIMARY KEY,
     "Titulo"            VARCHAR(200)  NOT NULL,
@@ -91,8 +68,8 @@ CREATE TABLE IF NOT EXISTS "AtividadesRemotas" (
     "TipoTarefa"        VARCHAR(30)   NULL,
     "InstrucoesTarefa"  TEXT          NULL,
     "Ativo"             BOOLEAN       NOT NULL DEFAULT TRUE,
-    "CriadoEm"          TIMESTAMP     NOT NULL DEFAULT NOW(),
-    "AtualizadoEm"      TIMESTAMP     NOT NULL DEFAULT NOW(),
+    "CriadoEm"          TIMESTAMP     NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
+    "AtualizadoEm"      TIMESTAMP     NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
     CONSTRAINT "FK_AtividadesRemotas_Grupo"
         FOREIGN KEY ("IdGrupo") REFERENCES "GruposEstudantes" ("IdGrupo") ON DELETE CASCADE,
     CONSTRAINT "FK_AtividadesRemotas_Escala"
@@ -112,8 +89,7 @@ ALTER TABLE "AtividadesRemotas"
         ('questionario', 'arquivo', 'discursiva', 'estudo_de_caso',
          'aula_online', 'leitura', 'formulario'));
 
--- O código identifica a atividade no momento do registro: duas do mesmo dia não
--- podem disputar o mesmo código.
+-- Duas atividades do mesmo dia não podem disputar o mesmo código.
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_AtividadesRemotas_CodigoData"
     ON "AtividadesRemotas" ("CodigoPresenca", "Data");
 CREATE INDEX IF NOT EXISTS "IX_AtividadesRemotas_Data"  ON "AtividadesRemotas" ("Data");
@@ -123,11 +99,11 @@ CREATE TABLE IF NOT EXISTS "ParticipacoesAtividadeRemota" (
     "IdParticipacao"    UUID         PRIMARY KEY,
     "IdAtividadeRemota" UUID         NOT NULL,
     "IdEstudante"       UUID         NOT NULL,
-    "RegistradoEm"      TIMESTAMP    NOT NULL DEFAULT NOW(),
+    "RegistradoEm"      TIMESTAMP    NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
     "CodigoInformado"   VARCHAR(20)  NOT NULL,
     "RespostaTarefa"    TEXT         NULL,
     "IdPresenca"        UUID         NULL,
-    "CriadoEm"          TIMESTAMP    NOT NULL DEFAULT NOW(),
+    "CriadoEm"          TIMESTAMP    NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
     CONSTRAINT "FK_Participacoes_Atividade"
         FOREIGN KEY ("IdAtividadeRemota")
         REFERENCES "AtividadesRemotas" ("IdAtividadeRemota") ON DELETE CASCADE,
@@ -135,13 +111,10 @@ CREATE TABLE IF NOT EXISTS "ParticipacoesAtividadeRemota" (
         FOREIGN KEY ("IdEstudante") REFERENCES "Usuarios" ("IdUsuario") ON DELETE CASCADE
 );
 
--- O código vale uma única vez por aluno.
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_Participacoes_AtividadeAluno"
     ON "ParticipacoesAtividadeRemota" ("IdAtividadeRemota", "IdEstudante");
 
--- ─────────────────────────────────────────────────────────────────────────────
---  4) Ponto vindo de atividade remota
--- ─────────────────────────────────────────────────────────────────────────────
+-- 4) Ponto vindo de atividade remota
 ALTER TABLE "RegistrosPresenca"
     ADD COLUMN IF NOT EXISTS "IdAtividadeRemota" UUID NULL;
 
@@ -154,9 +127,7 @@ ALTER TABLE "RegistrosPresenca"
 CREATE INDEX IF NOT EXISTS "IX_RegistrosPresenca_AtividadeRemota"
     ON "RegistrosPresenca" ("IdAtividadeRemota");
 
--- ─────────────────────────────────────────────────────────────────────────────
---  5) Exceções do calendário
--- ─────────────────────────────────────────────────────────────────────────────
+-- 5) Exceções do calendário
 CREATE TABLE IF NOT EXISTS "ExcecoesCalendario" (
     "IdExcecao"         UUID         PRIMARY KEY,
     "Tipo"              VARCHAR(30)  NOT NULL,
@@ -172,8 +143,8 @@ CREATE TABLE IF NOT EXISTS "ExcecoesCalendario" (
     "IdAtividadeRemota" UUID         NULL,
     "Descricao"         VARCHAR(300) NOT NULL DEFAULT '',
     "CriadoPorId"       UUID         NULL,
-    "CriadoEm"          TIMESTAMP    NOT NULL DEFAULT NOW(),
-    "AtualizadoEm"      TIMESTAMP    NOT NULL DEFAULT NOW(),
+    "CriadoEm"          TIMESTAMP    NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
+    "AtualizadoEm"      TIMESTAMP    NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
     CONSTRAINT "FK_Excecoes_Grupo"
         FOREIGN KEY ("IdGrupo") REFERENCES "GruposEstudantes" ("IdGrupo") ON DELETE CASCADE,
     CONSTRAINT "FK_Excecoes_Escala"
@@ -195,30 +166,42 @@ ALTER TABLE "ExcecoesCalendario"
     CHECK ("Tipo" IN ('feriado', 'recesso', 'cancelado', 'remoto',
                       'troca_local', 'atividade_especial', 'reposicao'));
 
-ALTER TABLE "ExcecoesCalendario" DROP CONSTRAINT IF EXISTS "CK_Excecoes_Abrangencia";
-ALTER TABLE "ExcecoesCalendario"
-    ADD CONSTRAINT "CK_Excecoes_Abrangencia"
-    CHECK ("Abrangencia" IN ('faculdade', 'curso', 'turma', 'rodizio', 'aluno'));
-
 ALTER TABLE "ExcecoesCalendario" DROP CONSTRAINT IF EXISTS "CK_Excecoes_Periodo";
 ALTER TABLE "ExcecoesCalendario"
     ADD CONSTRAINT "CK_Excecoes_Periodo" CHECK ("DataFim" >= "DataInicio");
 
--- Cada abrangência exige o seu alvo: sem essa trava, uma exceção de turma sem
--- turma alcançaria a faculdade inteira sem que ninguém percebesse.
-ALTER TABLE "ExcecoesCalendario" DROP CONSTRAINT IF EXISTS "CK_Excecoes_Alvo";
-ALTER TABLE "ExcecoesCalendario"
-    ADD CONSTRAINT "CK_Excecoes_Alvo" CHECK (
-        ("Abrangencia" = 'faculdade')
-     OR ("Abrangencia" = 'curso'   AND "Curso"       IS NOT NULL)
-     OR ("Abrangencia" = 'turma'   AND "IdGrupo"     IS NOT NULL)
-     OR ("Abrangencia" = 'rodizio' AND "IdEscala"    IS NOT NULL)
-     OR ("Abrangencia" = 'aluno'   AND "IdEstudante" IS NOT NULL)
-    );
+-- Abrangência e alvo só são criadas se faltarem: o 012 as substitui, e recriá-las numa
+-- reexecução traria "curso" de volta (e a CK_Excecoes_Alvo nem compilaria sem a coluna).
+DO $migracao$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname  = 'CK_Excecoes_Abrangencia'
+                     AND conrelid = 'public."ExcecoesCalendario"'::regclass) THEN
+        ALTER TABLE "ExcecoesCalendario"
+            ADD CONSTRAINT "CK_Excecoes_Abrangencia"
+            CHECK ("Abrangencia" IN ('faculdade', 'curso', 'turma', 'rodizio', 'aluno'));
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                   WHERE conname  = 'CK_Excecoes_Alvo'
+                     AND conrelid = 'public."ExcecoesCalendario"'::regclass) THEN
+        ALTER TABLE "ExcecoesCalendario"
+            ADD CONSTRAINT "CK_Excecoes_Alvo" CHECK (
+                ("Abrangencia" = 'faculdade')
+             OR ("Abrangencia" = 'curso'   AND "Curso"       IS NOT NULL)
+             OR ("Abrangencia" = 'turma'   AND "IdGrupo"     IS NOT NULL)
+             OR ("Abrangencia" = 'rodizio' AND "IdEscala"    IS NOT NULL)
+             OR ("Abrangencia" = 'aluno'   AND "IdEstudante" IS NOT NULL)
+            );
+    END IF;
+END $migracao$;
 
 CREATE INDEX IF NOT EXISTS "IX_Excecoes_Periodo"
     ON "ExcecoesCalendario" ("DataInicio", "DataFim");
 CREATE INDEX IF NOT EXISTS "IX_Excecoes_Abrangencia"
     ON "ExcecoesCalendario" ("Abrangencia");
+
+INSERT INTO "MigracoesAplicadas" ("Nome") VALUES ('009_programacao_atividades_remotas')
+ON CONFLICT ("Nome") DO NOTHING;
 
 COMMIT;

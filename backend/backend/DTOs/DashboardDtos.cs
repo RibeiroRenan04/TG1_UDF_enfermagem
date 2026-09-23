@@ -12,33 +12,16 @@ public class DashboardStatsDto
     public double PendencyHours { get; init; }
     public List<PendencyDto> Pendencies { get; init; } = [];
 
-    /// <summary>
-    /// Alunos ativos. Alimenta o contador do painel do professor — antes o campo
-    /// não existia na resposta e a tela mostrava sempre zero.
-    /// </summary>
     public int TotalStudents { get; init; }
 
-    // ── Irregularidades ───────────────────────────────────────────────────────
-    // O painel lê as ocorrências da mesma fonte da tela de irregularidades, então
-    // o que o aluno acabou de enviar aparece aqui na carga seguinte.
     public IrregularityCountsDto Irregularities { get; init; } = new();
 
-    /// <summary>
-    /// Avisos centralizados do card "Status Pendentes": prazos, turnos em aberto e
-    /// o andamento das irregularidades, em um único lugar.
-    /// </summary>
     public List<PendingStatusDto> PendingStatuses { get; init; } = [];
 
-    // ── Identificação do aluno ────────────────────────────────────────────────
-    /// <summary>
-    /// Código da turma de matrícula (ex.: "T02"), ou os códigos separados por
-    /// vírgula quando o aluno cursa mais de uma. Nulo sem vínculo ou fora do
-    /// perfil aluno.
-    /// </summary>
+    /// <summary>Código da turma, ou os códigos separados por vírgula quando o aluno cursa mais de uma.</summary>
     public string? GroupCode { get; init; }
     public string? GroupName { get; init; }
 
-    /// <summary>Turmas do aluno, uma a uma — o painel lista todas as matrículas.</summary>
     public List<UserGroupDto> Groups { get; init; } = [];
 
     /// <summary>Turno do aluno: "manha" | "tarde" | "noite".</summary>
@@ -56,7 +39,6 @@ public class IrregularityCountsDto
     public int Open { get; init; }
 }
 
-/// <summary>Um aviso do card "Status Pendentes".</summary>
 public class PendingStatusDto
 {
     /// <summary>Identificador do tipo de aviso, usado pela tela para o ícone e o link.</summary>
@@ -65,7 +47,6 @@ public class PendingStatusDto
     public string Severity { get; init; } = "info";
     public string Title { get; init; } = string.Empty;
     public string Detail { get; init; } = string.Empty;
-    /// <summary>Rota do frontend que resolve o aviso.</summary>
     public string? Link { get; init; }
     public string? LinkLabel { get; init; }
     /// <summary>Quantidade associada, quando o aviso agrega itens.</summary>

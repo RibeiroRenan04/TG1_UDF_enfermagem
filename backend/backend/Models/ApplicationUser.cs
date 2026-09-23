@@ -1,6 +1,7 @@
+using EstagioCheck.API.Services;
+
 namespace EstagioCheck.API.Models;
 
-/// <summary>Usuário do sistema (aluno, preceptor, professor/supervisor ou coordenadora).</summary>
 public class ApplicationUser
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -11,10 +12,10 @@ public class ApplicationUser
     /// <summary>"aluno" | "preceptor" | "supervisor" | "coordenadora"</summary>
     public string Role { get; set; } = Roles.Aluno;
 
-    /// <summary>Registro Geral de Matriculado (RGM) – é a própria matrícula do aluno.</summary>
+    /// <summary>A própria matrícula do aluno.</summary>
     public string? Rgm { get; set; }
 
-    /// <summary>Semestre atual do aluno (7 ou 8).</summary>
+    /// <summary>7 ou 8.</summary>
     public int? Semester { get; set; }
 
     /// <summary>Turno: "manha" | "tarde" | "noite"</summary>
@@ -23,35 +24,21 @@ public class ApplicationUser
     public string? Phone { get; set; }
     public string? Institution { get; set; }
 
-    /// <summary>
-    /// Autoriza o aluno a chegar depois do horário previsto de início do estágio.
-    /// A carga horária do dia continua sendo exigida: a permissão só evita que o
-    /// registro tardio seja tratado como irregularidade de horário.
-    /// </summary>
+    /// <summary>A carga horária continua exigida; só evita a irregularidade de horário.</summary>
     public bool AllowLateArrival { get; set; } = false;
 
-    /// <summary>Motivo da autorização de atraso, registrado pelo professor.</summary>
     public string? LateArrivalNote { get; set; }
 
-    /// <summary>
-    /// Aceite do termo de responsabilidade de acesso (não compartilhar a senha e
-    /// responder pelas ações feitas com a conta). Exigido de todo perfil não-aluno.
-    /// </summary>
+    /// <summary>Aceite do termo de responsabilidade, exigido de todo perfil não-aluno.</summary>
     public DateTime? TermsAcceptedAt { get; set; }
 
     public bool MustChangePassword { get; set; } = false;
     public bool MustSetEmail { get; set; } = false;
     public bool IsActive { get; set; } = true;
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = BrasiliaTime.Agora;
+    public DateTime UpdatedAt { get; set; } = BrasiliaTime.Agora;
 
-    // Navigation
-    /// <summary>
-    /// Turmas do aluno. São várias porque ele pode cursar mais de um rodízio ao
-    /// mesmo tempo; <see cref="TurmasDoAluno"/> resume a lista onde a tela ainda
-    /// mostra uma turma só.
-    /// </summary>
     public ICollection<GroupMembership> GroupMemberships { get; set; } = [];
     public ICollection<AttendanceRecord> AttendanceRecords { get; set; } = [];
     public ICollection<Evaluation> EvaluationsAsStudent { get; set; } = [];

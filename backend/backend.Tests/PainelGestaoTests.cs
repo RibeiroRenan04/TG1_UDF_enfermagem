@@ -5,11 +5,7 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// Indicadores do painel do professor. O que importa fixar: "esperado" segue a
-/// mesma programação do check-in (feriado não cobra presença, turma não cobra
-/// antes de o aluno entrar nela), e as horas seguem a conta do certificado.
-/// </summary>
+/// <summary>"Esperado" segue a programação do check-in; as horas seguem a conta do certificado.</summary>
 public class PainelGestaoTests
 {
     private static readonly DateOnly Hoje = BrasiliaTime.Hoje;
@@ -50,7 +46,7 @@ public class PainelGestaoTests
         c.Db.Add(new GroupMembership
         {
             StudentId = aluno.Id, GroupId = c.Turma.Id,
-            CreatedAt = entrada ?? DateTime.UtcNow.AddDays(-60)
+            CreatedAt = entrada ?? BrasiliaTime.Agora.AddDays(-60)
         });
         return aluno;
     }
@@ -114,7 +110,7 @@ public class PainelGestaoTests
         var c = await MontarAsync();
         using var _ = c.Db;
         // Entrou na turma há 3 dias: só 3 dias encerrados cobram presença dele.
-        AlunoNaTurma(c, "Novato", "33333333", entrada: DateTime.UtcNow.AddDays(-3));
+        AlunoNaTurma(c, "Novato", "33333333", entrada: BrasiliaTime.Agora.AddDays(-3));
         await c.Db.SaveChangesAsync();
 
         var painel = await Servico(c.Db).MontarAsync();
@@ -161,7 +157,8 @@ public class PainelGestaoTests
 
         Assert.Equal(1, progresso.Elegiveis);
         Assert.Equal(1, progresso.Faixas.Single(f => f.Rotulo == "Concluída").Alunos);
-        Assert.Equal(1, progresso.Faixas.Single(f => f.Rotulo == "Até 25%").Alunos);
+        Assert.Equal(1, progresso.Faixas.Single(f => f.Rotulo == "0% a 10%").Alunos);
+        Assert.Equal(11, progresso.Faixas.Count);
         Assert.Equal(1, progresso.SemCargaDefinida);
     }
 

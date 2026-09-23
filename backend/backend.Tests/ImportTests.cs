@@ -8,7 +8,6 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>Leitura e validação da planilha de unidades.</summary>
 public class PlanilhaReaderTests
 {
     private static PlanilhaUnidadesReader Reader() =>
@@ -219,7 +218,6 @@ public class PlanilhaReaderTests
     }
 }
 
-/// <summary>Duplicidade e confirmação da importação.</summary>
 public class UnidadeImportServiceTests
 {
     private static UnidadeImportService Montar(
@@ -435,11 +433,7 @@ public class UnidadeImportServiceTests
     }
 }
 
-/// <summary>
-/// Coordenadas e código CNES vindos na planilha. É o caminho da carga oficial do
-/// CNES: a unidade já entra localizada, sem esperar o geocodificador — que
-/// processa uma unidade por segundo e erra com endereços de Brasília.
-/// </summary>
+/// <summary>Coordenadas e CNES na planilha: a unidade já entra localizada, sem o geocodificador.</summary>
 public class ImportacaoComCoordenadasTests
 {
     private static PlanilhaUnidadesReader Reader() =>

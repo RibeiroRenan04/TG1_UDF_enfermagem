@@ -1,24 +1,17 @@
 namespace EstagioCheck.API.DTOs;
 
-/// <summary>
-/// Indicadores das irregularidades de ponto para o professor e a coordenadora:
-/// a fila que espera decisão, onde ela emperra, e os padrões que apontam causa
-/// (tipo, unidade, aluno) — "fora do local" concentrado numa unidade costuma ser
-/// coordenada ou raio errado, não aluno burlando o ponto.
-/// </summary>
+/// <summary>"Fora do local" concentrado numa unidade costuma ser coordenada ou raio errado, não fraude.</summary>
 public class IrregularidadesPainelDto
 {
     /// <summary>Janela analisada, em dias. Nulo quando é todo o histórico.</summary>
     public int? Dias { get; init; }
 
-    // ── Fila atual (não depende do período) ───────────────────────────────────
     public int AguardandoProfessor { get; init; }
     /// <summary>Há quantos dias a ocorrência mais antiga espera a decisão do professor.</summary>
     public int? MaisAntigaAguardandoProfessorDias { get; init; }
     public int AguardandoPreceptor { get; init; }
     public int? MaisAntigaAguardandoPreceptorDias { get; init; }
 
-    // ── Período ───────────────────────────────────────────────────────────────
     public int AbertasNoPeriodo { get; init; }
     /// <summary>Abertas na janela anterior de mesmo tamanho, para comparação. Nulo sem período.</summary>
     public int? AbertasPeriodoAnterior { get; init; }

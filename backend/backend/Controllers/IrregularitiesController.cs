@@ -10,27 +10,16 @@ using System.Security.Claims;
 namespace EstagioCheck.API.Controllers;
 
 /// <summary>
-/// Fluxo de irregularidades do ponto:
-/// 1. o aluno registra (ou o sistema gera a partir de um registro de presença);
-/// 2. o preceptor toma ciência;
-/// 3. o preceptor pode inserir uma justificativa/observação;
-/// 4. a ocorrência é encaminhada ao professor;
-/// 5. o professor analisa;
-/// 6. o professor aprova, nega ou acrescenta parecer.
-///
-/// O preceptor não valida nem altera a situação da irregularidade em nenhum ponto
-/// do fluxo — essa decisão é exclusiva do professor.
+/// Fluxo: aluno registra (ou o sistema gera) → preceptor toma ciência e observa → professor
+/// decide. O preceptor nunca altera a situação da irregularidade.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class IrregularitiesController(AppDbContext db, IrregularidadesPainelService painel) : ControllerBase
+public class IrregularitiesController(
+    AppDbContext db, IrregularidadesPainelService painel, EscopoPreceptorService escopo) : ControllerBase
 {
-    // ── Listagem ──────────────────────────────────────────────────────────────
-    /// <summary>
-    /// Aluno vê as próprias ocorrências; o preceptor vê as dos alunos das escalas
-    /// que supervisiona; professor e coordenadora veem todas.
-    /// </summary>
+    /// <summary>Aluno vê as próprias; preceptor, as dos alunos das escalas dele; professor e coordenadora, todas.</summary>
     [HttpGet]
     public async Task<ActionResult<List<IrregularityDto>>> GetAll(
         [FromQuery] string? status,
@@ -43,7 +32,6 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
             .Include(i => i.Student)
             .Include(i => i.Preceptor)
             .Include(i => i.Professor)
-            // O ponto original alimenta a coluna "data/hora do ponto" do painel.
             .Include(i => i.AttendanceRecord).ThenInclude(r => r!.Location)
             .AsNoTracking()
             .AsQueryable();
@@ -54,8 +42,7 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         }
         else if (role == Roles.Preceptor)
         {
-            var alunoIds = await AlunosDoPreceptorAsync(userId);
-            query = query.Where(i => alunoIds.Contains(i.StudentId));
+            query = EscopoPreceptorService.FiltrarOcorrencias(query, await escopo.CarregarAsync(userId));
         }
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -82,7 +69,6 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         return Ok(Map(irregularidade));
     }
 
-    // ── 1. O aluno registra a irregularidade ──────────────────────────────────
     [HttpPost]
     [Authorize(Roles = Roles.Aluno)]
     public async Task<ActionResult<IrregularityDto>> Create([FromBody] CreateIrregularityDto dto)
@@ -95,7 +81,6 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         if (dto.OccurredOn > BrasiliaTime.Hoje)
             return BadRequest(new { message = "A data da ocorrência não pode ser futura." });
 
-        // O registro de presença informado precisa ser do próprio aluno.
         if (dto.AttendanceRecordId.HasValue)
         {
             var pertence = await db.AttendanceRecords
@@ -104,10 +89,7 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
                 return BadRequest(new { message = "Registro de presença não encontrado para este aluno." });
         }
 
-        // ── Trava de duplicidade ─────────────────────────────────────────────
-        // Um ponto tem uma contestação por vez. Enquanto a atual não for negada
-        // pelo professor, abrir outra para o mesmo ponto só geraria fila repetida
-        // para o preceptor — a tela também mantém o botão inativo nesse período.
+        // Um ponto tem uma contestação por vez, até ela ser negada.
         var emAberto = await OcorrenciaEmAbertoAsync(userId, dto.AttendanceRecordId, dto.Type, dto.OccurredOn);
         if (emAberto != null)
             return Conflict(new
@@ -135,16 +117,10 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         db.PointIrregularities.Add(irregularidade);
         await db.SaveChangesAsync();
 
-        // Devolve a ocorrência já completa: é ela que a tela insere na lista e no
-        // painel sem precisar de um segundo GET.
         return Ok(Map((await CarregarAsync(irregularidade.Id))!));
     }
 
-    /// <summary>
-    /// Ocorrência ainda em análise que impede uma nova contestação. Vinculada a um
-    /// ponto, a trava é por ponto; sem ponto, é por tipo + data da ocorrência.
-    /// "Negada" libera o aluno a abrir outra.
-    /// </summary>
+    /// <summary>Com ponto vinculado a trava é por ponto; sem ponto, por tipo + data.</summary>
     private async Task<PointIrregularity?> OcorrenciaEmAbertoAsync(
         Guid studentId, Guid? attendanceRecordId, string tipo, DateOnly ocorridaEm)
     {
@@ -160,12 +136,7 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         return await query.OrderByDescending(i => i.CreatedAt).FirstOrDefaultAsync();
     }
 
-    // ── 2/3/4. O preceptor toma ciência, observa e encaminha ao professor ─────
-    /// <summary>
-    /// Registra a ciência do preceptor e a observação dele, encaminhando a
-    /// ocorrência ao professor. O preceptor não aprova nem nega: a situação passa
-    /// obrigatoriamente para "aguardando_professor".
-    /// </summary>
+    /// <summary>O preceptor não aprova nem nega: a situação passa para "aguardando_professor".</summary>
     [HttpPatch("{id}/preceptor-review")]
     [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<IrregularityDto>> PreceptorReview(
@@ -176,8 +147,7 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         var irregularidade = await CarregarAsync(id);
         if (irregularidade == null) return NotFound();
 
-        var alunoIds = await AlunosDoPreceptorAsync(userId);
-        if (!alunoIds.Contains(irregularidade.StudentId))
+        if (!await escopo.AlcancaOcorrenciaAsync(userId, id))
             return Forbid();
 
         if (irregularidade.Decidida)
@@ -195,7 +165,6 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         return Ok(Map(irregularidade));
     }
 
-    // ── 5/6. O professor analisa e decide ─────────────────────────────────────
     [HttpPatch("{id}/professor-decision")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<IrregularityDto>> ProfessorDecision(
@@ -214,8 +183,7 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
             : PointIrregularity.StatusNegada;
         irregularidade.UpdatedAt = BrasiliaTime.Agora;
 
-        // A decisão do professor reflete na situação do registro de ponto de origem:
-        // aprovar a justificativa regulariza a presença; negar mantém a irregularidade.
+        // Aprovar regulariza o ponto de origem; negar mantém a irregularidade.
         if (irregularidade.AttendanceRecordId.HasValue)
         {
             var registro = await db.AttendanceRecords
@@ -236,13 +204,7 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         return Ok(Map(irregularidade));
     }
 
-    // ── Indicadores da gestão ─────────────────────────────────────────────────
-    /// <summary>
-    /// Indicadores para o professor e a coordenadora: a fila que espera decisão,
-    /// onde ela emperra (preceptor ou professor) e os padrões por tipo, unidade e
-    /// aluno. <paramref name="dias"/> define a janela analisada (7 a 365); vazio
-    /// considera todo o histórico. A fila é sempre a atual.
-    /// </summary>
+    /// <summary><paramref name="dias"/> é a janela analisada (7 a 365; vazio = todo o histórico). A fila é sempre a atual.</summary>
     [HttpGet("painel")]
     [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<IrregularidadesPainelDto>> GetPainel([FromQuery] int? dias, CancellationToken ct)
@@ -253,7 +215,6 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         return Ok(await painel.MontarAsync(dias, ct));
     }
 
-    // ── Contadores para os painéis ────────────────────────────────────────────
     [HttpGet("summary")]
     public async Task<ActionResult> GetSummary()
     {
@@ -268,8 +229,7 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         }
         else if (role == Roles.Preceptor)
         {
-            var alunoIds = await AlunosDoPreceptorAsync(userId);
-            query = query.Where(i => alunoIds.Contains(i.StudentId));
+            query = EscopoPreceptorService.FiltrarOcorrencias(query, await escopo.CarregarAsync(userId));
         }
 
         var porStatus = await query
@@ -289,7 +249,6 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         });
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
     private Guid UsuarioAtual() => Guid.Parse(
         User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);
 
@@ -303,21 +262,6 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
             .Include(i => i.AttendanceRecord).ThenInclude(r => r!.Location)
             .FirstOrDefaultAsync(i => i.Id == id);
 
-    /// <summary>Alunos dos grupos das escalas em que o preceptor atua.</summary>
-    private async Task<List<Guid>> AlunosDoPreceptorAsync(Guid preceptorId)
-    {
-        var grupoIds = await db.RotationSchedules
-            .Where(s => s.PreceptorId == preceptorId)
-            .Select(s => s.GroupId)
-            .Distinct()
-            .ToListAsync();
-
-        return await db.GroupMemberships
-            .Where(m => grupoIds.Contains(m.GroupId))
-            .Select(m => m.StudentId)
-            .ToListAsync();
-    }
-
     private async Task<bool> PodeVerAsync(PointIrregularity irregularidade)
     {
         var userId = UsuarioAtual();
@@ -326,7 +270,7 @@ public class IrregularitiesController(AppDbContext db, IrregularidadesPainelServ
         return role switch
         {
             Roles.Aluno => irregularidade.StudentId == userId,
-            Roles.Preceptor => (await AlunosDoPreceptorAsync(userId)).Contains(irregularidade.StudentId),
+            Roles.Preceptor => await escopo.AlcancaOcorrenciaAsync(userId, irregularidade.Id),
             _ => true
         };
     }

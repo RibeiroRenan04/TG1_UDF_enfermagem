@@ -9,18 +9,10 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// Edição da alocação de rodízio.
-///
-/// A tela acusava "o registro foi alterado por outra pessoa enquanto você
-/// editava" sem ninguém mais no sistema: a gravação apagava todos os dias da
-/// programação e inseria todos de novo, então salvar duas vezes em sequência
-/// fazia a segunda tentar apagar o que a primeira já tinha apagado. Estes testes
-/// fixam a gravação por reconciliação, que repete sem erro.
-/// </summary>
+/// <summary>Salvar a edição duas vezes seguidas não pode acusar edição concorrente.</summary>
 public class EdicaoRodizioTests
 {
-    private sealed record Cenario(AppDbContext Db, StudentGroup Turma, Location Ubs, ApplicationUser Preceptor);
+    private sealed record Cenario(AppDbContext Db, StudentGroup Turma, Location Ubs, ApplicationUser Preceptor, Location Udf);
 
     private static GroupsController Montar(AppDbContext db) => new(db, new ConflitoTurmasService(db));
 
@@ -31,12 +23,14 @@ public class EdicaoRodizioTests
         var ubs = TestSupport.Unidade("UBS Sobradinho");
         var preceptor = TestSupport.Usuario(Roles.Preceptor, "Preceptor");
         var aluno = TestSupport.Aluno();
+        var udf = TestSupport.Unidade("UDF Centro Universitário — Campus Sede (Laboratórios de Enfermagem)");
+        udf.IsInstitution = true;
 
-        db.AddRange(turma, ubs, preceptor, aluno);
+        db.AddRange(turma, ubs, preceptor, aluno, udf);
         db.Add(new GroupMembership { StudentId = aluno.Id, GroupId = turma.Id });
         await db.SaveChangesAsync();
 
-        return new Cenario(db, turma, ubs, preceptor);
+        return new Cenario(db, turma, ubs, preceptor, udf);
     }
 
     private static CreateScheduleDto Dto(Cenario c, params int[] dias) => new(
@@ -104,5 +98,37 @@ public class EdicaoRodizioTests
 
         Assert.Empty(atualizada.Days);
         Assert.Empty(await db.RotationDaySchedules.Where(d => d.ScheduleId == criada.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Sexta_presencial_e_sempre_na_udf()
+    {
+        var c = await MontarCenarioAsync();
+        using var db = c.Db;
+
+        var criada = Corpo(await Montar(db).CreateSchedule(new CreateScheduleDto(
+            c.Turma.Id, c.Ubs.Id, c.Preceptor.Id, Turnos.Manha, "07/09 a 18/09",
+            new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 18), "assistencia", 80, null,
+            [
+                new CriarDiaRodizioDto(4, ModoAtividade.Presencial, c.Ubs.Id, null),
+                new CriarDiaRodizioDto(DiasSemana.Sexta, ModoAtividade.Presencial, c.Ubs.Id, null)
+            ])));
+
+        Assert.Equal(c.Ubs.Id, criada.Days.Single(d => d.DayOfWeek == 4).LocationId);
+        Assert.Equal(c.Udf.Id, criada.Days.Single(d => d.DayOfWeek == DiasSemana.Sexta).LocationId);
+    }
+
+    [Fact]
+    public async Task Sexta_remota_nao_ganha_local()
+    {
+        var c = await MontarCenarioAsync();
+        using var db = c.Db;
+
+        var criada = Corpo(await Montar(db).CreateSchedule(new CreateScheduleDto(
+            c.Turma.Id, c.Ubs.Id, c.Preceptor.Id, Turnos.Manha, "07/09 a 18/09",
+            new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 18), "assistencia", 80, null,
+            [new CriarDiaRodizioDto(DiasSemana.Sexta, ModoAtividade.Remoto, c.Ubs.Id, null)])));
+
+        Assert.Null(criada.Days.Single().LocationId);
     }
 }

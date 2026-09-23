@@ -17,15 +17,12 @@ public record CreateGroupDto(
     string? Description
 );
 
-/// <summary>Alunos a vincular e a desvincular de uma turma, numa chamada só.</summary>
 public record VinculoLoteDto(List<Guid>? Adicionar, List<Guid>? Remover);
 
-/// <summary>Aluno que não pôde ser vinculado, com o motivo para a tela mostrar.</summary>
 public record VinculoRecusadoDto(Guid StudentId, string? Nome, string Motivo);
 
 public record VinculoLoteResultadoDto(int Vinculados, int Desvinculados, List<VinculoRecusadoDto> Recusados);
 
-/// <summary>Aluno vinculado a uma turma.</summary>
 public class GroupMemberDto
 {
     public Guid StudentId { get; init; }
@@ -54,14 +51,10 @@ public class ScheduleDto
     public int RequiredHours { get; init; }
     public string? Notes { get; init; }
 
-    /// <summary>
-    /// Programação por dia da semana. Vazia, o rodízio vale como antes: todo dia
-    /// útil é presencial no local principal.
-    /// </summary>
+    /// <summary>Vazia: todo dia útil é presencial no local principal.</summary>
     public List<DiaRodizioDto> Days { get; init; } = [];
 }
 
-/// <summary>Regra de um dia da semana do rodízio ("sexta → faculdade → presencial").</summary>
 public class DiaRodizioDto
 {
     /// <summary>0 = domingo … 6 = sábado.</summary>
@@ -72,7 +65,6 @@ public class DiaRodizioDto
     public string Mode { get; init; } = string.Empty;
     public string ModeLabel { get; init; } = string.Empty;
 
-    /// <summary>Unidade do dia. Nula herda o local principal do rodízio.</summary>
     public Guid? LocationId { get; init; }
     public string? LocationName { get; init; }
     public string? Notes { get; init; }
@@ -85,11 +77,6 @@ public record CriarDiaRodizioDto(
     [MaxLength(300)] string? Notes
 );
 
-/// <summary>
-/// Alocação de rodízio de um grupo/turma feita pelo supervisor. Reúne turno,
-/// período, local do estágio, preceptor responsável, datas de início e término,
-/// atividade a ser desenvolvida e carga horária.
-/// </summary>
 public record CreateScheduleDto(
     [Required(ErrorMessage = "Selecione a turma.")] Guid GroupId,
     [Required(ErrorMessage = "Selecione o local do estágio.")] Guid LocationId,
@@ -101,7 +88,6 @@ public record CreateScheduleDto(
     [Required(ErrorMessage = "Informe a atividade a ser desenvolvida.")] string ActivityType,
     [Range(1, 2000, ErrorMessage = "Carga horária deve estar entre 1 e 2000 horas.")] int RequiredHours,
     string? Notes,
-    // Programação semanal do rodízio. Informada, o sistema gera sozinho a
-    // programação de cada data do período; omitida, o rodízio segue como antes.
+    // Omitida, todo dia útil é presencial no local principal.
     List<CriarDiaRodizioDto>? Days = null
 );

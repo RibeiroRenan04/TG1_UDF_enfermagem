@@ -8,10 +8,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EstagioCheck.API.Controllers;
 
-/// <summary>
-/// Gestão de usuários. A leitura é liberada para o professor e para a coordenadora
-/// (perfil de consulta e acompanhamento); toda escrita é exclusiva do professor.
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = Roles.Gestao)]
@@ -20,7 +16,7 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
     [HttpGet]
     public async Task<ActionResult<List<UserDto>>> GetAll()
     {
-        var users = await db.Users
+        var users = await db.Users.AsNoTracking()
             .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .OrderBy(u => u.FullName)
             .ToListAsync();
@@ -28,14 +24,13 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return Ok(users.Select(MapToDto));
     }
 
-    // ── Painel de alunos com filtros ──────────────────────────────────────────
     [HttpGet("students")]
     public async Task<ActionResult<List<UserDto>>> GetStudents(
         [FromQuery] int? semester,
         [FromQuery] string? shift,
         [FromQuery] bool? isActive)
     {
-        var query = db.Users
+        var query = db.Users.AsNoTracking()
             .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .Where(u => u.Role == "aluno");
 
@@ -52,11 +47,10 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return Ok(users.Select(MapToDto));
     }
 
-    // ── Painel de preceptores ─────────────────────────────────────────────────
     [HttpGet("preceptors")]
     public async Task<ActionResult<List<UserDto>>> GetPreceptors()
     {
-        var users = await db.Users
+        var users = await db.Users.AsNoTracking()
             .Where(u => u.Role != Roles.Aluno)
             .OrderBy(u => u.Role).ThenBy(u => u.FullName)
             .ToListAsync();
@@ -64,7 +58,6 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return Ok(users.Select(MapToDto));
     }
 
-    // ── Toggle ativo/inativo ──────────────────────────────────────────────────
     [HttpPatch("{id}/active")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> ToggleActive(Guid id)
@@ -73,21 +66,39 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         if (user == null) return NotFound();
 
         user.IsActive = !user.IsActive;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
         return Ok(new { id = user.Id, isActive = user.IsActive });
     }
 
+    /// <summary>Volta a senha do aluno para o RGM; a troca é exigida no próximo acesso.</summary>
+    [HttpPost("{id}/reset-password")]
+    [Authorize(Roles = Roles.Supervisor)]
+    public async Task<IActionResult> ResetarSenha(Guid id)
+    {
+        var user = await db.Users.FindAsync(id);
+        if (user == null) return NotFound();
+
+        if (user.Role != Roles.Aluno)
+            return BadRequest(ErrosApi.Corpo("Só a senha de alunos volta para o padrão do RGM."));
+
+        var rgm = NormalizarRgm(user.Rgm);
+        if (string.IsNullOrEmpty(rgm))
+            return BadRequest(ErrosApi.Corpo("O aluno não tem RGM cadastrado."));
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(rgm);
+        user.MustChangePassword = true;
+        user.UpdatedAt = BrasiliaTime.Agora;
+
+        await db.SaveChangesAsync();
+        return Ok(new { message = $"Senha de {user.FullName} redefinida para o RGM." });
+    }
+
     /// <summary>
-    /// Define as turmas do aluno. <c>GroupIds</c> traz a lista completa — o que
-    /// não vier nela é desvinculado, o que já estava é mantido. <c>GroupId</c>
-    /// continua aceito e vale como lista de uma turma só (nulo desvincula de
-    /// todas).
-    ///
-    /// Vincular a uma turma nova não desfaz as demais: o aluno pode cursar dois
-    /// módulos de estágio ao mesmo tempo. O que o sistema recusa é a agenda
-    /// impossível — mesmo turno, mesmos dias da semana e períodos sobrepostos.
+    /// <c>GroupIds</c> é a lista completa: o que não vier é desvinculado (<c>GroupId</c>, legado,
+    /// vale como lista de uma turma). O aluno pode estar em várias turmas; só a agenda
+    /// impossível é recusada.
     /// </summary>
     [HttpPatch("{id}/assign-group")]
     [Authorize(Roles = Roles.Supervisor)]
@@ -131,12 +142,7 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return NoContent();
     }
 
-    // ── Permissão de atraso ───────────────────────────────────────────────────
-    /// <summary>
-    /// Autoriza (ou revoga) a chegada do aluno após o horário previsto de início do
-    /// estágio. A carga horária do dia continua sendo exigida — a permissão apenas
-    /// impede que o registro tardio seja tratado como irregularidade de horário.
-    /// </summary>
+    /// <summary>A carga horária do dia continua exigida; a permissão só evita a irregularidade de horário.</summary>
     [HttpPatch("{id}/late-permission")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UserDto>> SetLatePermission(Guid id, [FromBody] LatePermissionDto dto)
@@ -153,17 +159,12 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         user.LateArrivalNote = dto.AllowLateArrival && !string.IsNullOrWhiteSpace(dto.Note)
             ? dto.Note.Trim()
             : null;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
         return Ok(MapToDto(user));
     }
 
-    // ── Troca de turno do aluno ───────────────────────────────────────────────
-    /// <summary>
-    /// Altera o turno do aluno — usado quando há troca autorizada entre alunos
-    /// (por exemplo, da manhã para a tarde). Somente o turno é editável aqui.
-    /// </summary>
     [HttpPatch("{id}/shift")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UserDto>> UpdateShift(Guid id, [FromBody] UpdateShiftDto dto)
@@ -181,19 +182,13 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
             return BadRequest(new { message = "Apenas alunos possuem turno de estágio." });
 
         user.Shift = shift;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
         return Ok(MapToDto(user));
     }
 
-    // ── Vínculo institucional ─────────────────────────────────────────────────
-    /// <summary>
-    /// Opções de vínculo institucional do cadastro de preceptor/professor: as
-    /// unidades de saúde ativas. A lista suspensa da tela vem daqui, e o cadastro
-    /// só aceita um destes valores — em texto livre a mesma unidade chegava
-    /// grafada de várias formas.
-    /// </summary>
+    /// <summary>Vínculo é lista fechada: em texto livre a mesma unidade chegava grafada de várias formas.</summary>
     [HttpGet("vinculos-institucionais")]
     public async Task<ActionResult<List<string>>> GetVinculosInstitucionais() =>
         Ok(await VinculosInstitucionaisAsync());
@@ -206,13 +201,7 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
             .OrderBy(nome => nome)
             .ToListAsync();
 
-    // ── Criar preceptor / professor / coordenadora ────────────────────────────
-    /// <summary>
-    /// Cadastra preceptor, professor (supervisor) ou coordenadora. O e-mail
-    /// institucional (@cs.udf.edu.br) não é obrigatório: muitos preceptores são
-    /// profissionais externos à UDF e utilizam e-mail próprio, que também serve
-    /// como login.
-    /// </summary>
+    /// <summary>E-mail institucional não é obrigatório: muitos preceptores são externos à UDF.</summary>
     [HttpPost("staff")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UserDto>> CreateStaff([FromBody] CreateStaffDto dto)
@@ -220,8 +209,6 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         if (dto.Role is not (Roles.Preceptor or Roles.Supervisor or Roles.Coordenadora))
             return BadRequest(new { message = "Papel deve ser 'preceptor', 'supervisor' ou 'coordenadora'." });
 
-        // Vínculo institucional é lista fechada (ver GetVinculosInstitucionais):
-        // a tela oferece um dropdown e a API confirma a escolha.
         var vinculo = dto.Institution?.Trim();
         if (!string.IsNullOrEmpty(vinculo))
         {
@@ -235,7 +222,6 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
                     code = "vinculo_invalido"
                 });
 
-            // Grava exatamente como está no cadastro da unidade.
             vinculo = escolhido;
         }
 
@@ -262,13 +248,7 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return CreatedAtAction(nameof(GetAll), MapToDto(user));
     }
 
-    // ── Importação em lote de alunos ──────────────────────────────────────────
-    /// <summary>
-    /// Importa alunos a partir da planilha acadêmica. O login de cada aluno é o
-    /// e-mail institucional gerado aqui e a senha inicial é o próprio RGM, trocada
-    /// no primeiro acesso. Os logins gerados voltam na resposta: sem eles o
-    /// supervisor não tem como informar ao aluno com que e-mail entrar.
-    /// </summary>
+    /// <summary>Login = e-mail institucional gerado; senha inicial = RGM. Os logins voltam na resposta para o professor repassar.</summary>
     [HttpPost("bulk-import")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<BulkImportResponseDto>> BulkImport([FromBody] BulkImportRequestDto dto)
@@ -289,8 +269,7 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
                     continue;
                 }
 
-                // Reconhece também o formato antigo (com o "14" na frente) para não
-                // duplicar alunos já cadastrados antes da mudança de formato.
+                // Aceita também o formato antigo (com "14") para não duplicar alunos.
                 var rgmLegado = $"{PrefixoRgmLegado}{rgm}";
                 var existing = await db.Users
                     .FirstOrDefaultAsync(u => u.Rgm == rgm || u.Rgm == rgmLegado);
@@ -303,7 +282,6 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
                     // igual ao RGM: reemite o hash no formato novo.
                     if (existing.MustChangePassword)
                         existing.PasswordHash = BCrypt.Net.BCrypt.HashPassword(rgm);
-                    // Preenche o e-mail institucional se ainda não houver.
                     if (string.IsNullOrEmpty(existing.Email))
                     {
                         var emailGerado = await GerarEmailInstitucionalAsync(s.FullName, emailsUsados);
@@ -311,12 +289,11 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
                         existing.MustSetEmail = false;
                         logins.Add(new ImportedStudentLoginDto(existing.FullName, rgm, emailGerado));
                     }
-                    existing.UpdatedAt = DateTime.UtcNow;
+                    existing.UpdatedAt = BrasiliaTime.Agora;
                     updated++;
                 }
                 else
                 {
-                    // E-mail institucional gerado automaticamente: nome.ultimonome@cs.udf.edu.br
                     var email = await GerarEmailInstitucionalAsync(s.FullName, emailsUsados);
                     var fullName = s.FullName.Trim();
 
@@ -324,7 +301,6 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
                     {
                         FullName = fullName,
                         Email = email,
-                        // Senha inicial igual ao RGM; MustChangePassword força a troca.
                         PasswordHash = BCrypt.Net.BCrypt.HashPassword(rgm),
                         Role = Roles.Aluno,
                         Rgm = rgm, // o RGM é a matrícula do aluno
@@ -348,14 +324,8 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return Ok(new BulkImportResponseDto(imported, updated, errors, logins));
     }
 
-    // ── Normalização do RGM ───────────────────────────────────────────────────
-    /// <summary>Prefixo que os RGMs da UDF traziam e que deixou de ser usado.</summary>
     private const string PrefixoRgmLegado = "14";
 
-    /// <summary>
-    /// Padroniza o RGM: mantém apenas dígitos e remove o "14" do início, que não faz
-    /// mais parte do formato. RGMs que são só o próprio prefixo são descartados.
-    /// </summary>
     internal static string NormalizarRgm(string? rgm)
     {
         var digitos = new string((rgm ?? string.Empty).Where(char.IsDigit).ToArray());
@@ -365,13 +335,8 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return digitos;
     }
 
-    // ── Geração de e-mail institucional ───────────────────────────────────────
     private const string DominioInstitucional = "@cs.udf.edu.br";
 
-    /// <summary>
-    /// Gera um e-mail institucional no formato "primeironome.ultimonome@cs.udf.edu.br",
-    /// garantindo unicidade (no lote e no banco) com sufixo numérico em caso de colisão.
-    /// </summary>
     private async Task<string> GerarEmailInstitucionalAsync(string fullName, HashSet<string> emailsUsados)
     {
         var prefixo = MontarPrefixoEmail(fullName);
@@ -411,7 +376,6 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return sb.ToString().Normalize(System.Text.NormalizationForm.FormC);
     }
 
-    // ── Avançar semestre ──────────────────────────────────────────────────────
     [HttpPost("advance-semester")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<AdvanceSemesterResponseDto>> AdvanceSemester()
@@ -432,7 +396,7 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
                 TotalHours = totalHoursMap.GetValueOrDefault(student.Id, 0)
             });
             student.IsActive = false;
-            student.UpdatedAt = DateTime.UtcNow;
+            student.UpdatedAt = BrasiliaTime.Agora;
         }
 
         // 2. Alunos do 7° semestre → avançam para o 8°
@@ -451,7 +415,7 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
                 TotalHours = totalHoursMap7.GetValueOrDefault(student.Id, 0)
             });
             student.Semester = 8;
-            student.UpdatedAt = DateTime.UtcNow;
+            student.UpdatedAt = BrasiliaTime.Agora;
         }
 
         await db.SaveChangesAsync();
@@ -459,13 +423,7 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return Ok(new AdvanceSemesterResponseDto(semester7.Count, semester8.Count));
     }
 
-    // ── Conclusão de estágio (individual) ─────────────────────────────────────
-    /// <summary>
-    /// Marca o aluno como concluinte/formado: sai de "Alunos ativos" e vai para
-    /// "Alunos inativos". Nada é apagado — pontos, rodízios e acompanhamentos
-    /// continuam, e a carga horária do momento fica gravada no histórico de
-    /// semestres. Uma marcação por engano se desfaz em <see cref="Reativar"/>.
-    /// </summary>
+    /// <summary>Nada é apagado; a carga horária do momento vai para o histórico. Desfaz-se em <see cref="Reativar"/>.</summary>
     [HttpPost("{id}/concluir")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UserDto>> Concluir(Guid id)
@@ -494,17 +452,12 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         });
 
         user.IsActive = false;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
         return Ok(MapToDto(user));
     }
 
-    /// <summary>
-    /// Desfaz a conclusão marcada por engano: o aluno volta para "Alunos ativos"
-    /// com o mesmo semestre, turno e turma. O registro no histórico de semestres
-    /// fica, como trilha do que aconteceu.
-    /// </summary>
     [HttpPost("{id}/reativar")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UserDto>> Reativar(Guid id)
@@ -524,13 +477,12 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
             });
 
         user.IsActive = true;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
         return Ok(MapToDto(user));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
     private async Task<Dictionary<Guid, decimal>> BuildTotalHoursMap(List<Guid> studentIds)
     {
         if (studentIds.Count == 0) return [];
@@ -558,9 +510,7 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         MustChangePassword = u.MustChangePassword,
         MustSetEmail = u.MustSetEmail,
         TermsAcceptedAt = u.TermsAcceptedAt,
-        // Turma principal (a primeira em que o aluno entrou) nos campos singulares,
-        // que as telas antigas leem; a lista completa em Groups, porque o aluno
-        // pode cursar mais de um rodízio ao mesmo tempo.
+        // Campos singulares = turma principal (telas antigas); Groups = lista completa.
         GroupId = TurmasDoAluno.Principal(u.GroupMemberships)?.GroupId,
         GroupCode = TurmasDoAluno.Principal(u.GroupMemberships)?.Group?.Code,
         GroupName = TurmasDoAluno.Principal(u.GroupMemberships)?.Group?.Name,

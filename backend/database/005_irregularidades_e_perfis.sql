@@ -1,37 +1,26 @@
--- =============================================================================
---  Migration 005 – Fluxo de irregularidades, permissão de atraso, perfil
---                  "coordenadora", edição de turno, RGM sem o prefixo "14"
---                  e termo de responsabilidade de acesso.
---
---  Compatível com PostgreSQL (Supabase / Railway). O script é idempotente:
---  pode ser executado mais de uma vez sem quebrar.
---
---  Recomendação: rode dentro de uma transação e confira os SELECTs de
---  conferência no fim antes do COMMIT.
--- =============================================================================
+-- 005 – irregularidades, permissão de atraso, perfil "coordenadora", RGM sem o "14" e termo de
+-- responsabilidade. A remoção do "14" (3.2) e o backfill (5) só rodam na primeira execução:
+-- repetir a 3.2 cortaria o "14" de um RGM legítimo.
 
 BEGIN;
 
--- ─────────────────────────────────────────────────────────────────────────────
---  1) Novas colunas em "Usuarios"
---     • PermissaoAtraso  – autoriza o aluno a chegar após o início do turno
---                          (a carga horária do dia continua sendo exigida);
---     • ObservacaoAtraso – motivo/registro da autorização, dado pelo professor;
---     • TermoAceitoEm    – aceite do termo de responsabilidade de acesso,
---                          exigido de todo perfil que não é aluno.
--- ─────────────────────────────────────────────────────────────────────────────
+-- 0) Controle de execução
+CREATE TABLE IF NOT EXISTS "MigracoesAplicadas" (
+    "Nome"       TEXT        PRIMARY KEY,
+    "AplicadaEm" TIMESTAMP   NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo')
+);
+
+CREATE TEMP TABLE "_Migracao005" ON COMMIT DROP AS
+SELECT NOT EXISTS (SELECT 1 FROM "MigracoesAplicadas" WHERE "Nome" = '005_irregularidades_e_perfis')
+       AND to_regclass('public."Irregularidades"') IS NULL AS "PrimeiraExecucao";
+
+-- 1) Novas colunas em "Usuarios"
 ALTER TABLE "Usuarios"
     ADD COLUMN IF NOT EXISTS "PermissaoAtraso"  BOOLEAN     NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS "ObservacaoAtraso" TEXT        NULL,
     ADD COLUMN IF NOT EXISTS "TermoAceitoEm"    TIMESTAMP   NULL;
 
-
--- ─────────────────────────────────────────────────────────────────────────────
---  2) Novo perfil "coordenadora"
---     Mesma visão do professor (supervisor), porém somente leitura — o bloqueio
---     de escrita é feito na API ([Authorize(Roles = ...)]) e no frontend.
---     Aqui só liberamos o valor na restrição da coluna "Papel", se ela existir.
--- ─────────────────────────────────────────────────────────────────────────────
+-- 2) Perfil "coordenadora" (o bloqueio de escrita é feito na API)
 DO $$
 DECLARE
     v_constraint TEXT;
@@ -53,21 +42,11 @@ ALTER TABLE "Usuarios"
     ADD CONSTRAINT "CK_Usuarios_Papel"
     CHECK ("Papel" IN ('aluno', 'preceptor', 'supervisor', 'coordenadora'));
 
-
--- ─────────────────────────────────────────────────────────────────────────────
---  3) RGM sem o "14" do início
---     O prefixo "14" deixou de fazer parte do formato. Removemos o prefixo dos
---     RGMs de alunos que ainda o possuem, desde que o resultado não colida com
---     um RGM já existente (o índice de RGM é único).
---
---     ATENÇÃO: a senha inicial do aluno que ainda NÃO fez o primeiro acesso é o
---     RGM antigo (com o 14). O hash da senha não é alterado aqui — reimporte a
---     planilha da turma depois de rodar este script e a API regrava a senha
---     inicial no formato novo para quem ainda tem "DeveTrocarSenha" = TRUE.
--- ─────────────────────────────────────────────────────────────────────────────
+-- 3) RGM sem o "14" do início
+--    A senha inicial de quem ainda não acessou continua sendo o RGM antigo: reimporte a
+--    planilha da turma depois deste script para a API regravá-la.
 
 -- 3.1) Conferência prévia: colisões que impediriam a remoção do prefixo.
---      Se esta consulta retornar linhas, resolva os RGMs duplicados antes.
 SELECT u."IdUsuario", u."NomeCompleto", u."Rgm" AS "RgmAtual",
        substring(u."Rgm" FROM 3) AS "RgmNovo"
 FROM   "Usuarios" u
@@ -80,11 +59,12 @@ WHERE  u."Papel" = 'aluno'
            AND  x."IdUsuario" <> u."IdUsuario"
        );
 
--- 3.2) Remoção do prefixo.
+-- 3.2) Remoção do prefixo
 UPDATE "Usuarios" u
 SET    "Rgm"          = substring(u."Rgm" FROM 3),
-       "AtualizadoEm" = NOW()
-WHERE  u."Papel" = 'aluno'
+       "AtualizadoEm" = (NOW() AT TIME ZONE 'America/Sao_Paulo')
+WHERE  (SELECT "PrimeiraExecucao" FROM "_Migracao005")
+  AND  u."Papel" = 'aluno'
   AND  u."Rgm" LIKE '14%'
   AND  length(u."Rgm") > 2
   AND  NOT EXISTS (
@@ -93,18 +73,7 @@ WHERE  u."Papel" = 'aluno'
            AND  x."IdUsuario" <> u."IdUsuario"
        );
 
-
--- ─────────────────────────────────────────────────────────────────────────────
---  4) Tabela "Irregularidades" — fluxo aluno → preceptor → professor
---
---     Situações ("Status"):
---       aguardando_preceptor → o aluno registrou/gerou a ocorrência;
---       aguardando_professor → o preceptor deu ciência e observou, encaminhando;
---       aprovada / negada    → decisão final, exclusiva do professor.
---
---     O preceptor NÃO altera a situação: ele só preenche "ObservacaoPreceptor"
---     e "CienciaPreceptorEm". A decisão fica em "ParecerProfessor".
--- ─────────────────────────────────────────────────────────────────────────────
+-- 4) Irregularidades: aguardando_preceptor → aguardando_professor → aprovada | negada
 CREATE TABLE IF NOT EXISTS "Irregularidades" (
     "IdIrregularidade"     UUID         PRIMARY KEY,
     "IdEstudante"          UUID         NOT NULL,
@@ -115,18 +84,16 @@ CREATE TABLE IF NOT EXISTS "Irregularidades" (
     "Descricao"            TEXT         NOT NULL,
     "Status"               VARCHAR(30)  NOT NULL DEFAULT 'aguardando_preceptor',
 
-    -- Etapa do preceptor: ciência + observação (sem poder decidir)
     "IdPreceptor"          UUID         NULL,
     "ObservacaoPreceptor"  TEXT         NULL,
     "CienciaPreceptorEm"   TIMESTAMP    NULL,
 
-    -- Etapa do professor: decisão final
     "IdProfessor"          UUID         NULL,
     "ParecerProfessor"     TEXT         NULL,
     "DecididoProfessorEm"  TIMESTAMP    NULL,
 
-    "CriadoEm"             TIMESTAMP    NOT NULL DEFAULT NOW(),
-    "AtualizadoEm"         TIMESTAMP    NOT NULL DEFAULT NOW(),
+    "CriadoEm"             TIMESTAMP    NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
+    "AtualizadoEm"         TIMESTAMP    NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
 
     CONSTRAINT "FK_Irregularidades_Estudante"
         FOREIGN KEY ("IdEstudante")  REFERENCES "Usuarios"("IdUsuario")        ON DELETE CASCADE,
@@ -153,12 +120,7 @@ CREATE INDEX IF NOT EXISTS "IX_Irregularidades_IdEstudante"
 CREATE INDEX IF NOT EXISTS "IX_Irregularidades_IdPresenca"
     ON "Irregularidades" ("IdPresenca");
 
-
--- ─────────────────────────────────────────────────────────────────────────────
---  5) Backfill: abre a ocorrência dos registros de ponto que já estão
---     irregulares e ainda não têm irregularidade vinculada, para que entrem
---     no novo fluxo de análise.
--- ─────────────────────────────────────────────────────────────────────────────
+-- 5) Backfill dos pontos já irregulares (o "- 3 horas" assume ponto em UTC, estado anterior ao 006)
 INSERT INTO "Irregularidades" (
     "IdIrregularidade", "IdEstudante", "IdPresenca", "IdEscala",
     "Tipo", "DataOcorrencia", "Descricao", "Status", "CriadoEm", "AtualizadoEm"
@@ -171,19 +133,20 @@ SELECT gen_random_uuid(),
        (r."RegistradoEm" - INTERVAL '3 hours')::date,
        COALESCE(NULLIF(r."MotivoIrregularidade", ''), 'Registro de ponto fora das regras.'),
        'aguardando_preceptor',
-       NOW(),
-       NOW()
+       (NOW() AT TIME ZONE 'America/Sao_Paulo'),
+       (NOW() AT TIME ZONE 'America/Sao_Paulo')
 FROM   "RegistrosPresenca" r
-WHERE  r."Status" = 'irregular'
+WHERE  (SELECT "PrimeiraExecucao" FROM "_Migracao005")
+  AND  r."Status" = 'irregular'
   AND  NOT EXISTS (
          SELECT 1 FROM "Irregularidades" i
          WHERE  i."IdPresenca" = r."IdPresenca"
        );
 
+INSERT INTO "MigracoesAplicadas" ("Nome") VALUES ('005_irregularidades_e_perfis')
+ON CONFLICT ("Nome") DO NOTHING;
 
--- ─────────────────────────────────────────────────────────────────────────────
---  6) Conferência
--- ─────────────────────────────────────────────────────────────────────────────
+-- 6) Conferência
 SELECT "Papel", COUNT(*) AS "Usuarios"
 FROM   "Usuarios"
 GROUP  BY "Papel"
@@ -201,13 +164,7 @@ ORDER  BY "Status";
 
 COMMIT;
 
-
--- =============================================================================
---  PÓS-MIGRAÇÃO (opcional) — cadastro do primeiro usuário "coordenadora".
---  Prefira criar pela tela de Usuários do professor; o SQL abaixo fica como
---  alternativa. Troque o e-mail e gere o hash BCrypt pela própria aplicação
---  (o campo "DeveTrocarSenha" força a definição de senha no primeiro acesso).
--- =============================================================================
+-- Opcional: primeiro usuário "coordenadora" (prefira a tela de Usuários).
 -- UPDATE "Usuarios"
--- SET    "Papel" = 'coordenadora', "AtualizadoEm" = NOW()
+-- SET    "Papel" = 'coordenadora', "AtualizadoEm" = (NOW() AT TIME ZONE 'America/Sao_Paulo')
 -- WHERE  "Email" = 'coordenacao@cs.udf.edu.br';

@@ -1,11 +1,6 @@
 namespace EstagioCheck.API.DTOs;
 
-/// <summary>
-/// Linha do relatório: o aluno como um todo, com o detalhe de cada turma em
-/// <see cref="Turmas"/>. Os totais somam as turmas mais os registros que não
-/// pertencem a nenhuma delas — é a mesma conta do certificado, e é ela que decide
-/// a liberação.
-/// </summary>
+/// <summary>Os totais usam a mesma conta do certificado e decidem a liberação.</summary>
 public class ReportRowDto
 {
     public Guid StudentId { get; init; }
@@ -14,7 +9,6 @@ public class ReportRowDto
     public bool IsActive { get; init; }
 
     public int Required { get; init; }
-    /// <summary>Horas aprovadas (pares check-in/check-out aprovados), como no certificado.</summary>
     public double Hours { get; init; }
     public int Approved { get; init; }
     public int Irregular { get; init; }
@@ -23,16 +17,12 @@ public class ReportRowDto
     public double ProgressPercent { get; init; }
     public bool CertificateReleased { get; init; }
 
-    /// <summary>
-    /// Horas aprovadas de registros sem turma atual do aluno — ponto sem rodízio ou
-    /// de uma turma da qual ele já saiu. Entram no total, não em uma turma.
-    /// </summary>
+    /// <summary>Registros fora das turmas atuais (sem rodízio, ou de turma que o aluno deixou).</summary>
     public double HoursOutsideGroups { get; init; }
 
     public List<ReportTurmaDto> Turmas { get; init; } = [];
 }
 
-/// <summary>O aluno em uma das turmas: só os registros e as pendências dos rodízios dela.</summary>
 public class ReportTurmaDto
 {
     public Guid GroupId { get; init; }

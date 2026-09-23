@@ -10,27 +10,16 @@ using System.Security.Claims;
 namespace EstagioCheck.API.Controllers;
 
 /// <summary>
-/// Alocação de estagiários às unidades de saúde.
-///
-/// Só usuários com papel "aluno" podem ser alocados. A alocação é <b>por turno</b>:
-/// o mesmo aluno pode estagiar de manhã em uma unidade e à tarde em outra, mas
-/// nunca ter duas alocações ativas no mesmo turno — a regra vale na API e no
-/// índice único do banco.
-///
-/// Trocar de unidade encerra a alocação daquele turno e cria outra: o histórico é
-/// preservado, nunca sobrescrito.
+/// Alocação por turno: manhã numa unidade e tarde em outra, nunca duas ativas no mesmo
+/// turno (API + índice único). Trocar de unidade encerra a alocação e cria outra.
 /// </summary>
 [ApiController]
 [Route("api")]
 [Authorize]
-public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> logger) : ControllerBase
+public class AlocacoesController(
+    AppDbContext db, ILogger<AlocacoesController> logger, EscopoPreceptorService escopoPreceptor) : ControllerBase
 {
-    // ── Estagiários de uma unidade ────────────────────────────────────────────
-    /// <summary>
-    /// Estagiários alocados na unidade. O preceptor e a gestão veem a lista toda;
-    /// o aluno consulta a unidade (precisa saber onde estagia), mas só enxerga a
-    /// própria alocação — a relação dos colegas não é dado dele.
-    /// </summary>
+    /// <summary>O aluno consulta a unidade, mas só enxerga a própria alocação.</summary>
     [HttpGet("unidades-saude/{id}/estagiarios")]
     public async Task<ActionResult<List<AlocacaoDto>>> GetEstagiariosDaUnidade(
         Guid id, [FromQuery] bool incluirEncerradas = false)
@@ -38,7 +27,7 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         if (!await db.Locations.AnyAsync(l => l.Id == id))
             return NotFound(new { message = "Unidade não encontrada." });
 
-        var query = db.StudentAllocations
+        var query = db.StudentAllocations.AsNoTracking()
             .Include(a => a.Student)
             .Include(a => a.Location)
             .Include(a => a.CreatedBy)
@@ -51,6 +40,12 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
             var eu = UsuarioAtual();
             query = query.Where(a => a.StudentId == eu);
         }
+        else if (User.IsInRole(Roles.Preceptor))
+        {
+            var escopo = await escopoPreceptor.CarregarAsync(UsuarioAtual());
+            if (!escopo.Locais.Contains(id)) return Forbid();
+            query = query.Where(a => escopo.Alunos.Contains(a.StudentId));
+        }
 
         var alocacoes = await query
             .OrderByDescending(a => a.Ativo)
@@ -61,16 +56,12 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         return Ok(alocacoes.Select(Map));
     }
 
-    /// <summary>
-    /// Alunos que podem ser alocados nesta unidade. Traz a unidade atual de cada um
-    /// para que a tela avise antes de uma troca acidental.
-    /// </summary>
     [HttpGet("unidades-saude/{id}/estagiarios-disponiveis")]
     [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<List<EstagiarioDisponivelDto>>> GetDisponiveis(
         Guid id, [FromQuery] string? busca)
     {
-        var query = db.Users
+        var query = db.Users.AsNoTracking()
             .Include(u => u.GroupMemberships).ThenInclude(m => m.Group)
             .Where(u => u.Role == Roles.Aluno && u.IsActive);
 
@@ -87,7 +78,7 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         var alunoIds = alunos.Select(u => u.Id).ToList();
 
         // Um aluno pode ter várias alocações ativas — uma por turno.
-        var ativas = await db.StudentAllocations
+        var ativas = await db.StudentAllocations.AsNoTracking()
             .Include(a => a.Location)
             .Where(a => a.Ativo && alunoIds.Contains(a.StudentId))
             .ToListAsync();
@@ -128,7 +119,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         }));
     }
 
-    // ── Criar alocação ────────────────────────────────────────────────────────
     [HttpPost("unidades-saude/{id}/estagiarios")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<AlocacaoDto>> Alocar(Guid id, [FromBody] CriarAlocacaoDto dto)
@@ -141,7 +131,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         var aluno = await db.Users.FirstOrDefaultAsync(u => u.Id == dto.EstagiarioId);
         if (aluno == null) return NotFound(new { message = "Estagiário não encontrado." });
 
-        // Regra validada aqui, não só na tela: só aluno estagia.
         if (aluno.Role != Roles.Aluno)
             return BadRequest(new
             {
@@ -162,8 +151,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
 
         var turno = turnoInformado ?? Turnos.Normalizar(aluno.Shift) ?? Turnos.Manha;
 
-        // Alocações em OUTROS turnos convivem: o aluno pode estagiar de manhã em uma
-        // unidade e à tarde em outra. A trava vale só para o mesmo turno.
         var alocacaoDoTurno = await db.StudentAllocations
             .Include(a => a.Location)
             .FirstOrDefaultAsync(a => a.StudentId == aluno.Id && a.Ativo && a.Shift == turno);
@@ -179,8 +166,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
                     turno
                 });
 
-            // Trocar de unidade precisa ser explícito: encerra a anterior daquele
-            // turno e abre outra, mantendo o histórico.
             if (!dto.EncerrarAlocacaoAtual)
                 return Conflict(new
                 {
@@ -193,9 +178,7 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
                     unidadeAtualNome = alocacaoDoTurno.Location.Name
                 });
 
-            // A anterior termina no dia em que a nova começa. Começar antes dela
-            // deixaria o fim antes do início, e o banco recusava com um erro genérico
-            // de "conflito de dados" que não dizia o que corrigir.
+            // A anterior termina no dia em que a nova começa: o fim não pode vir antes do início.
             if (inicio < alocacaoDoTurno.StartDate)
                 return BadRequest(new
                 {
@@ -254,12 +237,7 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         return Ok(Map(alocacao));
     }
 
-    // ── Encerrar alocação ─────────────────────────────────────────────────────
-    /// <summary>
-    /// Encerra a alocação ativa do estagiário na unidade. Com vários turnos por
-    /// aluno, <paramref name="turno"/> diz qual encerrar; sem ele, encerra a única
-    /// existente e recusa quando houver mais de uma.
-    /// </summary>
+    /// <summary>Com vários turnos, <paramref name="turno"/> diz qual encerrar; sem ele, só se houver uma.</summary>
     [HttpDelete("unidades-saude/{id}/estagiarios/{idEstagiario}")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<AlocacaoDto>> Encerrar(
@@ -289,8 +267,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
                         + "para este estagiário nesta unidade."
             });
 
-        // Sem turno informado e com mais de uma alocação ativa, encerrar qual delas
-        // seria um chute: a API pede o turno em vez de escolher por conta própria.
         if (alocacao == null)
             return BadRequest(new
             {
@@ -300,7 +276,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
                 turnos = ativas.Select(a => a.Shift).ToList()
             });
 
-        // Mesma trava da transferência: o fim não pode vir antes do início.
         var fim = dto?.DataFim ?? BrasiliaTime.Hoje;
         if (fim < alocacao.StartDate)
             return BadRequest(new
@@ -312,7 +287,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
                 inicioAlocacao = alocacao.StartDate
             });
 
-        // Encerrar preserva a linha: é o histórico de onde o aluno esteve.
         alocacao.Ativo = false;
         alocacao.EndDate = fim;
         if (!string.IsNullOrWhiteSpace(dto?.Observacao))
@@ -328,14 +302,9 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         return Ok(Map(alocacao));
     }
 
-    // ── Tela geral de alocações ───────────────────────────────────────────────
     [HttpGet("alocacoes")]
     [Authorize(Roles = Roles.Gestao)]
-    /// <summary>
-    /// Alocações filtradas, uma página por vez. A busca por nome ou RGM é feita
-    /// aqui, e não na tela: filtrar só a página carregada escondia quem estava nas
-    /// outras.
-    /// </summary>
+    /// <summary>A busca é feita aqui: filtrar só a página carregada escondia quem estava nas outras.</summary>
     public async Task<ActionResult<AlocacoesPaginaDto>> GetTodas(
         [FromQuery] Guid? unidadeId,
         [FromQuery] Guid? estagiarioId,
@@ -391,12 +360,7 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         });
     }
 
-    /// <summary>
-    /// Unidade de um estagiário. O aluno só enxerga a própria — e não a altera.
-    ///
-    /// Com alocação por turno o aluno pode ter mais de uma; sem
-    /// <paramref name="turno"/>, devolve a do turno cadastrado dele.
-    /// </summary>
+    /// <summary>O aluno só enxerga a própria. Sem <paramref name="turno"/>, vale o turno cadastrado.</summary>
     [HttpGet("estagiarios/{id}/unidade")]
     public async Task<ActionResult<AlocacaoDto>> GetUnidadeDoEstagiario(Guid id, [FromQuery] string? turno = null)
     {
@@ -422,7 +386,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         return Ok(Map(alocacao));
     }
 
-    /// <summary>Todas as alocações ativas do estagiário, uma por turno.</summary>
     [HttpGet("estagiarios/{id}/unidades")]
     public async Task<ActionResult<List<AlocacaoDto>>> GetUnidadesDoEstagiario(Guid id)
     {
@@ -441,7 +404,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         return Ok(ativas.Select(Map));
     }
 
-    /// <summary>Histórico de alocações de um estagiário.</summary>
     [HttpGet("estagiarios/{id}/alocacoes")]
     public async Task<ActionResult<List<AlocacaoDto>>> GetHistorico(Guid id)
     {
@@ -461,7 +423,6 @@ public class AlocacoesController(AppDbContext db, ILogger<AlocacoesController> l
         return Ok(alocacoes.Select(Map));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
     private Guid UsuarioAtual() => Guid.Parse(
         User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub")!);
 

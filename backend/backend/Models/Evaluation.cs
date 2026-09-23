@@ -1,3 +1,5 @@
+using EstagioCheck.API.Services;
+
 namespace EstagioCheck.API.Models;
 
 public class Evaluation
@@ -13,9 +15,8 @@ public class Evaluation
     public short PlanningScore { get; set; }
 
     public string? Comment { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = BrasiliaTime.Agora;
 
-    // Navigation
     public ApplicationUser Student { get; set; } = null!;
     public ApplicationUser Preceptor { get; set; } = null!;
     public RotationSchedule? Schedule { get; set; }

@@ -8,11 +8,7 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// Aluno em duas turmas — estágio na UBS pela manhã e PIC às quartas à tarde.
-/// O relatório mostra cada turma com os próprios registros e pendências; o
-/// certificado é decidido pelo total do aluno, com a conta do certificado.
-/// </summary>
+/// <summary>Cada turma mostra os próprios registros; o certificado é decidido pelo total do aluno.</summary>
 public class RelatorioPorTurmaTests
 {
     private sealed record Cenario(
@@ -54,8 +50,8 @@ public class RelatorioPorTurmaTests
 
         db.AddRange(aluno, ubs, campus, turmaEstagio, turmaPic, estagio, pic);
         db.AddRange(
-            new GroupMembership { StudentId = aluno.Id, GroupId = turmaEstagio.Id, CreatedAt = DateTime.UtcNow.AddDays(-60) },
-            new GroupMembership { StudentId = aluno.Id, GroupId = turmaPic.Id, CreatedAt = DateTime.UtcNow.AddDays(-59) });
+            new GroupMembership { StudentId = aluno.Id, GroupId = turmaEstagio.Id, CreatedAt = BrasiliaTime.Agora.AddDays(-60) },
+            new GroupMembership { StudentId = aluno.Id, GroupId = turmaPic.Id, CreatedAt = BrasiliaTime.Agora.AddDays(-59) });
 
         Turno(db, aluno, estagio, segunda, 7, 13);
         Turno(db, aluno, estagio, quarta, 7, 13);
@@ -95,7 +91,7 @@ public class RelatorioPorTurmaTests
         var estagio = linha.Turmas.Single(t => t.GroupId == c.TurmaEstagio.Id);
         var pic = linha.Turmas.Single(t => t.GroupId == c.TurmaPic.Id);
 
-        // Cada turma com os próprios registros — antes as duas repetiam o total do aluno.
+        // Cada turma com os próprios registros.
         Assert.Equal(12, estagio.Hours);
         Assert.Equal(4, pic.Hours);
         Assert.Equal(Turnos.Manha, estagio.Shift);
@@ -126,7 +122,6 @@ public class RelatorioPorTurmaTests
         Assert.Equal(100, linha.ProgressPercent);
         Assert.True(linha.Turmas.Single(t => t.GroupId == c.TurmaPic.Id).ProgressPercent < 100);
 
-        // O relatório e o certificado usam a mesma conta.
         var certificado = await new CertificateService(c.Db).ObterAsync(c.Aluno.Id);
         Assert.Equal(linha.Hours, certificado!.CompletedHours);
         Assert.True(certificado.Eligible);
@@ -154,8 +149,7 @@ public class RelatorioPorTurmaTests
         var c = await MontarAsync();
         using var _ = c.Db;
 
-        // Pareando só por dia, a entrada da manhã de quarta casava com a primeira
-        // saída do dia e o turno do PIC não contava: 12 h em vez de 16 h.
+        // Pareando só por dia, o turno do PIC não contava: 12 h em vez de 16 h.
         var certificado = await new CertificateService(c.Db).ObterAsync(c.Aluno.Id);
 
         Assert.Equal(16, certificado!.CompletedHours);

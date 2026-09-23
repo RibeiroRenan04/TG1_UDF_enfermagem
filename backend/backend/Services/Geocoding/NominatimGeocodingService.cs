@@ -6,22 +6,14 @@ using Microsoft.Extensions.Options;
 namespace EstagioCheck.API.Services.Geocoding;
 
 /// <summary>
-/// Geocodificação pelo Nominatim/OpenStreetMap.
-///
-/// O Nominatim público é um serviço gratuito e de baixa capacidade, mantido por
-/// doação. A política de uso exige identificação por User-Agent e no máximo uma
-/// requisição por segundo, sem paralelismo. Esta classe garante isso na origem:
-/// um semáforo serializa as chamadas do processo inteiro e o intervalo mínimo é
-/// respeitado antes de cada requisição, independentemente de quem chamou.
+/// A política do Nominatim público exige User-Agent e no máximo 1 requisição/s, sem paralelismo:
+/// um semáforo serializa as chamadas do processo inteiro e o intervalo é respeitado na origem.
 /// </summary>
 public class NominatimGeocodingService : IGeocodingService
 {
     public const string HttpClientName = "Nominatim";
 
-    /// <summary>
-    /// Serializa as requisições ao Nominatim em todo o processo. É estático de
-    /// propósito: a política é "uma requisição por vez", não "uma por instância".
-    /// </summary>
+    // Estático: a política é "uma requisição por vez" no processo, não por instância.
     private static readonly SemaphoreSlim Portao = new(1, 1);
     private static DateTime _ultimaRequisicaoUtc = DateTime.MinValue;
 
@@ -59,8 +51,7 @@ public class NominatimGeocodingService : IGeocodingService
             }
             catch (GeocodingException ex) when (ex.LimiteExcedido && tentativa < _options.MaxRetries)
             {
-                // 429 significa que estamos pressionando demais o serviço. Uma espera
-                // longa é o comportamento correto — insistir rápido só piora.
+                // 429: espera longa — insistir rápido só piora.
                 tentativa++;
                 var espera = TimeSpan.FromSeconds(_options.RetryAfterSecondsDefault);
                 _logger.LogWarning(
@@ -70,7 +61,6 @@ public class NominatimGeocodingService : IGeocodingService
             }
             catch (GeocodingException) when (tentativa < _options.MaxRetries)
             {
-                // Falha temporária de rede/timeout: uma nova tentativa curta, sem insistência.
                 tentativa++;
                 _logger.LogWarning(
                     "Falha temporária ao consultar o Nominatim. Tentativa {Tentativa}/{Max}.",
@@ -80,7 +70,6 @@ public class NominatimGeocodingService : IGeocodingService
         }
     }
 
-    // ── Requisição, com o intervalo mínimo garantido ──────────────────────────
     private async Task<List<NominatimPlace>> ConsultarAsync(string address, CancellationToken ct)
     {
         await Portao.WaitAsync(ct);
@@ -156,13 +145,7 @@ public class NominatimGeocodingService : IGeocodingService
         return $"/search?{string.Join("&", query)}";
     }
 
-    // ── Escolha do resultado ──────────────────────────────────────────────────
-    /// <summary>
-    /// O primeiro resultado do Nominatim nem sempre é o certo: uma busca por
-    /// "UBS 1" pode devolver a cidade inteira. Preferimos o resultado mais
-    /// específico e marcamos como duvidoso o que for genérico demais para servir
-    /// de referência a um geofence de poucas centenas de metros.
-    /// </summary>
+    /// <summary>O primeiro resultado nem sempre é o certo ("UBS 1" pode devolver a cidade): prefere o mais específico.</summary>
     private GeocodingResult? Interpretar(List<NominatimPlace> lugares, string enderecoConsultado)
     {
         if (lugares.Count == 0)
@@ -218,7 +201,6 @@ public class NominatimGeocodingService : IGeocodingService
 
     private static bool SemNumero(string endereco) => !endereco.Any(char.IsDigit);
 
-    // ── Contrato do JSON do Nominatim ─────────────────────────────────────────
     private class NominatimPlace
     {
         [JsonPropertyName("lat")] public string? Lat { get; set; }

@@ -11,16 +11,7 @@ using System.Security.Claims;
 
 namespace EstagioCheck.API.Controllers;
 
-/// <summary>
-/// Unidades de saúde onde o estágio acontece.
-///
-/// Opera sobre a mesma tabela usada pelo geofence do check-in ("Locais"): as
-/// coordenadas cadastradas aqui são as que validam a presença do aluno.
-///
-/// Leitura liberada para todos os autenticados; escrita (cadastro, importação,
-/// geocodificação, coordenadas) exclusiva do professor — a coordenadora consulta
-/// e não altera.
-/// </summary>
+/// <summary>Leitura para todos os autenticados; escrita exclusiva do professor.</summary>
 [ApiController]
 [Route("api/unidades-saude")]
 [Authorize]
@@ -31,7 +22,6 @@ public class UnidadesSaudeController(
     GeocodingQueue fila,
     ILogger<UnidadesSaudeController> logger) : ControllerBase
 {
-    // ── Listagem ──────────────────────────────────────────────────────────────
     [HttpGet]
     public async Task<ActionResult<List<UnidadeSaudeDto>>> GetAll(
         [FromQuery] string? nome,
@@ -41,6 +31,9 @@ public class UnidadesSaudeController(
         [FromQuery] string? statusGeocodificacao)
     {
         var query = db.Locations.AsQueryable();
+
+        // O aluno só consulta locais de estágio vigentes.
+        if (User.IsInRole(Roles.Aluno)) ativo = true;
 
         if (!string.IsNullOrWhiteSpace(nome))
             query = query.Where(l => EF.Functions.ILike(l.Name, $"%{nome.Trim()}%"));
@@ -59,12 +52,7 @@ public class UnidadesSaudeController(
         return Ok(unidades.Select(u => Map(u, contagem.GetValueOrDefault(u.Id))));
     }
 
-    /// <summary>
-    /// Unidades cuja localização precisa de conferência — a tela de revisão manual.
-    /// </summary>
     [HttpGet("pendentes-revisao")]
-    // Revisão de coordenadas é trabalho da gestão — a tela já era restrita a ela,
-    // mas o endpoint respondia a qualquer usuário autenticado.
     [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<List<UnidadeSaudeDto>>> GetPendentesRevisao()
     {
@@ -95,14 +83,11 @@ public class UnidadesSaudeController(
         return Ok(Map(unidade, contagem.GetValueOrDefault(id)));
     }
 
-    // ── Cadastro manual ───────────────────────────────────────────────────────
     [HttpPost]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UnidadeSaudeDto>> Create([FromBody] CriarUnidadeSaudeDto dto)
     {
-        // Coordenada pela metade não localiza nada, e fora do intervalo (ou 0, 0)
-        // viraria uma unidade "confirmada" num lugar qualquer — com o raio do
-        // check-in medido a partir dali.
+        // Coordenada pela metade, fora do intervalo ou (0, 0) viraria unidade "confirmada" num lugar qualquer.
         if (dto.Latitude.HasValue != dto.Longitude.HasValue)
             return BadRequest(ErrosApi.Corpo(
                 "Informe latitude e longitude juntas, ou deixe as duas em branco para localizar pelo endereço.",
@@ -129,8 +114,7 @@ public class UnidadesSaudeController(
             Ativo = true
         };
 
-        // Coordenadas informadas na tela valem como definição manual e nunca são
-        // sobrescritas depois por uma geocodificação automática.
+        // Coordenada informada na tela é manual: nunca é sobrescrita pela geocodificação.
         if (dto.Latitude.HasValue && dto.Longitude.HasValue)
         {
             unidade.Latitude = dto.Latitude.Value;
@@ -180,8 +164,7 @@ public class UnidadesSaudeController(
         if (dto.Ativo.HasValue) unidade.Ativo = dto.Ativo.Value;
         unidade.UpdatedAt = BrasiliaTime.Agora;
 
-        // Endereço mudou → a coordenada antiga deixa de valer, a menos que tenha
-        // sido definida à mão: nesse caso quem decide é o administrador.
+        // Endereço mudou: a coordenada antiga deixa de valer, salvo se manual.
         if (unidade.EnderecoCompleto != enderecoAntes && !unidade.CoordenadaManual)
         {
             unidade.Latitude = 0;
@@ -202,10 +185,7 @@ public class UnidadesSaudeController(
         return Ok(Map(unidade, contagem.GetValueOrDefault(id)));
     }
 
-    /// <summary>
-    /// Desativa a unidade. Não apagamos o registro: rodízios, presenças e alocações
-    /// antigas apontam para ele e precisam continuar legíveis.
-    /// </summary>
+    /// <summary>Desativa sem apagar: rodízios, presenças e alocações antigas apontam para a unidade.</summary>
     [HttpDelete("{id}")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> Delete(Guid id)
@@ -229,7 +209,6 @@ public class UnidadesSaudeController(
         return NoContent();
     }
 
-    // ── Geocodificação ────────────────────────────────────────────────────────
     [HttpPost("{id}/geocodificar")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<GeocodificacaoRespostaDto>> Geocodificar(
@@ -256,11 +235,7 @@ public class UnidadesSaudeController(
         });
     }
 
-    /// <summary>
-    /// Prévia da localização de um endereço ainda não salvo — o botão "Buscar
-    /// localização" do cadastro manual. Passa pelo backend como todo o resto: o
-    /// frontend nunca fala com o Nominatim.
-    /// </summary>
+    /// <summary>Prévia da localização de um endereço ainda não salvo. O frontend nunca fala com o Nominatim.</summary>
     [HttpPost("prever-endereco")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<GeocodificacaoRespostaDto>> PreverEndereco(
@@ -294,7 +269,6 @@ public class UnidadesSaudeController(
         });
     }
 
-    /// <summary>Aprova ou corrige as coordenadas à mão, na tela de revisão.</summary>
     [HttpPut("{id}/coordenadas")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UnidadeSaudeDto>> DefinirCoordenadas(
@@ -322,7 +296,6 @@ public class UnidadesSaudeController(
         return Ok(Map(unidade, contagem.GetValueOrDefault(id)));
     }
 
-    // ── Importação ────────────────────────────────────────────────────────────
     [HttpPost("importar/preview")]
     [Authorize(Roles = Roles.Supervisor)]
     [RequestSizeLimit(PlanilhaUnidadesReader.MaxBytes)]
@@ -405,7 +378,6 @@ public class UnidadesSaudeController(
         });
     }
 
-    /// <summary>Andamento da geocodificação de um lote, para a barra de progresso.</summary>
     [HttpGet("importar/{loteId}/progresso")]
     [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<ImportacaoProgressoDto>> ProgressoImportacao(Guid loteId)
@@ -455,7 +427,6 @@ public class UnidadesSaudeController(
         });
     }
 
-    /// <summary>Modelo oficial da planilha, em CSV.</summary>
     [HttpGet("importar/modelo")]
     [Authorize(Roles = Roles.Gestao)]
     public IActionResult BaixarModelo()
@@ -472,7 +443,6 @@ public class UnidadesSaudeController(
         return File(System.Text.Encoding.UTF8.GetBytes(conteudo), "text/csv", "modelo-unidades-saude.csv");
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
     private async Task<Dictionary<Guid, int>> ContarEstagiariosAsync(List<Guid> unidadeIds)
     {
         if (unidadeIds.Count == 0) return [];

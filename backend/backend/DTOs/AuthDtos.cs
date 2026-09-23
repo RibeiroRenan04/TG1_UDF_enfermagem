@@ -23,33 +23,24 @@ public record AuthResponseDto(
     string Role,
     bool MustChangePassword = false,
     bool MustSetEmail = false,
-    /// <summary>
-    /// Perfis não-aluno precisam aceitar o termo de responsabilidade de acesso
-    /// (não compartilhar a senha e responder pelas ações feitas com a conta)
-    /// antes de usar o sistema.
-    /// </summary>
+    // Perfis não-aluno precisam aceitar o termo de responsabilidade antes de usar o sistema.
     bool MustAcceptTerms = false,
-    // Turma e turno do aluno: o menu lateral identifica a que turma ele pertence.
-    // GroupCode/GroupName trazem a turma principal; Groups, todas elas — o aluno
-    // pode cursar mais de um módulo de estágio no mesmo período.
+    // GroupCode/GroupName: turma principal; Groups: todas.
     string? GroupCode = null,
     string? GroupName = null,
     string? Shift = null,
     List<UserGroupDto>? Groups = null
 );
 
-// ── Termo de responsabilidade ─────────────────────────────────────────────────
 public record AcceptTermsDto(
     [Required] bool Accepted
 );
 
-// ── Primeiro Acesso ───────────────────────────────────────────────────────────
 public record FirstAccessDto(
     [Required, EmailAddress, MaxLength(255)] string Email,
     [Required, MinLength(6), MaxLength(100)] string NewPassword
 );
 
-// ── Esqueci a senha ───────────────────────────────────────────────────────────
 public record ForgotPasswordDto(
     [Required, EmailAddress, MaxLength(255)] string Email
 );

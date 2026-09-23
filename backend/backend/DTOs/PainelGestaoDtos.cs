@@ -1,9 +1,5 @@
 namespace EstagioCheck.API.DTOs;
 
-/// <summary>
-/// Painel do professor e da coordenadora: o que precisa de atenção hoje, a
-/// tendência de presença, quem está ficando para trás e o que falta configurar.
-/// </summary>
 public class PainelGestaoDto
 {
     public DateOnly Data { get; init; }
@@ -19,19 +15,16 @@ public class PainelGestaoDto
     public int IrregularidadesAguardandoProfessor { get; init; }
     public int IrregularidadesAguardandoPreceptor { get; init; }
 
-    /// <summary>Cadastro que impede o estágio de funcionar (turma sem rodízio, unidade sem localização…).</summary>
     public List<AlertaConfiguracaoDto> Configuracao { get; init; } = [];
 }
 
 public class PresencaHojeDto
 {
-    /// <summary>Turnos em que algum aluno deveria registrar ponto hoje.</summary>
     public int Esperados { get; init; }
     public int Registrados { get; init; }
     public int SemRegistro => Esperados - Registrados;
     public List<PresencaTurnoDto> PorTurno { get; init; } = [];
 
-    /// <summary>Quem ainda não registrou o check-in de hoje (os primeiros da lista).</summary>
     public List<AlunoSemRegistroDto> AlunosSemRegistro { get; init; } = [];
 }
 
@@ -61,13 +54,11 @@ public class AlunoSemRegistroDto
     public string? Turma { get; init; }
     public string? Turno { get; init; }
     public string? Unidade { get; init; }
-    /// <summary>No ranking do período: quantos turnos ficaram sem registro.</summary>
     public int Quantidade { get; init; }
 }
 
 public class ProgressoCargaDto
 {
-    /// <summary>Alunos por faixa de carga horária cumprida, da menor à maior.</summary>
     public List<FaixaProgressoDto> Faixas { get; init; } = [];
     public int Elegiveis { get; init; }
     /// <summary>Alunos ativos sem rodízio: não há carga exigida a comparar.</summary>

@@ -1,10 +1,6 @@
 namespace EstagioCheck.API.Models;
 
-/// <summary>
-/// O que o aluno deve fazer em um dia de estágio. É este valor que decide como o
-/// ponto é validado: presencial confere a localização, remoto confere o código da
-/// atividade, e sem atividade não gera obrigação de ponto.
-/// </summary>
+/// <summary>Decide a validação do ponto: presencial → localização, remoto → código, sem atividade → nada.</summary>
 public static class ModoAtividade
 {
     public const string Presencial = "presencial";
@@ -32,16 +28,12 @@ public static class ModoAtividade
     };
 }
 
-/// <summary>Como a presença do dia é comprovada.</summary>
 public static class ValidacaoPresenca
 {
-    /// <summary>Geofence: o aluno precisa estar dentro do raio da unidade.</summary>
     public const string Localizacao = "localizacao";
 
-    /// <summary>Código da atividade remota (e, quando houver, a tarefa).</summary>
     public const string Codigo = "codigo";
 
-    /// <summary>Não há ponto a registrar (feriado, recesso, fim de semana).</summary>
     public const string Nenhuma = "nenhuma";
 
     public static string De(string? modo) => ModoAtividade.Normalizar(modo) switch

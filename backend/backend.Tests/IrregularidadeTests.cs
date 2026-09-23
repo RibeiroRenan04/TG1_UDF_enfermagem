@@ -9,20 +9,13 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// Trava de duplicidade das irregularidades, definida na reunião de 06/09/2026:
-/// um ponto tem uma contestação por vez. Enquanto a atual não for NEGADA pelo
-/// professor, o aluno não abre outra para o mesmo ponto.
-///
-/// A ocorrência também carrega a data/hora exata do ponto contestado, que o
-/// painel exibe ao lado da data de abertura.
-/// </summary>
+/// <summary>Um ponto tem uma contestação por vez, até ela ser negada pelo professor.</summary>
 public class IrregularidadeTests
 {
     private static IrregularitiesController Montar(
         EstagioCheck.API.Data.AppDbContext db, Guid usuarioId, string papel = Roles.Aluno)
     {
-        var controller = new IrregularitiesController(db, new IrregularidadesPainelService(db));
+        var controller = new IrregularitiesController(db, new IrregularidadesPainelService(db), new EscopoPreceptorService(db));
         var identidade = new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, usuarioId.ToString()),
@@ -45,7 +38,6 @@ public class IrregularidadeTests
     private static CreateIrregularityDto Ocorrencia(Guid? pontoId, string descricao = "Cheguei atrasado por causa do transporte.") =>
         new("atraso", BrasiliaTime.Hoje, descricao, pontoId, null);
 
-    /// <summary>Aluno com um registro de ponto para contestar.</summary>
     private static async Task<(EstagioCheck.API.Data.AppDbContext db, ApplicationUser aluno, AttendanceRecord ponto)>
         ComPontoAsync()
     {
@@ -69,7 +61,6 @@ public class IrregularidadeTests
         return (db, aluno, ponto);
     }
 
-    // ── Trava de duplicidade ──────────────────────────────────────────────────
     [Fact]
     public async Task Segunda_ocorrencia_para_o_mesmo_ponto_e_recusada()
     {
@@ -96,7 +87,7 @@ public class IrregularidadeTests
 
         var primeira = Corpo(await Montar(db, aluno.Id).Create(Ocorrencia(ponto.Id)));
 
-        // O professor nega: é o que a reunião definiu como gatilho para reabrir.
+        // O professor nega: é o gatilho para reabrir.
         await Montar(db, professor.Id, Roles.Supervisor)
             .ProfessorDecision(primeira.Id, new ProfessorDecisionIrregularityDto(false, "Sem comprovação."));
 
@@ -167,7 +158,6 @@ public class IrregularidadeTests
         Assert.Single(db.PointIrregularities);
     }
 
-    // ── Dados do ponto contestado ─────────────────────────────────────────────
     [Fact]
     public async Task Ocorrencia_carrega_a_data_hora_exata_do_ponto()
     {

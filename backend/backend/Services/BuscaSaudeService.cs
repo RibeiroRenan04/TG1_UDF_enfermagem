@@ -7,10 +7,8 @@ using Microsoft.Extensions.Caching.Memory;
 namespace EstagioCheck.API.Services;
 
 /// <summary>
-/// Consulta unidades de saúde do DF (Busca Saúde) via API pública do CNES/OpenDataSUS.
-/// A API só permite filtrar por UF/município/tipo (não por nome) e devolve no máximo
-/// 20 registros por página, então paginamos a lista completa do DF, guardamos em cache
-/// e filtramos o nome aqui no servidor.
+/// Unidades do DF pela API pública do CNES. Ela não filtra por nome e devolve no máximo 20 por
+/// página: paginamos a lista completa, guardamos em cache e filtramos aqui.
 /// </summary>
 public class BuscaSaudeService(
     IHttpClientFactory httpClientFactory,
@@ -18,21 +16,17 @@ public class BuscaSaudeService(
     ILogger<BuscaSaudeService> logger)
 {
     private const string BaseUrl = "https://apidadosabertos.saude.gov.br/cnes/estabelecimentos";
-    // Código UF do Distrito Federal no IBGE/CNES.
     private const int CodigoUfDf = 53;
     // Tipo 2 = "CENTRO DE SAUDE/UNIDADE BASICA" (UBS) — equivalente ao Busca Saúde UBS da SES-DF.
     public const int TipoUbs = 2;
     // A API ignora limites acima de 20 por página.
     private const int PageSize = 40;
-    // Trava de segurança para o laço de paginação (70 páginas = 2800 unidades).
+    // 70 páginas = 2800 unidades.
     private const int MaxPages = 70;
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(6);
 
-    /// <summary>
-    /// Busca unidades de saúde do DF, opcionalmente filtrando por <paramref name="termo"/>
-    /// (nome ou endereço, sem diferenciar acentos/maiúsculas).
-    /// </summary>
+    /// <summary>Filtro por nome ou endereço, sem diferenciar acentos/maiúsculas.</summary>
     public async Task<List<BuscaSaudeEstabelecimentoDto>> BuscarAsync(
         string? termo = null,
         int tipoUnidade = TipoUbs,
@@ -52,7 +46,6 @@ public class BuscaSaudeService(
         return resultado.Take(max).ToList();
     }
 
-    /// <summary>Lista completa (em cache) das unidades do DF de um tipo, paginando a API do CNES.</summary>
     private async Task<List<BuscaSaudeEstabelecimentoDto>> ObterUnidadesDfAsync(int tipoUnidade)
     {
         var cacheKey = $"cnes_df_{tipoUnidade}";
@@ -80,14 +73,12 @@ public class BuscaSaudeService(
                     .Where(e => e.Latitude.HasValue && e.Longitude.HasValue)
                     .Select(Map));
 
-                // Última página: veio menos que o tamanho cheio.
                 if (estabelecimentos.Count < PageSize) break;
             }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Erro ao consultar API CNES (Busca Saúde DF).");
-            // Se já carregamos algo, devolvemos o parcial; senão propaga.
             if (unidades.Count == 0) throw;
         }
 
@@ -119,7 +110,6 @@ public class BuscaSaudeService(
         return string.Join(", ", partes);
     }
 
-    /// <summary>Remove acentos e normaliza para maiúsculas para comparação tolerante.</summary>
     private static string Normalizar(string texto)
     {
         var decomposto = texto.Trim().ToUpperInvariant().Normalize(NormalizationForm.FormD);
@@ -135,7 +125,6 @@ public class BuscaSaudeService(
         PropertyNameCaseInsensitive = true
     };
 
-    // ── Modelos internos de deserialização ────────────────────────────────────
     private sealed class CnesRoot
     {
         [JsonPropertyName("estabelecimentos")]
@@ -179,7 +168,6 @@ public class BuscaSaudeService(
     }
 }
 
-/// <summary>DTO de retorno para o frontend.</summary>
 public record BuscaSaudeEstabelecimentoDto(
     string CodigoCnes,
     string Nome,

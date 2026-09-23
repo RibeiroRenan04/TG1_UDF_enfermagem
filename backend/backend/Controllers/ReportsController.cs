@@ -14,13 +14,8 @@ namespace EstagioCheck.API.Controllers;
 public class ReportsController(AppDbContext db, PendenciasService pendenciasService) : ControllerBase
 {
     /// <summary>
-    /// Relatório de carga horária: uma linha por aluno, com o detalhe de cada turma.
-    ///
-    /// Antes havia uma linha por vínculo, e todas repetiam as horas e as pendências
-    /// do aluno inteiro contra a carga de uma turma só — o PIC de 60 h aparecia
-    /// "concluído" com as 191 h do estágio da manhã. Agora cada turma conta só os
-    /// registros dos rodízios dela, e o certificado é decidido pelo total do aluno,
-    /// com a mesma conta de horas aprovadas do certificado.
+    /// Uma linha por aluno, com o detalhe de cada turma: cada turma conta só os registros dos
+    /// rodízios dela, e o certificado é decidido pelo total do aluno.
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<List<ReportRowDto>>> Get()
@@ -33,22 +28,21 @@ public class ReportsController(AppDbContext db, PendenciasService pendenciasServ
 
         var alunoIds = members.Select(m => m.StudentId).Distinct().ToList();
 
-        // De que turma é cada registro: pelo rodízio e, no ponto de atividade remota
-        // sem rodízio, pela turma da atividade. Inclui rodízios de turmas das quais o
-        // aluno já saiu — esses registros ficam fora das turmas atuais.
+        // Turma de cada registro: pelo rodízio ou, no ponto remoto sem rodízio, pela turma da atividade.
         var turmaDaEscala = await db.RotationSchedules.AsNoTracking()
+            .Select(s => new { s.Id, s.GroupId })
             .ToDictionaryAsync(s => s.Id, s => s.GroupId);
         var turmaDaAtividade = await db.RemoteActivities.AsNoTracking()
+            .Select(a => new { a.Id, a.GroupId })
             .ToDictionaryAsync(a => a.Id, a => a.GroupId);
 
         var registrosPorAluno = (await db.AttendanceRecords.AsNoTracking()
-                .Where(r => alunoIds.Contains(r.StudentId))
+                // O relatório só conta aprovados (horas e total) e irregulares; os pendentes ficam no banco.
+                .Where(r => alunoIds.Contains(r.StudentId) && (r.Status == "aprovado" || r.Status == "irregular"))
                 .Select(r => new { r.StudentId, r.Type, r.Status, r.RecordedAt, r.ScheduleId, r.RemoteActivityId })
                 .ToListAsync())
             .ToLookup(r => r.StudentId);
 
-        // Pendências de todos os alunos de uma vez: calculadas aluno por aluno, o
-        // relatório não terminava de carregar com a faculdade inteira.
         var pendenciasPorAluno = await pendenciasService.CalcularLoteAsync(alunoIds);
 
         var linhas = new List<ReportRowDto>();
@@ -102,7 +96,6 @@ public class ReportsController(AppDbContext db, PendenciasService pendenciasServ
                 };
             }).ToList();
 
-            // O total é a conta do certificado, sobre todos os registros do aluno.
             var total = CertificateService.CalcularHorasAprovadas(registros.Select(r => r.Hora));
             var exigidasTotal = detalhe.Sum(t => t.Required);
             var somaTurmas = registros

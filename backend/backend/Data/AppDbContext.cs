@@ -23,13 +23,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RemoteActivityParticipation> RemoteActivityParticipations => Set<RemoteActivityParticipation>();
     public DbSet<CalendarException> CalendarExceptions => Set<CalendarException>();
 
-    // As propriedades das entidades permanecem em inglês; o mapeamento aponta para
-    // o schema do banco em português (tabelas e colunas).
+    // Entidades em inglês, schema do banco em português.
     protected override void OnModelCreating(ModelBuilder mb)
     {
         base.OnModelCreating(mb);
 
-        // ── ApplicationUser → Usuarios ────────────────────────────────────────
         mb.Entity<ApplicationUser>(e =>
         {
             e.ToTable("Usuarios");
@@ -56,7 +54,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.Rgm).IsUnique().HasFilter("\"Rgm\" IS NOT NULL");
         });
 
-        // ── PasswordResetCode → CodigosRedefinicaoSenha ───────────────────────
         mb.Entity<PasswordResetCode>(e =>
         {
             e.ToTable("CodigosRedefinicaoSenha");
@@ -69,7 +66,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => new { x.Email, x.Code });
         });
 
-        // ── StudentSemesterHistory → HistoricoSemestreEstudante ───────────────
         mb.Entity<StudentSemesterHistory>(e =>
         {
             e.ToTable("HistoricoSemestreEstudante");
@@ -84,7 +80,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ── Location → Locais ─────────────────────────────────────────────────
         mb.Entity<Location>(e =>
         {
             e.ToTable("Locais");
@@ -97,7 +92,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.ShiftStart).HasColumnName("InicioTurno").HasMaxLength(5);
             e.Property(x => x.ShiftEnd).HasColumnName("FimTurno").HasMaxLength(5);
             e.Property(x => x.CodigoCnes).HasColumnName("CodigoCnes").HasMaxLength(20);
-            // ── Cadastro da unidade de saúde ──
             e.Property(x => x.Tipo).HasColumnName("Tipo").HasMaxLength(100);
             e.Property(x => x.Numero).HasColumnName("Numero").HasMaxLength(20);
             e.Property(x => x.Complemento).HasColumnName("Complemento").HasMaxLength(200);
@@ -107,7 +101,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Cep).HasColumnName("CEP").HasMaxLength(10);
             e.Property(x => x.Telefone).HasColumnName("Telefone").HasMaxLength(30);
             e.Property(x => x.Ativo).HasColumnName("Ativo").HasDefaultValue(true);
-            // ── Geocodificação ──
             e.Property(x => x.OrigemCoordenadas).HasColumnName("OrigemCoordenadas").HasMaxLength(30);
             e.Property(x => x.StatusGeocodificacao).HasColumnName("StatusGeocodificacao").HasMaxLength(30);
             e.Property(x => x.EnderecoGeocodificado).HasColumnName("EnderecoGeocodificado");
@@ -116,13 +109,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.LoteImportacao).HasColumnName("LoteImportacao");
             e.Property(x => x.CreatedAt).HasColumnName("CriadoEm");
             e.Property(x => x.UpdatedAt).HasColumnName("AtualizadoEm");
-            // Propriedades calculadas não têm coluna.
             e.Ignore(x => x.EnderecoCompleto);
             e.Ignore(x => x.CoordenadaManual);
             e.Ignore(x => x.TemCoordenadas);
             e.Ignore(x => x.LocalizacaoConfirmada);
             e.HasIndex(x => x.CodigoCnes).IsUnique().HasFilter("\"CodigoCnes\" IS NOT NULL");
-            // Índices dos filtros da tela de unidades.
             e.HasIndex(x => x.Name);
             e.HasIndex(x => x.Cep);
             e.HasIndex(x => x.Cidade);
@@ -130,7 +121,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.StatusGeocodificacao);
         });
 
-        // ── StudentGroup → GruposEstudantes ───────────────────────────────────
         mb.Entity<StudentGroup>(e =>
         {
             e.ToTable("GruposEstudantes");
@@ -143,7 +133,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.Code).IsUnique();
         });
 
-        // ── GroupMembership → MembrosGrupo ────────────────────────────────────
         mb.Entity<GroupMembership>(e =>
         {
             e.ToTable("MembrosGrupo");
@@ -152,9 +141,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.StudentId).HasColumnName("IdEstudante");
             e.Property(x => x.GroupId).HasColumnName("IdGrupo");
             e.Property(x => x.CreatedAt).HasColumnName("CriadoEm");
-            // O aluno pode estar em mais de uma turma (dois módulos de estágio no
-            // mesmo período, reposição de carga horária): o que não se repete é o
-            // par aluno + turma.
+            // O que não se repete é o par aluno + turma.
             e.HasIndex(x => new { x.StudentId, x.GroupId }).IsUnique();
             e.HasIndex(x => x.StudentId);
             e.HasOne(x => x.Student)
@@ -167,7 +154,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ── RotationSchedule → EscalasRodizio ─────────────────────────────────
         mb.Entity<RotationSchedule>(e =>
         {
             e.ToTable("EscalasRodizio");
@@ -199,7 +185,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .IsRequired(false);
         });
 
-        // ── AttendanceRecord → RegistrosPresenca ──────────────────────────────
         mb.Entity<AttendanceRecord>(e =>
         {
             e.ToTable("RegistrosPresenca");
@@ -245,7 +230,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .IsRequired(false);
         });
 
-        // ── Evaluation → Avaliacoes ───────────────────────────────────────────
         mb.Entity<Evaluation>(e =>
         {
             e.ToTable("Avaliacoes");
@@ -274,7 +258,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .IsRequired(false);
         });
 
-        // ── FormativeFollowup → AcompanhamentosFormativos ─────────────────────
         mb.Entity<FormativeFollowup>(e =>
         {
             e.ToTable("AcompanhamentosFormativos");
@@ -290,7 +273,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Semester).HasColumnName("Semestre");
             e.Property(x => x.FollowUpStart).HasColumnName("InicioAcompanhamento");
             e.Property(x => x.FollowUpEnd).HasColumnName("FimAcompanhamento");
-            // Dimensões comportamentais (nome de propriedade == nome de coluna).
             e.Property(x => x.Status).HasColumnName("Status").HasMaxLength(30).HasDefaultValue("rascunho");
             e.Property(x => x.PreceptorSignedAt).HasColumnName("AssinadoPreceptorEm");
             e.Property(x => x.PreceptorSignedName).HasColumnName("NomeAssinaturaPreceptor");
@@ -327,7 +309,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .IsRequired(false);
         });
 
-        // ── PointIrregularity → Irregularidades ───────────────────────────────
         mb.Entity<PointIrregularity>(e =>
         {
             e.ToTable("Irregularidades");
@@ -376,7 +357,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .IsRequired(false);
         });
 
-        // ── StudentAllocation → AlocacoesEstagiarios ──────────────────────────
         mb.Entity<StudentAllocation>(e =>
         {
             e.ToTable("AlocacoesEstagiarios");
@@ -395,9 +375,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.UpdatedAt).HasColumnName("AtualizadoEm");
             e.HasIndex(x => x.LocationId);
             e.HasIndex(x => x.StudentId);
-            // Garante no banco a regra de uma alocação ativa por estagiário e turno:
-            // manhã em uma unidade e tarde em outra é permitido; o mesmo turno duas
-            // vezes, não.
+            // Uma alocação ativa por estagiário e turno.
             e.HasIndex(x => new { x.StudentId, x.Shift })
              .IsUnique()
              .HasFilter("\"Ativo\" = TRUE")
@@ -417,7 +395,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .IsRequired(false);
         });
 
-        // ── GeocodingCacheEntry → GeocodificacaoCache ─────────────────────────
         mb.Entity<GeocodingCacheEntry>(e =>
         {
             e.ToTable("GeocodificacaoCache");
@@ -437,7 +414,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.EnderecoNormalizado).IsUnique();
         });
 
-        // ── RotationDaySchedule → DiasRodizio ─────────────────────────────────
         mb.Entity<RotationDaySchedule>(e =>
         {
             e.ToTable("DiasRodizio");
@@ -450,7 +426,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.LocationId).HasColumnName("IdLocal");
             e.Property(x => x.Notes).HasColumnName("Observacoes");
             e.Property(x => x.CreatedAt).HasColumnName("CriadoEm");
-            // Um rodízio tem, no máximo, uma regra por dia da semana.
             e.HasIndex(x => new { x.ScheduleId, x.DayOfWeek }).IsUnique();
             e.HasOne(x => x.Schedule)
              .WithMany(s => s.Days)
@@ -463,7 +438,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .IsRequired(false);
         });
 
-        // ── RemoteActivity → AtividadesRemotas ────────────────────────────────
         mb.Entity<RemoteActivity>(e =>
         {
             e.ToTable("AtividadesRemotas");
@@ -487,8 +461,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.UpdatedAt).HasColumnName("AtualizadoEm");
             e.Ignore(x => x.InicioEm);
             e.Ignore(x => x.FimEm);
-            // O código identifica a atividade na hora do registro: não pode repetir
-            // enquanto duas atividades estiverem abertas ao mesmo tempo.
+            // O código não pode repetir no mesmo dia.
             e.HasIndex(x => new { x.PresenceCode, x.ActivityDate }).IsUnique();
             e.HasIndex(x => x.ActivityDate);
             e.HasOne(x => x.Group)
@@ -506,7 +479,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ── RemoteActivityParticipation → ParticipacoesAtividadeRemota ────────
         mb.Entity<RemoteActivityParticipation>(e =>
         {
             e.ToTable("ParticipacoesAtividadeRemota");
@@ -519,7 +491,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.TaskResponse).HasColumnName("RespostaTarefa");
             e.Property(x => x.AttendanceRecordId).HasColumnName("IdPresenca");
             e.Property(x => x.CreatedAt).HasColumnName("CriadoEm");
-            // O código vale uma única vez por aluno.
             e.HasIndex(x => new { x.RemoteActivityId, x.StudentId }).IsUnique();
             e.HasOne(x => x.RemoteActivity)
              .WithMany(a => a.Participations)
@@ -531,7 +502,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ── CalendarException → ExcecoesCalendario ────────────────────────────
         mb.Entity<CalendarException>(e =>
         {
             e.ToTable("ExcecoesCalendario");

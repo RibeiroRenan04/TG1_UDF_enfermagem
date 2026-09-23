@@ -9,12 +9,7 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// O aluno pode cursar mais de um rodízio ao mesmo tempo — dois módulos de
-/// estágio em turnos diferentes, ou uma turma de reposição. Estes testes fixam o
-/// que isso implica: vincular a uma turma nova não desfaz a anterior, a agenda
-/// impossível continua recusada e a programação do dia enxerga as duas turmas.
-/// </summary>
+/// <summary>Turma nova não desfaz a anterior, agenda impossível é recusada e a programação enxerga as duas.</summary>
 public class MultiplasTurmasTests
 {
     private static GroupsController MontarGrupos(AppDbContext db) =>
@@ -217,7 +212,6 @@ public class MultiplasTurmasTests
     [Fact]
     public async Task Lote_grava_os_validos_e_devolve_cada_recusado_com_o_motivo()
     {
-        // Antes: uma requisição por aluno, e a primeira recusa interrompia o resto.
         using var db = TestSupport.NovoContexto();
         var manha = new StudentGroup { Code = "T01", Name = "Saúde Coletiva" };
         var outraManha = new StudentGroup { Code = "T02", Name = "Reposição" };

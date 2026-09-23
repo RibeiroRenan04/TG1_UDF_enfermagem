@@ -9,19 +9,14 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// O ponto só é aceito dentro do raio de uma unidade com localização confirmada.
-/// Cada teste fecha uma brecha encontrada: ponto sem unidade passava sem checagem
-/// de distância; unidade sem coordenadas recusava o aluno com "você está a
-/// 5.000 km"; e a precisão informada pelo celular, sem limite, ampliava o raio.
-/// </summary>
+/// <summary>O ponto só é aceito dentro do raio de uma unidade com localização confirmada.</summary>
 public class RaioCheckInTests
 {
     private const double Lat = -15.7401, Lon = -47.8829;
 
     private static AttendanceController Montar(AppDbContext db, Guid alunoId)
     {
-        var controller = new AttendanceController(db, new GeoService(), new ProgramacaoService(db));
+        var controller = new AttendanceController(db, new GeoService(), new ProgramacaoService(db), new EscopoPreceptorService(db));
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
@@ -96,7 +91,6 @@ public class RaioCheckInTests
 
         var r = await Montar(db, aluno.Id).Create(Ponto(unidade.Id));
 
-        // Antes: "fora_do_raio", "você está a 5.000 km".
         Assert.Equal("unidade_sem_localizacao", Codigo(r.Result));
     }
 

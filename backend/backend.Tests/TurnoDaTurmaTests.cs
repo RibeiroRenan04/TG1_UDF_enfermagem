@@ -3,10 +3,7 @@ using Xunit;
 
 namespace EstagioCheck.API.Tests;
 
-/// <summary>
-/// O turno exibido ao lado da turma vem dos rodízios dela, e não do cadastro do
-/// aluno — o PIC da tarde aparecia como "(Manhã)" para o aluno da manhã.
-/// </summary>
+/// <summary>O turno exibido ao lado da turma vem dos rodízios dela, não do cadastro do aluno.</summary>
 public class TurnoDaTurmaTests
 {
     private static StudentGroup Turma(params string[] turnos)

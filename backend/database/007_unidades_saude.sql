@@ -1,25 +1,14 @@
--- =============================================================================
---  Migration 007 – Módulo de Unidades de Saúde
---
---  Estende a tabela "Locais" com o cadastro completo da unidade de saúde e os
---  campos de geocodificação, e cria as tabelas de alocação de estagiários e de
---  cache de geocodificação.
---
---  POR QUE "Locais" E NÃO UMA TABELA NOVA:
---  "Locais" já é a unidade de saúde do sistema — é dela que o check-in lê as
---  coordenadas para validar a presença do aluno (geofence). Criar uma segunda
---  tabela de unidades produziria duas fontes de coordenadas que divergiriam com
---  o tempo, e o check-in continuaria lendo a antiga. Estendendo "Locais", as
---  unidades já cadastradas e os rodízios existentes seguem valendo.
---
---  O script é idempotente: pode ser executado mais de uma vez sem quebrar.
--- =============================================================================
+-- 007 – módulo de Unidades de Saúde: estende "Locais" (é dela que o check-in lê as coordenadas;
+-- uma segunda tabela divergiria) e cria alocações de estagiários e cache de geocodificação.
 
 BEGIN;
 
--- ─────────────────────────────────────────────────────────────────────────────
---  1) Cadastro da unidade de saúde e campos de geocodificação em "Locais"
--- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS "MigracoesAplicadas" (
+    "Nome"       TEXT        PRIMARY KEY,
+    "AplicadaEm" TIMESTAMP   NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo')
+);
+
+-- 1) Cadastro da unidade de saúde e campos de geocodificação em "Locais"
 ALTER TABLE "Locais"
     ADD COLUMN IF NOT EXISTS "Tipo"                  VARCHAR(100)  NULL,
     ADD COLUMN IF NOT EXISTS "Numero"                VARCHAR(20)   NULL,
@@ -36,7 +25,7 @@ ALTER TABLE "Locais"
     ADD COLUMN IF NOT EXISTS "PrecisaoLocalizacao"   VARCHAR(100)  NULL,
     ADD COLUMN IF NOT EXISTS "GeocodificadoEm"       TIMESTAMP     NULL,
     ADD COLUMN IF NOT EXISTS "LoteImportacao"        UUID          NULL,
-    ADD COLUMN IF NOT EXISTS "AtualizadoEm"          TIMESTAMP     NOT NULL DEFAULT NOW();
+    ADD COLUMN IF NOT EXISTS "AtualizadoEm"          TIMESTAMP     NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo');
 
 -- Valores controlados, para o banco recusar um status escrito errado.
 ALTER TABLE "Locais" DROP CONSTRAINT IF EXISTS "CK_Locais_StatusGeocodificacao";
@@ -50,7 +39,6 @@ ALTER TABLE "Locais"
     ADD CONSTRAINT "CK_Locais_OrigemCoordenadas"
     CHECK ("OrigemCoordenadas" IS NULL OR "OrigemCoordenadas" IN ('NOMINATIM', 'MANUAL', 'OUTRO'));
 
--- Índices dos filtros da tela de unidades.
 CREATE INDEX IF NOT EXISTS "IX_Locais_Nome"                 ON "Locais" ("Nome");
 CREATE INDEX IF NOT EXISTS "IX_Locais_CEP"                  ON "Locais" ("CEP");
 CREATE INDEX IF NOT EXISTS "IX_Locais_Cidade"               ON "Locais" ("Cidade");
@@ -58,12 +46,7 @@ CREATE INDEX IF NOT EXISTS "IX_Locais_Ativo"                ON "Locais" ("Ativo"
 CREATE INDEX IF NOT EXISTS "IX_Locais_StatusGeocodificacao" ON "Locais" ("StatusGeocodificacao");
 CREATE INDEX IF NOT EXISTS "IX_Locais_LoteImportacao"       ON "Locais" ("LoteImportacao");
 
--- ─────────────────────────────────────────────────────────────────────────────
---  2) Situação das unidades já cadastradas
---     Quem já tem coordenada foi cadastrada à mão (ou veio do CNES) antes deste
---     módulo: marcamos como MANUAL para que nenhuma importação futura sobrescreva
---     uma coordenada que já está validando check-in hoje.
--- ─────────────────────────────────────────────────────────────────────────────
+-- 2) Unidades que já tinham coordenada viram MANUAL, para nenhuma importação sobrescrevê-las
 UPDATE "Locais"
 SET "StatusGeocodificacao" = 'sucesso',
     "OrigemCoordenadas"    = COALESCE("OrigemCoordenadas", 'MANUAL')
@@ -80,14 +63,7 @@ SET "Cidade" = COALESCE("Cidade", 'Brasília'),
     "UF"     = COALESCE("UF", 'DF')
 WHERE "Cidade" IS NULL OR "UF" IS NULL;
 
--- ─────────────────────────────────────────────────────────────────────────────
---  3) Alocação de estagiários às unidades
---
---     Convive com o rodízio da turma: o rodízio define a escala do grupo, esta
---     tabela registra aluno a aluno em que unidade ele está e desde quando.
---     Trocar de unidade encerra a alocação (DataFim) e cria outra — o histórico
---     é preservado, nunca sobrescrito.
--- ─────────────────────────────────────────────────────────────────────────────
+-- 3) Alocação de estagiários (trocar de unidade encerra a alocação e cria outra)
 CREATE TABLE IF NOT EXISTS "AlocacoesEstagiarios" (
     "IdAlocacao"   UUID        PRIMARY KEY,
     "IdUnidade"    UUID        NOT NULL,
@@ -97,8 +73,8 @@ CREATE TABLE IF NOT EXISTS "AlocacoesEstagiarios" (
     "Ativo"        BOOLEAN     NOT NULL DEFAULT TRUE,
     "Observacao"   TEXT        NULL,
     "CriadoPorId"  UUID        NULL,
-    "CriadoEm"     TIMESTAMP   NOT NULL DEFAULT NOW(),
-    "AtualizadoEm" TIMESTAMP   NOT NULL DEFAULT NOW(),
+    "CriadoEm"     TIMESTAMP   NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
+    "AtualizadoEm" TIMESTAMP   NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
 
     CONSTRAINT "FK_Alocacoes_Unidade"
         FOREIGN KEY ("IdUnidade")    REFERENCES "Locais"("IdLocal")     ON DELETE RESTRICT,
@@ -122,13 +98,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "UX_Alocacoes_EstagiarioAtivo"
     ON "AlocacoesEstagiarios" ("IdEstagiario")
     WHERE "Ativo" = TRUE;
 
--- ─────────────────────────────────────────────────────────────────────────────
---  4) Cache de geocodificação
---
---     Evita consultar o Nominatim duas vezes pelo mesmo endereço. Reimportar a
---     mesma planilha não deve gerar tráfego novo no serviço público. Os "não
---     encontrado" também entram: não valem uma segunda consulta automática.
--- ─────────────────────────────────────────────────────────────────────────────
+-- 4) Cache de geocodificação (inclusive os "não encontrado")
 CREATE TABLE IF NOT EXISTS "GeocodificacaoCache" (
     "Id"                  UUID              PRIMARY KEY,
     "EnderecoNormalizado" VARCHAR(500)      NOT NULL,
@@ -138,16 +108,14 @@ CREATE TABLE IF NOT EXISTS "GeocodificacaoCache" (
     "Precisao"            VARCHAR(100)      NULL,
     "Status"              VARCHAR(30)       NOT NULL DEFAULT 'pendente',
     "Provedor"            VARCHAR(30)       NOT NULL DEFAULT 'NOMINATIM',
-    "CriadoEm"            TIMESTAMP         NOT NULL DEFAULT NOW(),
-    "AtualizadoEm"        TIMESTAMP         NOT NULL DEFAULT NOW()
+    "CriadoEm"            TIMESTAMP         NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo'),
+    "AtualizadoEm"        TIMESTAMP         NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo')
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "UX_GeocodificacaoCache_Endereco"
     ON "GeocodificacaoCache" ("EnderecoNormalizado");
 
--- ─────────────────────────────────────────────────────────────────────────────
---  5) Conferência
--- ─────────────────────────────────────────────────────────────────────────────
+-- 5) Conferência
 SELECT COALESCE("StatusGeocodificacao", '(nulo)') AS "Status",
        COUNT(*)                                   AS "Unidades"
 FROM   "Locais"
@@ -160,5 +128,8 @@ FROM   "Locais"
 WHERE  "Ativo" = TRUE;
 
 SELECT COUNT(*) AS "AlocacoesAtivas" FROM "AlocacoesEstagiarios" WHERE "Ativo" = TRUE;
+
+INSERT INTO "MigracoesAplicadas" ("Nome") VALUES ('007_unidades_saude')
+ON CONFLICT ("Nome") DO NOTHING;
 
 COMMIT;

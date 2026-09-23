@@ -5,21 +5,12 @@ using Microsoft.EntityFrameworkCore;
 namespace EstagioCheck.API.Services;
 
 /// <summary>
-/// Compatibilidade de agenda entre as turmas de um aluno.
-///
-/// Estar em duas turmas é normal — Saúde Coletiva pela manhã e Estágio Hospitalar
-/// à tarde, ou uma turma de reposição em dias alternados. O que não existe é o
-/// aluno em dois lugares ao mesmo tempo: mesmo turno, mesmo dia da semana e
-/// períodos que se sobrepõem. Só essa sobreposição exata é recusada; qualquer
-/// outra combinação passa.
+/// Estar em duas turmas é normal; só é recusada a sobreposição exata: mesmo turno, mesmo dia
+/// da semana e períodos que se sobrepõem.
 /// </summary>
 public class ConflitoTurmasService(AppDbContext db)
 {
-    /// <summary>
-    /// Verifica se vincular o aluno à turma cria sobreposição com as turmas em que
-    /// ele já está. Devolve a explicação do conflito ou <c>null</c> quando a
-    /// agenda é compatível.
-    /// </summary>
+    /// <summary>Explicação do conflito, ou <c>null</c> quando a agenda é compatível.</summary>
     public async Task<string?> VerificarAsync(Guid studentId, Guid groupId, CancellationToken ct = default)
     {
         var novas = await EscalasAsync([groupId], ct);
@@ -36,12 +27,7 @@ public class ConflitoTurmasService(AppDbContext db)
         return PrimeiroConflito(novas, await EscalasAsync(outrasTurmas, ct));
     }
 
-    /// <summary>
-    /// A mesma verificação de <see cref="VerificarAsync"/> para vários alunos de
-    /// uma vez, com três consultas no total em vez de três por aluno — é o que
-    /// torna viável vincular uma turma inteira de 100 alunos num clique.
-    /// Devolve só os alunos com conflito, cada um com o motivo.
-    /// </summary>
+    /// <summary>Mesma verificação para vários alunos em três consultas no total; devolve só os com conflito.</summary>
     public async Task<Dictionary<Guid, string>> VerificarLoteAsync(
         Guid groupId, IReadOnlyCollection<Guid> studentIds, CancellationToken ct = default)
     {
@@ -74,7 +60,6 @@ public class ConflitoTurmasService(AppDbContext db)
         return conflitos;
     }
 
-    /// <summary>Primeira sobreposição exata entre os rodízios novos e os atuais, explicada.</summary>
     private static string? PrimeiroConflito(List<RotationSchedule> novas, List<RotationSchedule> atuais)
     {
         foreach (var nova in novas)
@@ -113,10 +98,7 @@ public class ConflitoTurmasService(AppDbContext db)
             .Where(s => groupIds.Contains(s.GroupId))
             .ToListAsync(ct);
 
-    /// <summary>
-    /// Dias da semana que o rodízio ocupa. Sem programação cadastrada ele vale
-    /// como antes — segunda a sexta no local principal.
-    /// </summary>
+    /// <summary>Sem programação cadastrada, segunda a sexta.</summary>
     private static HashSet<int> DiasOcupados(RotationSchedule escala) =>
         escala.Days.Count == 0
             ? [1, 2, 3, 4, 5]

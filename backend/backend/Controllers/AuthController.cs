@@ -13,8 +13,7 @@ namespace EstagioCheck.API.Controllers;
 [Route("api/[controller]")]
 public class AuthController(AppDbContext db, TokenService tokenService, EmailService emailService) : ControllerBase
 {
-    // O autocadastro foi removido: alunos são criados via importação e
-    // preceptores/supervisores pelo cadastro do professor (UsersController).
+    // Sem autocadastro: alunos vêm da importação e os demais perfis, do cadastro do professor.
 
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
@@ -28,30 +27,20 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         return Ok(Resposta(user));
     }
 
-    /// <summary>
-    /// Resposta de autenticação. Para o aluno leva também a turma e o turno, que o
-    /// menu lateral exibe sem precisar de outra consulta.
-    /// </summary>
     private AuthResponseDto Resposta(ApplicationUser user) => new(
         tokenService.GenerateToken(user), user.Id.ToString(), user.Email, user.FullName, user.Role,
         user.MustChangePassword, user.MustSetEmail, DeveAceitarTermo(user),
-        // O aluno pode cursar mais de uma turma: o menu lateral mostra todas, e os
-        // campos singulares seguem com a principal para quem lê um código só.
-        TurmasDoAluno.Principal(user.GroupMemberships)?.Group?.Code,
-        TurmasDoAluno.Principal(user.GroupMemberships)?.Group?.Name,
+        TurmasDoAluno.Vigentes(user.GroupMemberships, BrasiliaTime.Hoje).FirstOrDefault()?.Group?.Code,
+        TurmasDoAluno.Vigentes(user.GroupMemberships, BrasiliaTime.Hoje).FirstOrDefault()?.Group?.Name,
         user.Shift,
-        [.. TurmasDoAluno.Ordenados(user.GroupMemberships)
+        [.. TurmasDoAluno.Vigentes(user.GroupMemberships, BrasiliaTime.Hoje)
             .Where(m => m.Group != null)
             .Select(m => new UserGroupDto
             {
                 Id = m.GroupId, Code = m.Group.Code, Name = m.Group.Name, Shift = TurmasDoAluno.Turno(m.Group)
             })]);
 
-    // ── Termo de responsabilidade de acesso ───────────────────────────────────
-    /// <summary>
-    /// Texto do termo exibido a preceptores, professores e coordenadoras. Fica no
-    /// backend para que a versão aceita seja a mesma em qualquer cliente.
-    /// </summary>
+    /// <summary>Fica no backend para a versão aceita ser a mesma em qualquer cliente.</summary>
     [HttpGet("terms")]
     [AllowAnonymous]
     public ActionResult GetTerms() => Ok(new
@@ -68,7 +57,6 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         }
     });
 
-    /// <summary>Registra o aceite do termo pelo usuário autenticado.</summary>
     [HttpPost("accept-terms")]
     [Authorize]
     public async Task<IActionResult> AcceptTerms([FromBody] AcceptTermsDto dto)
@@ -85,14 +73,13 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         var user = await db.Users.FindAsync(id);
         if (user == null) return NotFound();
 
-        user.TermsAcceptedAt = DateTime.UtcNow;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.TermsAcceptedAt = BrasiliaTime.Agora;
+        user.UpdatedAt = BrasiliaTime.Agora;
         await db.SaveChangesAsync();
 
         return Ok(new { acceptedAt = user.TermsAcceptedAt, versao = TermoVersao });
     }
 
-    // ── Primeiro Acesso ───────────────────────────────────────────────────────
     [HttpPost("first-access")]
     [Authorize]
     public async Task<ActionResult<AuthResponseDto>> FirstAccess([FromBody] FirstAccessDto dto)
@@ -111,8 +98,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         if (!user.MustChangePassword && !user.MustSetEmail)
             return BadRequest(new { message = "Primeiro acesso não necessário para este usuário." });
 
-        // O e-mail institucional é exigido apenas do aluno. Preceptores costumam ser
-        // profissionais externos à UDF e podem usar e-mail próprio.
+        // E-mail institucional só é exigido do aluno: preceptores costumam ser externos.
         if (user.Role == "aluno" && !EhEmailInstitucional(dto.Email))
             return BadRequest(new { message = "O e-mail deve ser institucional (@cs.udf.edu.br)." });
 
@@ -124,19 +110,16 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
         user.MustChangePassword = false;
         user.MustSetEmail = false;
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
 
         return Ok(Resposta(user));
     }
 
-    // ── Esqueci a senha ───────────────────────────────────────────────────────
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
     {
-        // Não há restrição de domínio aqui: preceptores externos precisam conseguir
-        // recuperar a senha com o e-mail que usam para entrar.
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
 
         // Retorna 200 mesmo se o e-mail não existir para não revelar cadastros
@@ -149,7 +132,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         {
             Email = dto.Email.Trim().ToLower(),
             Code = code,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15)
+            ExpiresAt = BrasiliaTime.Agora.AddMinutes(15)
         });
         await db.SaveChangesAsync();
 
@@ -158,7 +141,6 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         return Ok(new { message = "Se o e-mail estiver cadastrado, você receberá o código em breve." });
     }
 
-    // ── Verificar código ──────────────────────────────────────────────────────
     [HttpPost("verify-reset-code")]
     public async Task<IActionResult> VerifyResetCode([FromBody] VerifyResetCodeDto dto)
     {
@@ -166,7 +148,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
             r.Email == dto.Email.ToLower() &&
             r.Code == dto.Code &&
             !r.Used &&
-            r.ExpiresAt > DateTime.UtcNow);
+            r.ExpiresAt > BrasiliaTime.Agora);
 
         if (record == null)
             return BadRequest(new { message = "Código inválido ou expirado." });
@@ -174,7 +156,6 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         return Ok(new { message = "Código válido." });
     }
 
-    // ── Redefinir senha ───────────────────────────────────────────────────────
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
     {
@@ -182,7 +163,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
             r.Email == dto.Email.ToLower() &&
             r.Code == dto.Code &&
             !r.Used &&
-            r.ExpiresAt > DateTime.UtcNow);
+            r.ExpiresAt > BrasiliaTime.Agora);
 
         if (record == null)
             return BadRequest(new { message = "Código inválido ou expirado." });
@@ -192,7 +173,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
             return NotFound(new { message = "Usuário não encontrado." });
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = BrasiliaTime.Agora;
 
         record.Used = true;
 
@@ -207,7 +188,6 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
     private static bool EhEmailInstitucional(string email) =>
         email.Trim().EndsWith(DominioInstitucional, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Preceptor, professor e coordenadora só entram após aceitar o termo.</summary>
     private static bool DeveAceitarTermo(Models.ApplicationUser user) =>
         Models.Roles.ExigeTermoResponsabilidade(user.Role) && user.TermsAcceptedAt == null;
 }

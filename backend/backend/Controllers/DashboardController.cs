@@ -13,7 +13,8 @@ namespace EstagioCheck.API.Controllers;
 [Route("api/[controller]")]
 [Authorize]
 public class DashboardController(
-    AppDbContext db, PendenciasService pendenciasService, PainelGestaoService painelGestao) : ControllerBase
+    AppDbContext db, PendenciasService pendenciasService, PainelGestaoService painelGestao,
+    EscopoPreceptorService escopoPreceptor) : ControllerBase
 {
     [HttpGet("stats")]
     public async Task<ActionResult<DashboardStatsDto>> GetStats()
@@ -22,26 +23,34 @@ public class DashboardController(
             ?? User.FindFirstValue("sub")!);
         var role = User.FindFirstValue(ClaimTypes.Role) ?? Roles.Aluno;
 
-        // O preceptor vê só os alunos das turmas que acompanha — antes os cards
-        // somavam os registros da faculdade inteira.
-        var alunosDoPreceptor = role == Roles.Preceptor ? await AlunosDoPreceptorAsync(userId) : null;
+        // O preceptor vê só os pontos dos rodízios que supervisiona.
+        var escopo = role == Roles.Preceptor ? await escopoPreceptor.CarregarAsync(userId) : null;
 
         var query = db.AttendanceRecords.AsQueryable();
         if (role == Roles.Aluno)
             query = query.Where(r => r.StudentId == userId);
-        else if (alunosDoPreceptor != null)
-            query = query.Where(r => alunosDoPreceptor.Contains(r.StudentId));
+        else if (escopo != null)
+            query = EscopoPreceptorService.FiltrarPontos(query, escopo);
 
-        var recs = await query
-            .Select(r => new { r.Type, r.Status, r.RecordedAt, r.StudentId })
-            .ToListAsync();
+        // A gestão não vê horas no painel: para ela basta contar por situação no próprio banco, em vez
+        // de trazer o ponto da faculdade inteira (dezenas de milhares de linhas) para somar em memória.
+        var ehGestao = role is Roles.Supervisor or Roles.Coordenadora;
+        var recs = ehGestao
+            ? []
+            : await query.AsNoTracking()
+                .Select(r => new { r.Type, r.Status, r.RecordedAt, r.StudentId })
+                .ToListAsync();
 
-        var total = recs.Count;
-        var approved = recs.Count(r => r.Status == "aprovado");
-        var irregular = recs.Count(r => r.Status == "irregular");
-        var pending = recs.Count(r => r.Status == "pendente");
+        var porStatus = ehGestao
+            ? await query.GroupBy(r => r.Status).Select(g => new { Status = g.Key, Total = g.Count() }).ToListAsync()
+            : [.. recs.GroupBy(r => r.Status).Select(g => new { Status = g.Key, Total = g.Count() })];
 
-        // Calcula horas (par check_in/check_out por aluno+dia)
+        int ContarPontos(string status) => porStatus.FirstOrDefault(s => s.Status == status)?.Total ?? 0;
+        var total = porStatus.Sum(s => s.Total);
+        var approved = ContarPontos("aprovado");
+        var irregular = ContarPontos("irregular");
+        var pending = ContarPontos("pendente");
+
         var byStudentDay = recs
             .GroupBy(r => $"{r.StudentId}|{r.RecordedAt:yyyy-MM-dd}")
             .ToDictionary(
@@ -64,8 +73,7 @@ public class DashboardController(
 
         if (role == Roles.Aluno)
         {
-            // Cursando mais de uma turma, a carga exigida é a soma dos rodízios de
-            // todas elas — e o painel identifica cada uma.
+            // Com mais de uma turma, a carga exigida é a soma dos rodízios.
             var vinculos = await db.GroupMemberships
                 .Include(m => m.Group).ThenInclude(g => g.Schedules)
                 .Where(m => m.StudentId == userId)
@@ -75,8 +83,8 @@ public class DashboardController(
             {
                 required = vinculos.Sum(m => m.Group.Schedules.Sum(s => s.RequiredHours));
 
-                var ordenados = TurmasDoAluno.Ordenados(vinculos);
-                groupCode = TurmasDoAluno.Codigos(vinculos);
+                var ordenados = TurmasDoAluno.Vigentes(vinculos, BrasiliaTime.Hoje);
+                groupCode = TurmasDoAluno.Codigos(ordenados);
                 groupName = string.Join(", ", ordenados.Select(m => m.Group.Name));
                 turmas = [.. ordenados.Select(m => new UserGroupDto
                 {
@@ -85,8 +93,6 @@ public class DashboardController(
                 })];
             }
 
-            // O painel identifica a turma e o turno do aluno, que antes só via o
-            // próprio nome e e-mail.
             shift = await db.Users
                 .Where(u => u.Id == userId)
                 .Select(u => u.Shift)
@@ -95,18 +101,13 @@ public class DashboardController(
             pendencies = await pendenciasService.CalcularAsync(userId);
         }
 
-        // Contador de alunos do painel de gestão. A resposta não trazia o campo,
-        // então a tela do professor exibia zero sempre.
         var totalStudents = role == Roles.Aluno
             ? 0
-            : alunosDoPreceptor != null
-                ? await db.Users.CountAsync(u => alunosDoPreceptor.Contains(u.Id) && u.IsActive)
+            : escopo != null
+                ? await db.Users.CountAsync(u => escopo.Alunos.Contains(u.Id) && u.IsActive)
                 : await db.Users.CountAsync(u => u.Role == Roles.Aluno && u.IsActive);
 
-        // As ocorrências vêm da mesma tabela da tela de irregularidades — o que o
-        // aluno acabou de enviar já entra nesta contagem.
-        var ocorrencias = await CarregarIrregularidadesAsync(userId, role);
-        var contagens = ContarIrregularidades(ocorrencias);
+        var (ocorrencias, contagens) = await CarregarOcorrenciasAsync(userId, role, escopo);
 
         return Ok(new DashboardStatsDto
         {
@@ -129,22 +130,12 @@ public class DashboardController(
         });
     }
 
-    // ── Painel de gestão ──────────────────────────────────────────────────────
-    /// <summary>
-    /// Indicadores do professor e da coordenadora: presença de hoje, tendência das
-    /// últimas duas semanas, quem acumula turnos sem registro, progresso da carga
-    /// horária e o que falta configurar para o estágio funcionar.
-    /// </summary>
     [HttpGet("gestao")]
     [Authorize(Roles = Roles.Gestao)]
     public async Task<ActionResult<PainelGestaoDto>> GetPainelGestao(CancellationToken ct) =>
         Ok(await painelGestao.MontarAsync(ct));
 
-    // ── Status pendentes ──────────────────────────────────────────────────────
-    /// <summary>
-    /// Avisos centralizados do painel. Ficam em um endpoint próprio também porque
-    /// a tela recarrega o card após registrar uma irregularidade.
-    /// </summary>
+    /// <summary>Endpoint próprio: a tela recarrega o card após registrar uma irregularidade.</summary>
     [HttpGet("status-pendentes")]
     public async Task<ActionResult<List<PendingStatusDto>>> GetPendingStatuses()
     {
@@ -154,53 +145,41 @@ public class DashboardController(
         List<PendencyDto> pendencies = role == Roles.Aluno
             ? await pendenciasService.CalcularAsync(userId)
             : [];
-        var ocorrencias = await CarregarIrregularidadesAsync(userId, role);
+        var (ocorrencias, contagens) = await CarregarOcorrenciasAsync(userId, role);
 
-        return Ok(MontarStatusPendentes(role, pendencies, ocorrencias, ContarIrregularidades(ocorrencias)));
+        return Ok(MontarStatusPendentes(role, pendencies, ocorrencias, contagens));
     }
 
     /// <summary>
-    /// Ocorrências visíveis ao usuário: o aluno vê as próprias, o preceptor as dos
-    /// alunos que supervisiona, professor e coordenadora veem todas.
+    /// Só o aluno precisa das ocorrências em si (prazo e motivo da negada); preceptor e gestão só usam as
+    /// contagens, que saem agrupadas do banco sem trazer as linhas.
     /// </summary>
-    private async Task<List<PointIrregularity>> CarregarIrregularidadesAsync(Guid userId, string role)
+    private async Task<(List<PointIrregularity> Ocorrencias, IrregularityCountsDto Contagens)> CarregarOcorrenciasAsync(
+        Guid userId, string role, EscopoPreceptorService.Escopo? escopo = null)
     {
-        var query = db.PointIrregularities
-            .AsNoTracking()
-            .AsQueryable();
+        var query = db.PointIrregularities.AsNoTracking();
 
         if (role == Roles.Aluno)
         {
-            query = query.Where(i => i.StudentId == userId);
-        }
-        else if (role == Roles.Preceptor)
-        {
-            var alunoIds = await AlunosDoPreceptorAsync(userId);
-            query = query.Where(i => alunoIds.Contains(i.StudentId));
+            var minhas = await query.Where(i => i.StudentId == userId)
+                .OrderByDescending(i => i.CreatedAt)
+                .ToListAsync();
+            return (minhas, ContarIrregularidades(minhas.GroupBy(i => i.Status).ToDictionary(g => g.Key, g => g.Count())));
         }
 
-        return await query.OrderByDescending(i => i.CreatedAt).ToListAsync();
+        if (role == Roles.Preceptor)
+            query = EscopoPreceptorService.FiltrarOcorrencias(query, escopo ?? await escopoPreceptor.CarregarAsync(userId));
+
+        var porStatus = await query
+            .GroupBy(i => i.Status)
+            .Select(g => new { Status = g.Key, Total = g.Count() })
+            .ToDictionaryAsync(g => g.Status, g => g.Total);
+        return ([], ContarIrregularidades(porStatus));
     }
 
-    /// <summary>Alunos das turmas em que o preceptor tem ao menos um rodízio.</summary>
-    private async Task<List<Guid>> AlunosDoPreceptorAsync(Guid preceptorId)
+    private static IrregularityCountsDto ContarIrregularidades(Dictionary<string, int> porStatus)
     {
-        var grupoIds = await db.RotationSchedules
-            .Where(sc => sc.PreceptorId == preceptorId)
-            .Select(sc => sc.GroupId)
-            .Distinct()
-            .ToListAsync();
-
-        return await db.GroupMemberships
-            .Where(m => grupoIds.Contains(m.GroupId))
-            .Select(m => m.StudentId)
-            .Distinct()
-            .ToListAsync();
-    }
-
-    private static IrregularityCountsDto ContarIrregularidades(List<PointIrregularity> ocorrencias)
-    {
-        int Contar(string status) => ocorrencias.Count(i => i.Status == status);
+        int Contar(string status) => porStatus.GetValueOrDefault(status);
 
         var aguardandoPreceptor = Contar(PointIrregularity.StatusAguardandoPreceptor);
         var aguardandoProfessor = Contar(PointIrregularity.StatusAguardandoProfessor);
@@ -212,15 +191,11 @@ public class DashboardController(
             Approved = Contar(PointIrregularity.StatusAprovada),
             Denied = Contar(PointIrregularity.StatusNegada),
             Open = aguardandoPreceptor + aguardandoProfessor,
-            Total = ocorrencias.Count
+            Total = porStatus.Values.Sum()
         };
     }
 
-    /// <summary>
-    /// Monta os avisos do card "Status Pendentes" conforme o perfil: o aluno vê os
-    /// próprios prazos e o andamento das contestações; preceptor e professor veem
-    /// o que está parado esperando uma ação deles.
-    /// </summary>
+    /// <summary>Aluno: prazos e contestações; preceptor e professor: o que espera uma ação deles.</summary>
     private static List<PendingStatusDto> MontarStatusPendentes(
         string role,
         List<PendencyDto> pendencies,

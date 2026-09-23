@@ -38,14 +38,11 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
 
         query = role switch
         {
-            // Aluno vê apenas os próprios documentos já finalizados pelo preceptor.
             Roles.Aluno => query.Where(f => f.StudentId == userId
                 && (f.Status == StatusFinalizadoPreceptor || f.Status == StatusCienciaAluno)),
 
-            // Preceptor vê apenas os acompanhamentos que ele mesmo realiza.
             Roles.Preceptor => query.Where(f => f.PreceptorId == userId),
 
-            // Professor e coordenadora recebem somente o relatório finalizado, para consulta.
             Roles.Supervisor or Roles.Coordenadora => query.Where(f => f.Status != StatusRascunho),
 
             _ => query.Where(_ => false)
@@ -71,11 +68,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         return Ok(Map(f));
     }
 
-    /// <summary>
-    /// Busca um aluno pelo RGM para preencher o acompanhamento automaticamente.
-    /// Além do nome, devolve período/turno/semestre e a escala vigente, evitando
-    /// digitação manual e divergência com o que já está cadastrado no sistema.
-    /// </summary>
+    /// <summary>Dados do aluno e escala vigente, para preencher o acompanhamento sem digitação.</summary>
     [HttpGet("student-by-rgm/{rgm}")]
     [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<StudentLookupDto>> GetStudentByRgm(string rgm)
@@ -116,11 +109,9 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
             Rgm = student.Rgm,
             Semester = student.Semester,
             Shift = escala?.Shift ?? student.Shift,
-            // Período do rodízio quando houver escala; senão, o semestre do aluno.
             PeriodLabel = escala?.PeriodLabel
                 ?? (student.Semester.HasValue ? $"{student.Semester}° semestre" : null),
-            // Com mais de uma turma, vale a do rodízio encontrado: é nele que o
-            // preceptor está acompanhando o aluno.
+            // Com mais de uma turma, vale a do rodízio encontrado.
             GroupId = escala?.GroupId ?? groupId,
             GroupCode = principal?.Group?.Code,
             GroupName = principal?.Group?.Name,
@@ -133,12 +124,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         });
     }
 
-    /// <summary>
-    /// Rodízios do preceptor com os alunos alocados em cada um. O preceptor
-    /// escolhe o aluno pela lista da turma em vez de digitar o RGM de memória;
-    /// cada aluno já vem com o contexto do rodízio (período, turno, local e datas)
-    /// para preencher o acompanhamento de uma vez.
-    /// </summary>
+    /// <summary>Rodízios do preceptor com os alunos e o contexto de cada um, para escolher o aluno pela lista.</summary>
     [HttpGet("my-schedules")]
     [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<List<ScheduleStudentsDto>>> GetMySchedules()
@@ -155,7 +141,6 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
 
         if (escalas.Count == 0) return Ok(new List<ScheduleStudentsDto>());
 
-        // Uma consulta só para os alunos de todas as turmas envolvidas.
         var grupoIds = escalas.Select(e => e.GroupId).Distinct().ToList();
         var membros = await db.GroupMemberships
             .Include(m => m.Student)
@@ -199,7 +184,6 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
                 })
                 .ToList()
         })
-        // Rodízio vigente primeiro: é o que o preceptor procura no dia a dia.
         .OrderByDescending(e => e.Current)
         .ThenByDescending(e => e.StartDate)
         .ToList();
@@ -207,7 +191,6 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         return Ok(resultado);
     }
 
-    /// <summary>O acompanhamento do aluno é realizado pelo preceptor.</summary>
     [HttpPost]
     [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<FollowupDto>> Create([FromBody] CreateFollowupDto dto)
@@ -247,7 +230,6 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
         return Ok(Map(f));
     }
 
-    /// <summary>Somente o preceptor responsável edita o conteúdo do acompanhamento.</summary>
     [HttpPut("{id}")]
     [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<FollowupDto>> Update(Guid id, [FromBody] UpdateFollowupDto dto)
@@ -267,13 +249,12 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
             return Conflict(new { message = "Conteúdo bloqueado após finalização do preceptor." });
 
         AplicarConteudo(f, dto);
-        f.UpdatedAt = DateTime.UtcNow;
+        f.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
         return Ok(Map(f));
     }
 
-    /// <summary>Preceptor finaliza o acompanhamento e o libera para ciência do aluno.</summary>
     [HttpPost("{id}/finalize-preceptor")]
     [Authorize(Roles = Roles.Preceptor)]
     public async Task<ActionResult<FollowupDto>> FinalizePreceptor(Guid id, [FromBody] FinalizeFollowupDto dto)
@@ -290,17 +271,16 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
             return Conflict(new { message = "Já finalizado." });
 
         f.Status = StatusFinalizadoPreceptor;
-        f.PreceptorSignedAt = DateTime.UtcNow;
+        f.PreceptorSignedAt = BrasiliaTime.Agora;
         f.PreceptorSignedName = dto.SignerName;
         f.PreceptorSignedIp = IpDaRequisicao();
         f.PreceptorSignedUserId = userId;
-        f.UpdatedAt = DateTime.UtcNow;
+        f.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
         return Ok(Map(f));
     }
 
-    /// <summary>Aluno dá ciência do acompanhamento realizado pelo preceptor.</summary>
     [HttpPost("{id}/finalize-student")]
     [Authorize(Roles = Roles.Aluno)]
     public async Task<ActionResult<FollowupDto>> FinalizeStudent(Guid id, [FromBody] FinalizeFollowupDto dto)
@@ -317,17 +297,16 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
             return Conflict(new { message = "Aguardando finalização do preceptor." });
 
         f.Status = StatusCienciaAluno;
-        f.StudentSignedAt = DateTime.UtcNow;
+        f.StudentSignedAt = BrasiliaTime.Agora;
         f.StudentSignedName = dto.SignerName;
         f.StudentSignedIp = IpDaRequisicao();
         f.StudentSignedUserId = userId;
-        f.UpdatedAt = DateTime.UtcNow;
+        f.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
         return Ok(Map(f));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
     private Guid CurrentUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? User.FindFirstValue("sub")!);
 

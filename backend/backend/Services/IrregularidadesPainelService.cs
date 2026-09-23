@@ -6,13 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EstagioCheck.API.Services;
 
-/// <summary>
-/// Indicadores da tela de irregularidades para o professor e a coordenadora.
-///
-/// A fila (o que espera decisão ou ciência) é sempre a atual; os padrões — tipo,
-/// unidade, aluno, evolução e tempos — olham a janela escolhida. O volume de
-/// ocorrências é pequeno, então tudo é lido de uma vez e agregado em memória.
-/// </summary>
+/// <summary>A fila é sempre a atual; os padrões olham a janela escolhida. Tudo é agregado em memória.</summary>
 public class IrregularidadesPainelService(AppDbContext db)
 {
     public static readonly IReadOnlyDictionary<string, string> RotulosTipo = new Dictionary<string, string>
@@ -51,7 +45,6 @@ public class IrregularidadesPainelService(AppDbContext db)
 
         int DiasDesde(DateTime d) => Math.Max(0, (int)(agora - d).TotalDays);
 
-        // ── Fila atual ────────────────────────────────────────────────────────
         var comProfessor = todas.Where(i => i.Status == PointIrregularity.StatusAguardandoProfessor).ToList();
         var comPreceptor = todas.Where(i => i.Status == PointIrregularity.StatusAguardandoPreceptor).ToList();
 
@@ -73,7 +66,6 @@ public class IrregularidadesPainelService(AppDbContext db)
             .ThenByDescending(f => f.Pendentes)
             .ToList();
 
-        // ── Período ───────────────────────────────────────────────────────────
         var abertas = todas.Where(i => inicio == null || i.CreatedAt >= inicio).ToList();
         var decididas = todas
             .Where(i => i.ProfessorDecidedAt != null && (inicio == null || i.ProfessorDecidedAt >= inicio)
@@ -177,11 +169,7 @@ public class IrregularidadesPainelService(AppDbContext db)
             .Take(8)];
     }
 
-    /// <summary>
-    /// Ocorrências abertas ao longo do tempo: por semana até 90 dias; por mês
-    /// quando a janela é maior (semestre, histórico inteiro), para o gráfico não
-    /// virar um pente de 26 barras finas.
-    /// </summary>
+    /// <summary>Por semana até 90 dias; por mês acima disso, para o gráfico não virar um pente de barras.</summary>
     private static (bool Semanal, List<IrregularidadesPeriodoDto> Baldes) MontarEvolucao(
         List<DateTime> criadas, DateTime? inicio, DateTime agora)
     {
@@ -193,7 +181,6 @@ public class IrregularidadesPainelService(AppDbContext db)
         var baldes = new List<IrregularidadesPeriodoDto>();
         if (semanal)
         {
-            // Semanas começando na segunda-feira.
             var cursor = de.AddDays(-(((int)de.DayOfWeek + 6) % 7));
             while (cursor <= ate)
             {

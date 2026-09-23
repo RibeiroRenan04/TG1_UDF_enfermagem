@@ -6,18 +6,13 @@ using Microsoft.EntityFrameworkCore;
 namespace EstagioCheck.API.Services;
 
 /// <summary>
-/// Indicadores do painel do professor e da coordenadora.
-///
-/// "Quem deveria estar em estágio" sai da mesma programação que libera o
-/// check-in (rodízio, dia da semana, feriados e exceções, data de entrada na
-/// turma), carregada em lote para todos os alunos. Assim o painel nunca cobra
-/// presença num dia que o próprio ponto dispensaria.
+/// "Quem deveria estar em estágio" sai da mesma programação que libera o check-in, em lote:
+/// o painel nunca cobra presença num dia que o ponto dispensaria.
 /// </summary>
 public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao)
 {
     /// <summary>Janela da tendência e do ranking: duas semanas encerradas.</summary>
     public const int DiasDeHistorico = 14;
-    private const int LimiteLista = 12;
 
     public async Task<PainelGestaoDto> MontarAsync(CancellationToken ct = default)
     {
@@ -39,8 +34,7 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
 
         var lote = await programacao.CarregarLoteAsync(ids, inicio, hoje, ct);
 
-        // Check-ins do período, por aluno, data e turno — o turno de um registro é
-        // o da escala vinculada; sem escala, o do horário (a mesma regra do ponto).
+        // Por aluno, data e turno (o da escala vinculada; sem escala, o do horário).
         var desde = inicio.ToDateTime(TimeOnly.MinValue);
         var registrados = (await db.AttendanceRecords.AsNoTracking()
                 .Where(r => r.Type == "check_in" && r.RecordedAt >= desde && ids.Contains(r.StudentId))
@@ -50,7 +44,6 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
                           Turnos.Normalizar(r.Turno) ?? Turnos.DaHora(r.RecordedAt)))
             .ToHashSet();
 
-        // ── Turnos esperados × registrados, dia a dia ─────────────────────────
         var dias = new List<PresencaDiaDto>();
         var faltasNoPeriodo = new Dictionary<Guid, int>();
         var porTurnoHoje = Turnos.Validos.ToDictionary(t => t, _ => (Esperados: 0, Registrados: 0));
@@ -112,8 +105,7 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
                 })],
             AlunosSemRegistro = [.. semRegistroHoje
                 .OrderBy(a => Array.IndexOf(Turnos.Validos, TurnoPorRotulo(a.Turno)))
-                .ThenBy(a => a.Nome, StringComparer.CurrentCultureIgnoreCase)
-                .Take(LimiteLista)]
+                .ThenBy(a => a.Nome, StringComparer.CurrentCultureIgnoreCase)]
         };
 
         var ranking = faltasNoPeriodo
@@ -153,12 +145,7 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
     private static string TurnoPorRotulo(string? rotulo) =>
         Turnos.Validos.FirstOrDefault(t => Turnos.Rotulo(t) == rotulo) ?? Turnos.Manha;
 
-    // ── Carga horária ─────────────────────────────────────────────────────────
-    /// <summary>
-    /// Alunos por faixa de carga horária cumprida. Horas e carga exigida seguem a
-    /// mesma conta do certificado: pares de check-in/check-out aprovados, e a
-    /// soma dos rodízios de todas as turmas do aluno.
-    /// </summary>
+    /// <summary>Mesma conta do certificado: pares aprovados e a soma dos rodízios de todas as turmas.</summary>
     private async Task<ProgressoCargaDto> ProgressoCargaAsync(List<Guid> ids, CancellationToken ct)
     {
         var exigidas = (await db.GroupMemberships.AsNoTracking()
@@ -168,15 +155,17 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
             .GroupBy(m => m.StudentId)
             .ToDictionary(g => g.Key, g => g.Sum(m => m.Horas));
 
+        // Só o par aprovado conta hora: filtrar no banco evita trazer o ponto inteiro da faculdade.
         var registrosPorAluno = (await db.AttendanceRecords.AsNoTracking()
-                .Where(r => ids.Contains(r.StudentId))
+                .Where(r => ids.Contains(r.StudentId) && r.Status == "aprovado")
                 .Select(r => new { r.StudentId, r.Type, r.Status, r.RecordedAt, r.ScheduleId })
                 .ToListAsync(ct))
             .GroupBy(r => r.StudentId)
             .ToDictionary(g => g.Key, g => g.Select(r =>
                 new CertificateService.RegistroHora(r.Type, r.Status, r.RecordedAt, r.ScheduleId)).ToList());
 
-        string[] rotulos = ["Até 25%", "25% a 50%", "50% a 75%", "75% a 99%", "Concluída"];
+        // Faixas de 10%: "0% a 10%" … "90% a 99%" e "Concluída".
+        string[] rotulos = [.. Enumerable.Range(0, 10).Select(i => i == 9 ? "90% a 99%" : $"{i * 10}% a {(i + 1) * 10}%"), "Concluída"];
         var faixas = new int[rotulos.Length];
         int semCarga = 0, elegiveis = 0;
 
@@ -188,11 +177,8 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
             var horas = CertificateService.CalcularHorasAprovadas(registrosPorAluno.GetValueOrDefault(id) ?? []);
             var pct = 100 * horas / exigida;
 
-            if (pct >= 100) { faixas[4]++; elegiveis++; }
-            else if (pct >= 75) faixas[3]++;
-            else if (pct >= 50) faixas[2]++;
-            else if (pct >= 25) faixas[1]++;
-            else faixas[0]++;
+            if (pct >= 100) { faixas[10]++; elegiveis++; }
+            else faixas[Math.Clamp((int)(pct / 10), 0, 9)]++;
         }
 
         return new ProgressoCargaDto
@@ -203,12 +189,7 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
         };
     }
 
-    // ── Pendências de configuração ────────────────────────────────────────────
-    /// <summary>
-    /// O que impede o estágio de acontecer direito. Cada item aponta a tela onde
-    /// se resolve — é a lista que evitou, por exemplo, 327 unidades sem localização
-    /// passarem despercebidas.
-    /// </summary>
+    /// <summary>O que impede o estágio de funcionar, com a tela onde se resolve.</summary>
     private async Task<List<AlertaConfiguracaoDto>> AlertasConfiguracaoAsync(DateOnly hoje, CancellationToken ct)
     {
         var alertas = new List<AlertaConfiguracaoDto>();
@@ -218,8 +199,7 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
 
         var turmasSemAlunos = await db.StudentGroups.CountAsync(g => !g.Memberships.Any(), ct);
 
-        // Turma com alunos e nenhum rodízio de hoje em diante: ninguém dela tem
-        // programação, então ninguém consegue registrar ponto.
+        // Turma com alunos e sem rodízio de hoje em diante: ninguém dela consegue registrar ponto.
         var turmasSemRodizio = await db.StudentGroups.CountAsync(g =>
             g.Memberships.Any() && !g.Schedules.Any(s => s.EndDate >= hoje), ct);
 
@@ -227,8 +207,7 @@ public class PainelGestaoService(AppDbContext db, ProgramacaoService programacao
 
         var rodiziosSemPreceptor = await rodiziosAtivos.CountAsync(s => s.PreceptorId == null, ct);
 
-        // Localização confirmada = coordenada fora de (0, 0) e geocodificação com
-        // sucesso (ou cadastro antigo sem status) — a mesma regra do check-in.
+        // Mesma regra de localização confirmada do check-in.
         var semLocalizacao = db.Locations.Where(l =>
             (l.Latitude == 0 && l.Longitude == 0)
             || (l.StatusGeocodificacao != null && l.StatusGeocodificacao != StatusGeocodificacao.Sucesso));
