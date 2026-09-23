@@ -33,22 +33,22 @@ export class AppLayoutComponent {
   sidenavOpen = true;
 
   private readonly allNav: NavItem[] = [
-    { path: '/app',             label: 'Painel',            icon: 'dashboard',        roles: ['aluno','preceptor','supervisor','coordenadora'] },
+    { path: '/app',             label: 'Painel',            icon: 'dashboard',        roles: ['aluno','preceptor','supervisor','secretaria'] },
     { path: '/app/check-in',    label: 'Registrar presença', icon: 'location_on',      roles: ['aluno'] },
     { path: '/app/historico',   label: 'Meu histórico',      icon: 'assignment',       roles: ['aluno'] },
-    { path: '/app/irregularidades', label: 'Irregularidades', icon: 'fact_check',      roles: ['aluno','preceptor','supervisor','coordenadora'] },
-    { path: '/app/certificados', label: 'Certificados',      icon: 'workspace_premium', roles: ['aluno','supervisor','coordenadora'] },
-    { path: '/app/acompanhamentos', label: 'Acompanhamentos', icon: 'description',    roles: ['aluno','preceptor','supervisor','coordenadora'] },
+    { path: '/app/irregularidades', label: 'Irregularidades', icon: 'fact_check',      roles: ['aluno','preceptor','supervisor','secretaria'] },
+    { path: '/app/certificados', label: 'Certificados',      icon: 'workspace_premium', roles: ['aluno','supervisor','secretaria'] },
+    { path: '/app/acompanhamentos', label: 'Acompanhamentos', icon: 'description',    roles: ['aluno','preceptor','supervisor','secretaria'] },
     { path: '/app/preceptor',   label: 'Meus alunos',        icon: 'star',             roles: ['preceptor'] },
     // "Locais" saiu do menu: era a mesma tabela de "Unidades de saúde", em outra
     // tela. A rota antiga continua existindo e redireciona para cá.
-    { path: '/app/unidades',    label: 'Unidades de saúde',  icon: 'domain',           roles: ['aluno','supervisor','coordenadora'] },
-    { path: '/app/alocacoes',   label: 'Alocações',          icon: 'assignment_ind',   roles: ['supervisor','coordenadora'] },
-    { path: '/app/rodizios',    label: 'Rodízios',           icon: 'calendar_today',   roles: ['supervisor','coordenadora'] },
-    { path: '/app/atividades-remotas', label: 'Atividades remotas', icon: 'home_work',  roles: ['aluno','supervisor','coordenadora'] },
-    { path: '/app/excecoes',    label: 'Calendário', icon: 'event_busy',   roles: ['supervisor','coordenadora'] },
-    { path: '/app/usuarios',    label: 'Usuários',           icon: 'people',           roles: ['supervisor','coordenadora'] },
-    { path: '/app/relatorios',  label: 'Relatórios',         icon: 'bar_chart',        roles: ['supervisor','coordenadora'] }
+    { path: '/app/unidades',    label: 'Unidades de saúde',  icon: 'domain',           roles: ['aluno','supervisor','secretaria'] },
+    { path: '/app/alocacoes',   label: 'Alocações',          icon: 'assignment_ind',   roles: ['supervisor','secretaria'] },
+    { path: '/app/rodizios',    label: 'Rodízios',           icon: 'calendar_today',   roles: ['supervisor','secretaria'] },
+    { path: '/app/atividades-remotas', label: 'Atividades remotas', icon: 'home_work',  roles: ['aluno','supervisor','secretaria'] },
+    { path: '/app/excecoes',    label: 'Calendário', icon: 'event_busy',   roles: ['supervisor','secretaria'] },
+    { path: '/app/usuarios',    label: 'Usuários',           icon: 'people',           roles: ['supervisor','secretaria'] },
+    { path: '/app/relatorios',  label: 'Relatórios',         icon: 'bar_chart',        roles: ['supervisor','secretaria'] }
   ];
 
   /** Rótulos de perfil: o identificador técnico não é o nome usado na faculdade. */
@@ -56,7 +56,7 @@ export class AppLayoutComponent {
     aluno: 'Aluno(a)',
     preceptor: 'Preceptor(a)',
     supervisor: 'Professor(a) responsável',
-    coordenadora: 'Coordenadora (consulta)'
+    secretaria: 'Secretaria (consulta)'
   };
 
   rotuloPerfil = computed(() => {
@@ -81,7 +81,7 @@ export class AppLayoutComponent {
     return `${turmas.length > 1 ? 'Turmas' : 'Turma'}: ${turmas.join(', ')}`;
   });
 
-  /** A coordenadora navega igual ao professor, mas sem alterar nada. */
+  /** A secretaria navega igual ao professor, mas sem alterar nada. */
   somenteLeitura = this.auth.somenteLeitura;
 
   navItems = computed(() => {

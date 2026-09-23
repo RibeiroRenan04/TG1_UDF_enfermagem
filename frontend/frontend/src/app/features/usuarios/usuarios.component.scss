@@ -120,7 +120,7 @@
   .turma-select { width: 100%; }
 }
 
-// ── Perfil de consulta (coordenadora) ────────────────────────────────────────
+// ── Perfil de consulta (secretaria) ────────────────────────────────────────
 .readonly-note {
   display: flex;
   gap: 8px;
@@ -150,7 +150,7 @@
   min-height: 24px !important;
 }
 
-.role-chip.role-coordenadora {
+.role-chip.role-secretaria {
   background: #ede9fe;
   color: #5b21b6;
 }

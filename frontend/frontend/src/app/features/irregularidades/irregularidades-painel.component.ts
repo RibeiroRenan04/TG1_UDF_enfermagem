@@ -17,7 +17,7 @@ export const PRAZO_ATENCAO_DIAS = 3;
 type Balde = IrregularidadesPainel['evolucao'][number];
 
 /**
- * Indicadores das irregularidades para o professor e a coordenadora. Cada bloco
+ * Indicadores das irregularidades para o professor e a secretaria. Cada bloco
  * responde a uma pergunta:
  *  1. O que espera minha decisão, e há quanto tempo?
  *  2. Onde a fila emperra — no preceptor ou em mim?

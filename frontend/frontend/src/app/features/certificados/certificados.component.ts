@@ -98,7 +98,15 @@ export class CertificadosComponent implements OnInit {
     win.document.write(this.montarHtml(cert));
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 300);
+
+    // Espera a logo carregar; senão ela sai em branco no PDF.
+    const logo = win.document.querySelector('img');
+    if (logo && !logo.complete) {
+      logo.addEventListener('load', () => win.print());
+      logo.addEventListener('error', () => win.print());
+    } else {
+      setTimeout(() => win.print(), 300);
+    }
   }
 
   private montarHtml(c: Certificate): string {
@@ -109,6 +117,8 @@ export class CertificadosComponent implements OnInit {
     const instituicao = c.institution || 'Centro Universitário do Distrito Federal – UDF';
     const horas = c.completedHours.toLocaleString('pt-BR');
     const exigidas = c.requiredHours.toLocaleString('pt-BR');
+    // A janela de impressão é about:blank, então o caminho relativo não resolveria.
+    const logo = new URL('assets/logo.png', document.baseURI).href;
 
     return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><title>Certificado — ${c.studentName}</title>
@@ -116,6 +126,7 @@ export class CertificadosComponent implements OnInit {
   * { box-sizing: border-box; }
   body { font-family: Georgia, 'Times New Roman', serif; margin: 0; padding: 40px; color: #1a2b3c; }
   .cert { border: 8px double #00ADEE; border-radius: 12px; padding: 48px 56px; max-width: 820px; margin: 0 auto; }
+  .logo { display: block; width: 80px; height: 80px; margin: 0 auto 12px; }
   .titulo { text-align: center; font-size: 34px; letter-spacing: 6px; font-weight: bold; color: #0a3d62; margin-bottom: 8px; }
   .sub { text-align: center; font-size: 14px; color: #6B7280; margin-bottom: 36px; text-transform: uppercase; letter-spacing: 2px; }
   .corpo { font-size: 18px; line-height: 1.9; text-align: justify; }
@@ -127,6 +138,7 @@ export class CertificadosComponent implements OnInit {
 </style></head>
 <body>
   <div class="cert">
+    <img src="${logo}" alt="UDF Centro Universitário" class="logo">
     <div class="titulo">CERTIFICADO</div>
     <div class="sub">Estágio Supervisionado em Enfermagem</div>
     <div class="corpo">

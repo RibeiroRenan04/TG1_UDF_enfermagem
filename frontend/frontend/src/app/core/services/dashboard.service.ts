@@ -27,7 +27,7 @@ export class DashboardService {
     return this.http.get<PendingStatus[]>(`${this.api}/status-pendentes`);
   }
 
-  /** Indicadores do professor e da coordenadora (presença, carga horária, configuração). */
+  /** Indicadores do professor e da secretaria (presença, carga horária, configuração). */
   getPainelGestao(): Observable<PainelGestao> {
     return this.http.get<PainelGestao>(`${this.api}/gestao`);
   }

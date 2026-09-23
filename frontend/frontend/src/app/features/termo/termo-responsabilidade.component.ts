@@ -14,7 +14,7 @@ import { mensagemErro } from '../../core/utils/api-error';
 
 /**
  * Termo de responsabilidade de acesso, exigido de preceptores, professores e
- * coordenadoras antes do primeiro uso. Registra que a senha não deve ser
+ * secretarias antes do primeiro uso. Registra que a senha não deve ser
  * compartilhada e que o usuário responde pelas ações feitas com a conta.
  */
 @Component({

@@ -60,7 +60,7 @@ export class UsuariosComponent implements OnInit {
   savingShiftId = signal<string | null>(null);
 
   /**
-   * A coordenadora (secretaria/estagiária) usa a mesma tela do professor apenas
+   * A secretaria (ou a estagiária) usa a mesma tela do professor apenas
    * para consulta: nenhuma ação de escrita fica disponível para ela.
    */
   somenteLeitura = this.auth.somenteLeitura;
@@ -389,7 +389,7 @@ export class UsuariosComponent implements OnInit {
     return ({
       preceptor: 'Preceptor(a)',
       supervisor: 'Professor(a)',
-      coordenadora: 'Coordenadora'
+      secretaria: 'Secretaria'
     } as Record<string, string>)[role] ?? role;
   }
 

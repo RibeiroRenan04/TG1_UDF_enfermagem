@@ -16,6 +16,9 @@ import { AttendanceRecord, IrregularityType } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
 import { hojeIso } from '../../core/utils/data-br';
 
+/** Opção "não é sobre um ponto": escolha explícita, para o passo 1 não avançar em branco. */
+const SEM_PONTO = 'nenhum';
+
 /** Ponto já escolhido pela tela de origem (histórico), quando houver. */
 export interface RegistrarIrregularidadeData {
   registro?: AttendanceRecord;
@@ -56,10 +59,23 @@ export interface RegistrarIrregularidadeData {
         </div>
       </div>
 
+      <!-- O cabeçalho do mat-stepper trunca os rótulos na largura do modal: este o substitui. -->
+      <ol class="passos">
+        <li *ngFor="let rotulo of passos; let i = index"
+            [class.ativo]="i === passo()" [class.feito]="i < passo()"
+            [attr.aria-current]="i === passo() ? 'step' : null">
+          <span class="passo-num">
+            <mat-icon *ngIf="i < passo(); else numero">check</mat-icon>
+            <ng-template #numero>{{ i + 1 }}</ng-template>
+          </span>
+          <span class="passo-rotulo">{{ rotulo }}</span>
+        </li>
+      </ol>
+
       <mat-stepper #stepper linear [selectedIndex]="passo()" (selectionChange)="passo.set($event.selectedIndex)">
 
         <!-- ── 1. Qual ponto ─────────────────────────────────────────────── -->
-        <mat-step [completed]="true" label="Qual ponto">
+        <mat-step [stepControl]="form.controls.attendanceRecordId" label="Qual ponto">
           <ng-container *ngIf="registroFixo() as r; else escolherPonto">
             <div class="ponto-fixo">
               <mat-icon>event_available</mat-icon>
@@ -84,7 +100,7 @@ export interface RegistrarIrregularidadeData {
               <mat-label>Registro de ponto</mat-label>
               <mat-select [formControl]="form.controls.attendanceRecordId"
                           (selectionChange)="aoEscolherPonto()">
-                <mat-option [value]="null">Não é sobre um ponto registrado</mat-option>
+                <mat-option [value]="semPonto">Não é sobre um ponto registrado</mat-option>
                 <mat-option *ngFor="let r of contestaveis()" [value]="r.id">
                   {{ r.recordedAt | date:'dd/MM/yy HH:mm' }} —
                   {{ r.type === 'check_in' ? 'Entrada' : 'Saída' }}
@@ -94,6 +110,7 @@ export interface RegistrarIrregularidadeData {
               <mat-hint *ngIf="!contestaveis().length">
                 Nenhum ponto disponível para contestação.
               </mat-hint>
+              <mat-error>Escolha o ponto ou indique que não é sobre um ponto registrado</mat-error>
             </mat-form-field>
 
             <div class="bloqueados" *ngIf="bloqueados().length">
@@ -108,7 +125,8 @@ export interface RegistrarIrregularidadeData {
 
           <div class="passo-acoes">
             <button mat-button (click)="dialogRef.close(false)">Cancelar</button>
-            <button mat-raised-button color="primary" matStepperNext>Continuar</button>
+            <button mat-raised-button color="primary" matStepperNext
+                    [disabled]="form.controls.attendanceRecordId.invalid">Continuar</button>
           </div>
         </mat-step>
 
@@ -185,13 +203,45 @@ export interface RegistrarIrregularidadeData {
     .form { display: flex; flex-direction: column; gap: 14px; }
     .full { width: 100%; }
     .fluxo-box {
-      display: flex; gap: 8px; align-items: flex-start;
+      display: flex; gap: 10px; align-items: flex-start;
       background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
-      border-radius: 8px; padding: 10px 12px; margin-bottom: 16px;
+      border-radius: 8px; padding: 10px 12px; margin-bottom: 20px;
       font-size: 0.78rem; line-height: 1.5;
-      mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
+      mat-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
     }
-    .passo-ajuda { font-size: 0.8rem; color: #6B7280; margin: 4px 0 12px; line-height: 1.5; }
+
+    /* Indicador de etapas */
+    .passos {
+      display: flex; align-items: center;
+      list-style: none; margin: 0 0 20px; padding: 0;
+      li {
+        display: flex; align-items: center; gap: 8px; flex: 1;
+        font-size: 0.8rem; color: #6B7280; white-space: nowrap;
+      }
+      li:last-child { flex: none; }
+      li:not(:last-child)::after {
+        content: ''; flex: 1; height: 2px; min-width: 16px;
+        margin: 0 4px; border-radius: 1px; background: #e5e7eb;
+      }
+      li.feito::after { background: var(--primary); }
+      .passo-num {
+        display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+        width: 24px; height: 24px; border-radius: 50%;
+        border: 2px solid #d1d5db; box-sizing: border-box;
+        font-size: 0.75rem; font-weight: 600; line-height: 1;
+        mat-icon { font-size: 16px; width: 16px; height: 16px; }
+      }
+      li.ativo { color: var(--foreground); font-weight: 600; }
+      li.ativo .passo-num { background: var(--primary); border-color: var(--primary); color: #fff; }
+      li.feito .passo-num { background: #e0f5fd; border-color: var(--primary); color: var(--primary); }
+    }
+
+    /* O stepper só troca o conteúdo: sem cabeçalho próprio, sem recuo lateral */
+    mat-stepper { --mat-stepper-container-color: transparent; }
+    :host ::ng-deep .mat-horizontal-stepper-header-container { display: none; }
+    :host ::ng-deep .mat-horizontal-content-container { padding: 0; }
+
+    .passo-ajuda { font-size: 0.8rem; color: #6B7280; margin: 0 0 12px; line-height: 1.5; }
     .ponto-fixo {
       display: flex; gap: 10px; align-items: center;
       background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
@@ -215,13 +265,20 @@ export interface RegistrarIrregularidadeData {
     }
     .passo-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
     .erro { color: #b91c1c; font-size: 0.85rem; margin: 8px 0 0; }
-    :host { display: block; min-width: 460px; }
+    :host { display: block; }
+
+    /* No celular só a etapa atual mostra o nome */
+    @media (max-width: 480px) {
+      .passos li:not(.ativo) .passo-rotulo { display: none; }
+    }
   `]
 })
 export class RegistrarIrregularidadeDialogComponent implements OnInit {
   busy = signal(false);
   erro = signal('');
   passo = signal(0);
+  readonly passos = ['Ponto', 'Ocorrência', 'Conferir e enviar'];
+  readonly semPonto = SEM_PONTO;
   registros = signal<AttendanceRecord[]>([]);
   readonly hoje = hojeIso();
 
@@ -241,7 +298,7 @@ export class RegistrarIrregularidadeDialogComponent implements OnInit {
   form = this.fb.nonNullable.group({
     type:               ['atraso' as IrregularityType, Validators.required],
     occurredOn:         [hojeIso(), Validators.required],
-    attendanceRecordId: this.fb.control<string | null>(null),
+    attendanceRecordId: this.fb.control<string | null>(null, Validators.required),
     description:        ['', [Validators.required, Validators.minLength(10), Validators.maxLength(2000)]]
   });
 
@@ -309,7 +366,7 @@ export class RegistrarIrregularidadeDialogComponent implements OnInit {
       type: v.type,
       occurredOn: v.occurredOn,
       description: v.description,
-      attendanceRecordId: v.attendanceRecordId ?? undefined
+      attendanceRecordId: v.attendanceRecordId === SEM_PONTO ? undefined : v.attendanceRecordId ?? undefined
     }).subscribe({
       next: () => { this.busy.set(false); this.dialogRef.close(true); },
       error: (err) => {

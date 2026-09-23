@@ -8,7 +8,7 @@ export const authGuard: CanActivateFn = () => {
   if (!auth.isAuth()) return router.createUrlTree(['/auth']);
   const u = auth.user();
   if (u?.mustChangePassword || u?.mustSetEmail) return router.createUrlTree(['/primeiro-acesso']);
-  // Preceptor, professor e coordenadora só entram após aceitar o termo de
+  // Preceptor, professor e secretaria só entram após aceitar o termo de
   // responsabilidade de acesso (senha pessoal e intransferível).
   if (u?.mustAcceptTerms) return router.createUrlTree(['/termo-responsabilidade']);
   return true;

@@ -5,7 +5,7 @@
 
 <div class="actions-bar">
   <button mat-stroked-button *ngIf="!somenteLeitura()" (click)="openCadastrarStaffDialog()">
-    <mat-icon>person_add</mat-icon> Novo preceptor/professor/coordenadora
+    <mat-icon>person_add</mat-icon> Novo preceptor/professor/secretaria
   </button>
   <button mat-stroked-button (click)="exportarCredenciais()"
           matTooltip="Planilha com login (e-mail gerado) e senha inicial (RGM) de cada aluno">
@@ -158,7 +158,7 @@
   <mat-card class="panel-card">
     <mat-card-header>
       <mat-icon mat-card-avatar>badge</mat-icon>
-      <mat-card-title>Preceptores, professores e coordenadoras</mat-card-title>
+      <mat-card-title>Preceptores, professores e secretarias</mat-card-title>
     </mat-card-header>
     <mat-card-content>
       <table mat-table [dataSource]="paginaStaff.pagina()" class="full-width" *ngIf="staff().length; else emptyStaff">
@@ -175,7 +175,7 @@
           <td mat-cell *matCellDef="let u">
             <span class="role-chip"
                   [class.role-supervisor]="u.role === 'supervisor'"
-                  [class.role-coordenadora]="u.role === 'coordenadora'">{{ perfilLabel(u.role) }}</span>
+                  [class.role-secretaria]="u.role === 'secretaria'">{{ perfilLabel(u.role) }}</span>
           </td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="displayedStaffCols"></tr>

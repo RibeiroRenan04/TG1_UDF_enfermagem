@@ -33,7 +33,7 @@ export class IrregularitiesService {
   }
 
   /**
-   * Indicadores do professor e da coordenadora. `dias` é a janela analisada;
+   * Indicadores do professor e da secretaria. `dias` é a janela analisada;
    * nulo considera todo o histórico. A fila de decisão é sempre a atual.
    */
   getPainel(dias: number | null): Observable<IrregularidadesPainel> {

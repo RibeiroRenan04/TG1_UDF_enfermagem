@@ -1,4 +1,4 @@
-/** Painel do professor e da coordenadora — espelha o PainelGestaoDto da API. */
+/** Painel do professor e da secretaria — espelha o PainelGestaoDto da API. */
 export interface PainelGestao {
   data: string;
   hoje: PresencaHoje;

@@ -9,7 +9,7 @@
   <p *ngIf="somenteLeitura()">Acompanhamento das ocorrências (perfil de consulta).</p>
 </div>
 
-<!-- ══ Indicadores (professor e coordenadora) ══════════════════════════════
+<!-- ══ Indicadores (professor e secretaria) ══════════════════════════════
      Clicar num indicador filtra a lista abaixo. -->
 <app-irregularidades-painel *ngIf="ehGestao()"
                             (filtrarStatus)="filtrarPorStatus($event)"

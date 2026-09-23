@@ -59,7 +59,7 @@ export class HistoricoComponent implements OnInit {
     }
 
     const ref = this.dialog.open(RegistrarIrregularidadeDialogComponent, {
-      width: '560px', maxHeight: '90vh', data: { registro }
+      width: '560px', maxWidth: '95vw', maxHeight: '90vh', autoFocus: 'dialog', data: { registro }
     });
     ref.afterClosed().subscribe((criada: boolean) => {
       if (criada) {

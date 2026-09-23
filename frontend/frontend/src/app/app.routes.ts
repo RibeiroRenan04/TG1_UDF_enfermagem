@@ -60,7 +60,7 @@ export const routes: Routes = [
       // as ações de escrita são bloqueadas na API e escondidas nas telas.
       {
         path: 'unidades',
-        canActivate: [roleGuard(['aluno', 'supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['aluno', 'supervisor', 'secretaria'])],
         loadComponent: () => import('./features/unidades/unidades.component').then(m => m.UnidadesComponent)
       },
       {
@@ -70,17 +70,17 @@ export const routes: Routes = [
       },
       {
         path: 'unidades/revisao',
-        canActivate: [roleGuard(['supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['supervisor', 'secretaria'])],
         loadComponent: () => import('./features/unidades/revisao-localizacao.component').then(m => m.RevisaoLocalizacaoComponent)
       },
       {
         path: 'unidades/:id',
-        canActivate: [roleGuard(['aluno', 'supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['aluno', 'supervisor', 'secretaria'])],
         loadComponent: () => import('./features/unidades/unidade-detalhe.component').then(m => m.UnidadeDetalheComponent)
       },
       {
         path: 'alocacoes',
-        canActivate: [roleGuard(['supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['supervisor', 'secretaria'])],
         loadComponent: () => import('./features/alocacoes/alocacoes.component').then(m => m.AlocacoesComponent)
       },
       // "Locais" e "Unidades de saúde" eram duas telas sobre a MESMA tabela
@@ -92,7 +92,7 @@ export const routes: Routes = [
       { path: 'locais/:id', redirectTo: 'unidades/:id' },
       {
         path: 'rodizios',
-        canActivate: [roleGuard(['supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['supervisor', 'secretaria'])],
         loadComponent: () => import('./features/rodizios/rodizios.component').then(m => m.RodiziosComponent)
       },
       // ── Programação do dia ──
@@ -100,29 +100,29 @@ export const routes: Routes = [
       // gestão cadastra as atividades e as exceções do calendário.
       {
         path: 'atividades-remotas',
-        canActivate: [roleGuard(['aluno', 'supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['aluno', 'supervisor', 'secretaria'])],
         loadComponent: () => import('./features/atividades-remotas/atividades-remotas.component')
           .then(m => m.AtividadesRemotasComponent)
       },
       {
         path: 'excecoes',
-        canActivate: [roleGuard(['supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['supervisor', 'secretaria'])],
         loadComponent: () => import('./features/excecoes/excecoes.component')
           .then(m => m.ExcecoesComponent)
       },
       {
         path: 'usuarios',
-        canActivate: [roleGuard(['supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['supervisor', 'secretaria'])],
         loadComponent: () => import('./features/usuarios/usuarios.component').then(m => m.UsuariosComponent)
       },
       {
         path: 'relatorios',
-        canActivate: [roleGuard(['supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['supervisor', 'secretaria'])],
         loadComponent: () => import('./features/relatorios/relatorios.component').then(m => m.RelatoriosComponent)
       },
       {
         path: 'certificados',
-        canActivate: [roleGuard(['aluno', 'supervisor', 'coordenadora'])],
+        canActivate: [roleGuard(['aluno', 'supervisor', 'secretaria'])],
         loadComponent: () => import('./features/certificados/certificados.component').then(m => m.CertificadosComponent)
       }
     ]

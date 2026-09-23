@@ -51,7 +51,7 @@ export class UnidadesComponent implements OnInit {
   readonly opcoesStatus: StatusGeocodificacao[] =
     ['pendente', 'processando', 'sucesso', 'revisao_manual', 'nao_encontrado', 'erro'];
 
-  /** Só o professor altera; a coordenadora consulta. */
+  /** Só o professor altera; a secretaria consulta. */
   podeEditar = this.auth.ehProfessor;
   somenteLeitura = this.auth.somenteLeitura;
 

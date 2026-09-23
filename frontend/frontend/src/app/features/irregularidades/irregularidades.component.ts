@@ -29,7 +29,7 @@ import { mensagemErro } from '../../core/utils/api-error';
  *   • aluno      → registra a ocorrência e acompanha o andamento;
  *   • preceptor  → toma ciência, observa e encaminha ao professor (não decide);
  *   • professor  → analisa e aprova ou nega, com parecer;
- *   • coordenadora → apenas consulta.
+ *   • secretaria → apenas consulta.
  */
 @Component({
   selector: 'app-irregularidades',
@@ -66,7 +66,7 @@ export class IrregularidadesComponent implements OnInit {
   ehAluno = computed(() => this.auth.role() === 'aluno');
   ehPreceptor = computed(() => this.auth.role() === 'preceptor');
   ehProfessor = this.auth.ehProfessor;
-  /** Professor e coordenadora: veem os indicadores acima da lista. */
+  /** Professor e secretaria: veem os indicadores acima da lista. */
   ehGestao = this.auth.ehGestao;
   somenteLeitura = this.auth.somenteLeitura;
 
@@ -167,7 +167,7 @@ export class IrregularidadesComponent implements OnInit {
   // ── Aluno: registra a ocorrência ──────────────────────────────────────────
   abrirRegistro(): void {
     const ref = this.dialog.open(RegistrarIrregularidadeDialogComponent, {
-      width: '560px', maxHeight: '90vh'
+      width: '560px', maxWidth: '95vw', maxHeight: '90vh', autoFocus: 'dialog'
     });
     ref.afterClosed().subscribe((criada: boolean) => {
       if (criada) {

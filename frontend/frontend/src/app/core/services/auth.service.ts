@@ -20,18 +20,18 @@ export class AuthService {
   readonly userId  = computed(() => this._user()?.userId ?? null);
 
   /**
-   * A coordenadora (secretaria/estagiária) enxerga o mesmo que o professor, porém
+   * A secretaria (ou a estagiária) enxerga o mesmo que o professor, porém
    * sem qualquer permissão de alteração. Use este sinal para esconder ou desabilitar
    * ações de escrita — o backend também bloqueia, isto é apenas a camada visual.
    */
-  readonly somenteLeitura = computed(() => this._user()?.role === 'coordenadora');
+  readonly somenteLeitura = computed(() => this._user()?.role === 'secretaria');
 
   /** Professor responsável: único perfil com acesso total de gestão. */
   readonly ehProfessor = computed(() => this._user()?.role === 'supervisor');
 
-  /** Professor ou coordenadora: quem enxerga os painéis de gestão. */
+  /** Professor ou secretaria: quem enxerga os painéis de gestão. */
   readonly ehGestao = computed(() =>
-    this._user()?.role === 'supervisor' || this._user()?.role === 'coordenadora');
+    this._user()?.role === 'supervisor' || this._user()?.role === 'secretaria');
 
   /** Perfis que precisam aceitar o termo de responsabilidade de acesso. */
   readonly deveAceitarTermo = computed(() => this._user()?.mustAcceptTerms === true);

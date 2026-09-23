@@ -20,7 +20,7 @@ import { mensagemErro } from '../../core/utils/api-error';
     MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatIconModule
   ],
   template: `
-    <h2 mat-dialog-title>Cadastrar preceptor, professor ou coordenadora</h2>
+    <h2 mat-dialog-title>Cadastrar preceptor, professor ou secretaria</h2>
     <mat-dialog-content>
       <p class="hint">O usuário receberá a senha inicial informada e deverá trocá-la no primeiro acesso.</p>
 
@@ -46,9 +46,9 @@ import { mensagemErro } from '../../core/utils/api-error';
             <mat-select formControlName="role">
               <mat-option value="preceptor">Preceptor(a)</mat-option>
               <mat-option value="supervisor">Professor(a) responsável</mat-option>
-              <mat-option value="coordenadora">Coordenadora (somente consulta)</mat-option>
+              <mat-option value="secretaria">Secretaria (somente consulta)</mat-option>
             </mat-select>
-            <mat-hint *ngIf="form.get('role')?.value === 'coordenadora'">
+            <mat-hint *ngIf="form.get('role')?.value === 'secretaria'">
               Mesma visão do professor, sem permissão de alteração.
             </mat-hint>
           </mat-form-field>
@@ -170,7 +170,7 @@ export class CadastrarStaffDialogComponent implements OnInit {
       fullName:    v.fullName!,
       email:       v.email!,
       password:    v.password!,
-      role:        v.role as 'preceptor' | 'supervisor' | 'coordenadora',
+      role:        v.role as 'preceptor' | 'supervisor' | 'secretaria',
       institution: v.institution || undefined,
       phone:       v.phone || undefined
     }).subscribe({

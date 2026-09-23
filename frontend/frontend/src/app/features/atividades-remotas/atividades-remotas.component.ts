@@ -100,9 +100,9 @@ export class AtividadesRemotasComponent implements OnInit {
     taskInstructions: ['']
   });
 
-  /** O aluno vê a agenda; professor e coordenadora veem a gestão das atividades. */
+  /** O aluno vê a agenda; professor e secretaria veem a gestão das atividades. */
   ehAluno = computed(() => this.auth.role() === 'aluno');
-  /** A coordenadora acompanha, mas não altera — a API bloqueia do mesmo jeito. */
+  /** A secretaria acompanha, mas não altera — a API bloqueia do mesmo jeito. */
   podeEditar = this.auth.ehProfessor;
 
   /** A tarefa complementar só é configurada quando a atividade a exige. */

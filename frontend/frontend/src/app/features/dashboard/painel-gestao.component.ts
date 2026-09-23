@@ -12,7 +12,7 @@ import { MatPaginatorModule } from '@angular/material/paginator';
 import { Paginacao } from '../../core/utils/paginacao';
 
 /**
- * Painel do professor e da coordenadora. Cada bloco responde a uma pergunta,
+ * Painel do professor e da secretaria. Cada bloco responde a uma pergunta,
  * da mais urgente para a de acompanhamento:
  *  1. Quem deveria estar em estágio agora e ainda não registrou? (hoje)
  *  2. A presença está caindo? (últimos 14 dias)

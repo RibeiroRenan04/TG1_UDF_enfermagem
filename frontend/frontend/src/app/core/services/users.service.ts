@@ -56,12 +56,12 @@ export class UsersService {
     return this.http.get<string[]>(`${this.api}/vinculos-institucionais`);
   }
 
-  /** Cadastra preceptor, professor (supervisor) ou coordenadora manualmente */
+  /** Cadastra preceptor, professor (supervisor) ou secretaria manualmente */
   createStaff(dto: {
     fullName: string;
     email: string;
     password: string;
-    role: 'preceptor' | 'supervisor' | 'coordenadora';
+    role: 'preceptor' | 'supervisor' | 'secretaria';
     institution?: string;
     phone?: string;
   }): Observable<UserDto> {

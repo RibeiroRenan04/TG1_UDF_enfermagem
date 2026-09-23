@@ -1,5 +1,5 @@
 /** Perfis de acesso. "supervisor" é o professor responsável. */
-export type UserRole = 'aluno' | 'preceptor' | 'supervisor' | 'coordenadora';
+export type UserRole = 'aluno' | 'preceptor' | 'supervisor' | 'secretaria';
 
 export interface AuthResponse {
   token: string;
@@ -33,7 +33,7 @@ export interface TurmaVinculada {
   shift?: string | null;
 }
 
-/** Termo de responsabilidade exibido a preceptores, professores e coordenadoras. */
+/** Termo de responsabilidade exibido a preceptores, professores e secretarias. */
 export interface ResponsibilityTerms {
   titulo: string;
   versao: string;
