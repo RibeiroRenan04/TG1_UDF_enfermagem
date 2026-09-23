@@ -1,4 +1,6 @@
 import { Component, OnInit, signal, computed } from '@angular/core';
+import { MatPaginatorModule } from '@angular/material/paginator';
+import { Paginacao, normalizarBusca } from '../../core/utils/paginacao';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -26,6 +28,7 @@ import { PermissaoAtrasoDialogComponent } from './permissao-atraso-dialog.compon
 import { CadastrarStaffDialogComponent } from './cadastrar-staff-dialog.component';
 import { ConfirmarDialogComponent, ConfirmarDialogData } from '../../shared/confirmar-dialog.component';
 import { mensagemErro } from '../../core/utils/api-error';
+import { hojeIso } from '../../core/utils/data-br';
 
 type Shift = 'manha' | 'tarde' | 'noite';
 type Sem   = 7 | 8;
@@ -41,7 +44,7 @@ interface TabKey { sem: Sem; shift: Shift; label: string }
     MatSelectModule, MatFormFieldModule, MatInputModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule,
     MatTabsModule, MatChipsModule, MatDividerModule, MatTooltipModule,
-    MatSlideToggleModule
+    MatSlideToggleModule, MatPaginatorModule
   ],
   templateUrl: './usuarios.component.html',
   styleUrls: ['./usuarios.component.scss']
@@ -77,21 +80,41 @@ export class UsuariosComponent implements OnInit {
     { sem: 8, shift: 'noite',  label: '8° Noite'   },
   ];
 
+  /** Busca por nome, RGM ou e-mail; vale para todas as seções da tela. */
+  readonly busca = signal('');
+
+  private readonly filtrados = computed(() => {
+    const termo = normalizarBusca(this.busca());
+    return termo
+      ? this.users().filter(u => [u.fullName, u.rgm, u.email].some(c => normalizarBusca(c).includes(termo)))
+      : this.users();
+  });
+
   activeStudents = computed(() =>
-    this.users().filter(u => u.role === 'aluno' && u.isActive !== false && (u.semester === 7 || u.semester === 8))
+    this.filtrados().filter(u => u.role === 'aluno' && u.isActive !== false && (u.semester === 7 || u.semester === 8))
   );
 
   uncategorizedStudents = computed(() =>
-    this.users().filter(u => u.role === 'aluno' && u.isActive !== false && !u.semester)
+    this.filtrados().filter(u => u.role === 'aluno' && u.isActive !== false && !u.semester)
   );
 
   inactiveStudents = computed(() =>
-    this.users().filter(u => u.role === 'aluno' && u.isActive === false)
+    this.filtrados().filter(u => u.role === 'aluno' && u.isActive === false)
   );
 
   staff = computed(() =>
-    this.users().filter(u => u.role !== 'aluno')
+    this.filtrados().filter(u => u.role !== 'aluno')
   );
+
+  private readonly paginasPorAba = new Map(this.tabs.map(tab =>
+    [tab.label, new Paginacao(computed(() => this.studentsForTab(tab)))] as const));
+  readonly paginaSemCategoria = new Paginacao(this.uncategorizedStudents);
+  readonly paginaInativos = new Paginacao(this.inactiveStudents);
+  readonly paginaStaff = new Paginacao(this.staff);
+
+  paginaDaAba(tab: TabKey): Paginacao<UserDto> {
+    return this.paginasPorAba.get(tab.label)!;
+  }
 
   displayedStaffCols = ['name', 'email', 'role'];
 
@@ -197,6 +220,29 @@ export class UsuariosComponent implements OnInit {
             this.snackBar.open(mensagemErro(err, 'Erro ao concluir o estágio do aluno'), 'OK',
               { duration: 6000, panelClass: 'snack-error' });
           }
+        });
+      });
+  }
+
+  /** Volta a senha para o RGM do aluno — o caminho para quem esqueceu a senha. */
+  resetarSenha(student: UserDto): void {
+    const data: ConfirmarDialogData = {
+      titulo: 'Resetar senha',
+      icone: 'lock_reset',
+      mensagem: `Resetar a senha de ${student.fullName}?`,
+      detalhe: `A senha volta a ser o RGM do aluno (${student.rgm ?? 'sem RGM cadastrado'}) e ele precisará `
+             + 'criar uma nova no próximo acesso.',
+      textoConfirmar: 'Resetar senha',
+      cor: 'warn'
+    };
+
+    this.dialog.open(ConfirmarDialogComponent, { width: '480px', data })
+      .afterClosed().subscribe((confirmado: boolean) => {
+        if (!confirmado) return;
+        this.usersService.resetarSenha(student.id).subscribe({
+          next: (r) => this.snackBar.open(r.message, '', { duration: 5000, panelClass: 'snack-success' }),
+          error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao resetar a senha'), 'OK',
+            { duration: 6000, panelClass: 'snack-error' })
         });
       });
   }
@@ -354,7 +400,9 @@ export class UsuariosComponent implements OnInit {
    * sem esta lista não há como comunicar o acesso a quem foi importado.
    */
   exportarCredenciais(): void {
-    const alunos = [...this.activeStudents(), ...this.uncategorizedStudents()];
+    // Todos os alunos ativos, independentemente da busca em tela.
+    const alunos = this.users().filter(u => u.role === 'aluno' && u.isActive !== false
+      && (!u.semester || u.semester === 7 || u.semester === 8));
     if (!alunos.length) {
       this.snackBar.open('Nenhum aluno ativo para exportar.', '', { duration: 3000 });
       return;
@@ -380,7 +428,7 @@ export class UsuariosComponent implements OnInit {
     ws['!cols'] = [{ wch: 32 }, { wch: 12 }, { wch: 34 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Credenciais');
-    XLSX.writeFile(wb, `credenciais-alunos-${new Date().toISOString().substring(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `credenciais-alunos-${hojeIso()}.xlsx`);
 
     this.snackBar.open(`${linhas.length} credencial(is) exportada(s).`, '',
       { duration: 3000, panelClass: 'snack-success' });

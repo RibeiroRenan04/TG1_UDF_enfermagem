@@ -75,11 +75,15 @@
       <div class="row-two">
         <mat-form-field appearance="outline">
           <mat-label>Início do acompanhamento</mat-label>
-          <input matInput type="date" formControlName="followUpStart">
+          <input matInput [matDatepicker]="dp1" formControlName="followUpStart" placeholder="dd/mm/aaaa">
+          <mat-datepicker-toggle matIconSuffix [for]="dp1"></mat-datepicker-toggle>
+          <mat-datepicker #dp1></mat-datepicker>
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>Término do acompanhamento</mat-label>
-          <input matInput type="date" formControlName="followUpEnd">
+          <input matInput [matDatepicker]="dp2" formControlName="followUpEnd" placeholder="dd/mm/aaaa">
+          <mat-datepicker-toggle matIconSuffix [for]="dp2"></mat-datepicker-toggle>
+          <mat-datepicker #dp2></mat-datepicker>
         </mat-form-field>
       </div>
 

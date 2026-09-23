@@ -10,6 +10,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ReportsService } from '../../core/services/reports.service';
 import { ReportRow, ReportTurma } from '../../core/models/models';
 import { rotuloTurno } from '../../core/utils/turma';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatPaginatorModule } from '@angular/material/paginator';
+import { Paginacao, normalizarBusca } from '../../core/utils/paginacao';
 
 /** Valores exibidos numa linha — de uma turma ou do total do aluno. */
 type Valores = Pick<ReportTurma,
@@ -35,7 +39,8 @@ interface LinhaRelatorio {
   standalone: true,
   imports: [
     CommonModule, MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
-    MatProgressSpinnerModule, MatChipsModule, MatTooltipModule
+    MatProgressSpinnerModule, MatChipsModule, MatTooltipModule,
+    MatFormFieldModule, MatInputModule, MatPaginatorModule
   ],
   templateUrl: './relatorios.component.html',
   styleUrls: ['./relatorios.component.scss']
@@ -45,7 +50,18 @@ export class RelatoriosComponent implements OnInit {
   loading = signal(true);
   displayedColumns = ['name', 'turma', 'hours', 'required', 'progress', 'approved', 'irregular', 'pendencies', 'certificate'];
 
-  linhas = computed<LinhaRelatorio[]>(() => this.rows().flatMap(a => this.montarLinhas(a)));
+  readonly busca = signal('');
+  readonly filtrados = computed(() => {
+    const termo = normalizarBusca(this.busca());
+    return termo
+      ? this.rows().filter(a => [a.fullName, a.rgm, ...a.turmas.map(t => t.groupCode)]
+          .some(c => normalizarBusca(c).includes(termo)))
+      : this.rows();
+  });
+  /** Paginado por aluno, para as linhas de um mesmo aluno não se separarem. */
+  readonly paginacao = new Paginacao(this.filtrados);
+
+  linhas = computed<LinhaRelatorio[]>(() => this.paginacao.pagina().flatMap(a => this.montarLinhas(a)));
 
   constructor(private reportsService: ReportsService) {}
 
@@ -77,21 +93,37 @@ export class RelatoriosComponent implements OnInit {
       : '';
   }
 
-  exportCsv(): void {
-    const header = ['Aluno', 'RGM', 'Turma', 'Turno', 'Horas aprovadas', 'Exigidas', 'Progresso (%)', 'Aprovados',
-                    'Irregulares', 'Dias pendentes', 'Horas pendentes', 'Certificado'];
-    const lines = this.linhas().map(l => [
-      l.aluno.fullName, l.aluno.rgm ?? '',
-      l.tipo === 'total' ? 'TOTAL DO ALUNO' : (l.turma?.groupCode ?? ''),
-      l.tipo === 'total' ? '' : this.turno(l.turma),
-      l.valores.hours, l.valores.required, l.valores.progressPercent, l.valores.approved,
-      l.valores.irregular, l.valores.pendencyDays, l.valores.pendencyHours,
-      l.certificado ? (l.aluno.certificateReleased ? 'Sim' : 'Não') : ''
-    ].join(';'));
-    const csv = [header.join(';'), ...lines].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'relatorio.csv'; a.click();
-    URL.revokeObjectURL(url);
+  readonly gerandoPdf = signal(false);
+
+  /** O arquivo sai com o mesmo recorte da tela: a busca aplicada vai junto e aparece no cabeçalho. */
+  async baixarPdf(): Promise<void> {
+    this.gerandoPdf.set(true);
+    try {
+      // jsPDF e SheetJS são pesados: só carregam quando alguém exporta.
+      const { gerarPdf } = await import('./relatorio-exportacao');
+      gerarPdf({ alunos: this.filtrados(), busca: this.busca().trim() }, await this.carregarLogo());
+    } finally {
+      this.gerandoPdf.set(false);
+    }
+  }
+
+  async baixarXlsx(): Promise<void> {
+    const { gerarXlsx } = await import('./relatorio-exportacao');
+    gerarXlsx({ alunos: this.filtrados(), busca: this.busca().trim() });
+  }
+
+  /** Logo da UDF em data URL para embutir no PDF; sem ela o relatório sai só com o nome. */
+  private async carregarLogo(): Promise<string | null> {
+    try {
+      const blob = await (await fetch('assets/logo.png')).blob();
+      return await new Promise<string>((ok, falha) => {
+        const leitor = new FileReader();
+        leitor.onload = () => ok(leitor.result as string);
+        leitor.onerror = falha;
+        leitor.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
   }
 }

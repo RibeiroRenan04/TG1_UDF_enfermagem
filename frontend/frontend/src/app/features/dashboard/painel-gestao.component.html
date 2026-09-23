@@ -145,13 +145,11 @@
       <div class="bloco-cabecalho">
         <div>
           <h3>Ainda sem check-in hoje</h3>
-          <p class="sub" *ngIf="p.hoje.semRegistro > p.hoje.alunosSemRegistro.length">
-            Mostrando {{ p.hoje.alunosSemRegistro.length }} de {{ p.hoje.semRegistro }}
-          </p>
+          <p class="sub" *ngIf="p.hoje.semRegistro">{{ p.hoje.semRegistro }} aluno(s)</p>
         </div>
       </div>
       <ul class="lista-alunos" *ngIf="p.hoje.alunosSemRegistro.length; else todosRegistraram">
-        <li *ngFor="let a of p.hoje.alunosSemRegistro">
+        <li *ngFor="let a of paginaSemRegistro.pagina()">
           <div class="aluno-nome">{{ a.nome }}</div>
           <div class="aluno-meta">
             {{ a.turno }}<ng-container *ngIf="a.unidade"> · {{ a.unidade }}</ng-container>
@@ -159,6 +157,10 @@
           </div>
         </li>
       </ul>
+      <mat-paginator *ngIf="paginaSemRegistro.total() > paginaSemRegistro.tamanho()" class="paginador-card"
+                     [length]="paginaSemRegistro.total()" [pageIndex]="paginaSemRegistro.indice()"
+                     [pageSize]="paginaSemRegistro.tamanho()" [hidePageSize]="true"
+                     (page)="paginaSemRegistro.mudar($event)"></mat-paginator>
       <ng-template #todosRegistraram>
         <p class="vazio">
           <mat-icon class="ok">check_circle</mat-icon>
@@ -205,7 +207,7 @@
           <div class="barra-h-rotulo"><span>{{ f.rotulo }}</span></div>
           <div class="barra-h-trilho">
             <div class="barra-h" [style.width.%]="f.alunos ? largura(f.alunos, maiorFaixa()) : 0"
-                 [style.background]="corFaixa[i]"></div>
+                 [style.background]="corFaixa(i)"></div>
             <span class="barra-h-valor">{{ f.alunos }}</span>
           </div>
         </div>

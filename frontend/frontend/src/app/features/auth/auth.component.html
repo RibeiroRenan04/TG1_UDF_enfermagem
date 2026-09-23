@@ -40,77 +40,26 @@
         </form>
       </ng-container>
 
-      <!-- ════ VIEW 1: Informar e-mail ════ -->
+      <!-- ════ VIEW 1: Esqueci a senha ════ -->
       <ng-container *ngIf="view() === 1">
         <div class="recovery-header">
-          <mat-icon class="recovery-icon">lock_reset</mat-icon>
-          <h2>Recuperar senha</h2>
-          <p>Informe o e-mail cadastrado no sistema para receber o código de verificação.</p>
+          <div class="ajuda-ilustracao" aria-hidden="true">
+            <mat-icon class="ajuda-icone-principal">support_agent</mat-icon>
+            <mat-icon class="ajuda-icone-secundario">lock_reset</mat-icon>
+          </div>
+          <h2>Esqueceu a senha?</h2>
+          <p><strong>Entre em contato com o professor responsável</strong> para redefinir o seu acesso.</p>
         </div>
-        <form [formGroup]="forgotForm" (ngSubmit)="onSendCode()" class="form">
-          <mat-form-field appearance="outline">
-            <mat-label>E-mail de acesso</mat-label>
-            <input matInput type="email" formControlName="forgotEmail" placeholder="rgm&#64;cs.udf.edu.br">
-            <mat-hint>Alunos usam o e-mail acadêmico; preceptores podem usar e-mail externo.</mat-hint>
-            <mat-error *ngIf="forgotForm.get('forgotEmail')?.hasError('email')">E-mail inválido</mat-error>
-            <mat-error *ngIf="forgotForm.get('forgotEmail')?.hasError('required')">Campo obrigatório</mat-error>
-          </mat-form-field>
-          <button mat-raised-button color="primary" type="submit" [disabled]="forgotForm.get('forgotEmail')?.invalid || busy()">
-            <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
-            <span *ngIf="!busy()">Enviar código</span>
-          </button>
-          <button mat-button type="button" (click)="goToLogin()">← Voltar ao login</button>
-        </form>
-      </ng-container>
 
-      <!-- ════ VIEW 2: Inserir código ════ -->
-      <ng-container *ngIf="view() === 2">
-        <div class="recovery-header">
-          <mat-icon class="recovery-icon">mark_email_read</mat-icon>
-          <h2>Código enviado!</h2>
-          <p>Verifique sua caixa de entrada em <strong>{{ forgotForm.get('forgotEmail')?.value }}</strong> e insira o código de 6 dígitos.</p>
-        </div>
-        <form [formGroup]="codeForm" (ngSubmit)="onVerifyCode()" class="form">
-          <mat-form-field appearance="outline">
-            <mat-label>Código de verificação</mat-label>
-            <input matInput formControlName="code" maxlength="6" placeholder="000000">
-            <mat-error *ngIf="codeForm.get('code')?.hasError('minlength')">O código tem 6 dígitos</mat-error>
-          </mat-form-field>
-          <button mat-raised-button color="primary" type="submit" [disabled]="codeForm.invalid || busy()">
-            <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
-            <span *ngIf="!busy()">Verificar código</span>
-          </button>
-          <button mat-button type="button" (click)="onSendCode()">Reenviar código</button>
-          <button mat-button type="button" (click)="view.set(1)">← Voltar</button>
-        </form>
-      </ng-container>
+        <ol class="ajuda-passos">
+          <li>Procure o professor responsável pelo estágio.</li>
+          <li>Alunos: ele volta a sua senha para o padrão, que é o seu <strong>RGM</strong>.</li>
+          <li>Entre com o RGM como senha e crie uma nova no primeiro acesso.</li>
+        </ol>
 
-      <!-- ════ VIEW 3: Nova senha ════ -->
-      <ng-container *ngIf="view() === 3">
-        <div class="recovery-header">
-          <mat-icon class="recovery-icon">lock_open</mat-icon>
-          <h2>Nova senha</h2>
-          <p>Crie uma senha forte para sua conta.</p>
-        </div>
-        <form [formGroup]="resetForm" (ngSubmit)="onResetPassword()" class="form">
-          <mat-form-field appearance="outline">
-            <mat-label>Nova senha</mat-label>
-            <input matInput [type]="hideNewPass ? 'password' : 'text'" formControlName="newPassword" autocomplete="new-password">
-            <button mat-icon-button matSuffix type="button" (click)="hideNewPass = !hideNewPass">
-              <mat-icon>{{ hideNewPass ? 'visibility_off' : 'visibility' }}</mat-icon>
-            </button>
-            <mat-error *ngIf="resetForm.get('newPassword')?.hasError('minlength')">Mínimo 8 caracteres</mat-error>
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Confirmar nova senha</mat-label>
-            <input matInput type="password" formControlName="confirmPassword" autocomplete="new-password">
-            <mat-error *ngIf="resetForm.hasError('mismatch')">As senhas não conferem</mat-error>
-          </mat-form-field>
-          <button mat-raised-button color="primary" type="submit" [disabled]="resetForm.invalid || busy()">
-            <mat-spinner *ngIf="busy()" diameter="20"></mat-spinner>
-            <span *ngIf="!busy()">Redefinir senha</span>
-          </button>
-        </form>
+        <button mat-raised-button color="primary" type="button" (click)="goToLogin()">
+          Voltar ao login
+        </button>
       </ng-container>
 
     </mat-card-content>

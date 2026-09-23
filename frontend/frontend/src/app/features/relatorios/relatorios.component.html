@@ -6,15 +6,26 @@
       turma aparece com o detalhe de cada uma e o total — o certificado é decidido pelo total.
     </p>
   </div>
-  <button mat-stroked-button (click)="exportCsv()" [disabled]="!rows().length">
-    <mat-icon>download</mat-icon> Exportar CSV
-  </button>
+  <div class="acoes-exportacao">
+    <button mat-stroked-button (click)="baixarXlsx()" [disabled]="!filtrados().length">
+      <mat-icon>table_view</mat-icon> Excel
+    </button>
+    <button mat-raised-button color="primary" (click)="baixarPdf()" [disabled]="!filtrados().length || gerandoPdf()">
+      <mat-icon>picture_as_pdf</mat-icon> PDF
+    </button>
+  </div>
 </div>
 
 <div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
 
 <mat-card *ngIf="!loading()">
   <mat-card-content>
+    <mat-form-field appearance="outline" class="busca" subscriptSizing="dynamic" *ngIf="rows().length">
+      <mat-icon matPrefix>search</mat-icon>
+      <mat-label>Buscar por nome, RGM ou turma</mat-label>
+      <input matInput [value]="busca()" (input)="busca.set($any($event.target).value)">
+    </mat-form-field>
+
     <!-- As colunas seguem os campos de ReportRow: usar nomes que a API não devolve
          deixava a tabela inteira em branco. -->
     <table mat-table [dataSource]="linhas()" class="full-width" *ngIf="linhas().length; else empty">
@@ -88,8 +99,11 @@
           [class.linha-turma]="row.tipo === 'turma' && !row.certificado"
           [class.linha-total]="row.tipo === 'total'"></tr>
     </table>
+    <mat-paginator *ngIf="linhas().length" [length]="paginacao.total()" [pageIndex]="paginacao.indice()"
+                   [pageSize]="paginacao.tamanho()" [pageSizeOptions]="paginacao.opcoes"
+                   (page)="paginacao.mudar($event)"></mat-paginator>
     <ng-template #empty>
-      <div class="empty-state"><mat-icon>bar_chart</mat-icon><p>Nenhum dado de relatório.</p></div>
+      <div class="empty-state"><mat-icon>bar_chart</mat-icon><p>{{ rows().length ? 'Nenhum aluno encontrado com essa busca.' : 'Nenhum dado de relatório.' }}</p></div>
     </ng-template>
   </mat-card-content>
 </mat-card>

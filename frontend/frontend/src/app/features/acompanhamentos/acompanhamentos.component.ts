@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -28,7 +29,7 @@ interface Bloco { titulo: string; itens: Dimensao[]; }
   selector: 'app-acompanhamentos',
   standalone: true,
   imports: [
-    CommonModule, ReactiveFormsModule,
+    MatDatepickerModule, CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule,
     MatTooltipModule, MatDividerModule, MatDialogModule

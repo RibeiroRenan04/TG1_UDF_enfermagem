@@ -60,8 +60,13 @@
 
         <mat-form-field appearance="outline">
           <mat-label>Local do estágio</mat-label>
-          <mat-select formControlName="locationId">
-            <mat-option *ngFor="let l of locations()" [value]="l.id">{{ l.name }}</mat-option>
+          <mat-select formControlName="locationId" (openedChange)="buscaLocal.set('')">
+            <div class="select-busca">
+              <mat-icon>search</mat-icon>
+              <input placeholder="Buscar local…" [value]="buscaLocal()"
+                     (input)="buscaLocal.set($any($event.target).value)" (keydown)="$event.stopPropagation()">
+            </div>
+            <mat-option *ngFor="let l of locaisFiltrados(scheduleForm.value.locationId)" [value]="l.id">{{ l.name }}</mat-option>
           </mat-select>
           <mat-error *ngIf="scheduleForm.get('locationId')?.hasError('required')">Selecione o local</mat-error>
           <mat-error *ngIf="erroServidor('locationId') as e">{{ e }}</mat-error>
@@ -80,14 +85,18 @@
 
         <mat-form-field appearance="outline">
           <mat-label>Data de início</mat-label>
-          <input matInput type="date" formControlName="startDate">
+          <input matInput [matDatepicker]="dp1" formControlName="startDate" placeholder="dd/mm/aaaa">
+          <mat-datepicker-toggle matIconSuffix [for]="dp1"></mat-datepicker-toggle>
+          <mat-datepicker #dp1></mat-datepicker>
           <mat-error *ngIf="scheduleForm.get('startDate')?.hasError('required')">Informe a data de início</mat-error>
           <mat-error *ngIf="erroServidor('startDate') as e">{{ e }}</mat-error>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Data de término</mat-label>
-          <input matInput type="date" formControlName="endDate">
+          <input matInput [matDatepicker]="dp2" formControlName="endDate" placeholder="dd/mm/aaaa">
+          <mat-datepicker-toggle matIconSuffix [for]="dp2"></mat-datepicker-toggle>
+          <mat-datepicker #dp2></mat-datepicker>
           <mat-error *ngIf="scheduleForm.get('endDate')?.hasError('required')">Informe a data de término</mat-error>
           <mat-error *ngIf="erroServidor('endDate') as e">{{ e }}</mat-error>
         </mat-form-field>
@@ -136,6 +145,7 @@
               como presencial no local principal. O <strong>sábado</strong> só entra
               quando marcado — use para plantões, práticas supervisionadas e aulas de
               campo; as horas registradas nele somam na carga do aluno.
+              Às <strong>sextas</strong> o estágio é na UDF (Laboratórios de Enfermagem) ou remoto.
             </p>
           </div>
           <div class="dias-atalhos">
@@ -159,19 +169,34 @@
             <mat-label>Atividade</mat-label>
             <mat-select [value]="d.mode" [disabled]="!d.ativo"
                         (valueChange)="atualizarDia(d.dayOfWeek, { mode: $event })">
-              <mat-option *ngFor="let m of modos" [value]="m.valor">{{ m.rotulo }}</mat-option>
+              <mat-option *ngFor="let m of modosDoDia(d)" [value]="m.valor">{{ m.rotulo }}</mat-option>
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="dia-campo">
+          <mat-form-field appearance="outline" class="dia-campo" *ngIf="!ehSexta(d); else localDaSexta">
             <mat-label>Local</mat-label>
             <mat-select [value]="d.locationId"
                         [disabled]="!d.ativo || d.mode !== 'presencial'"
+                        (openedChange)="buscaLocal.set('')"
                         (valueChange)="atualizarDia(d.dayOfWeek, { locationId: $event })">
+                <div class="select-busca">
+                  <mat-icon>search</mat-icon>
+                  <input placeholder="Buscar local…" [value]="buscaLocal()"
+                         (input)="buscaLocal.set($any($event.target).value)" (keydown)="$event.stopPropagation()">
+                </div>
               <mat-option value="">Local principal do rodízio</mat-option>
-              <mat-option *ngFor="let l of locations()" [value]="l.id">{{ l.name }}</mat-option>
+              <mat-option *ngFor="let l of locaisFiltrados(d.locationId)" [value]="l.id">{{ l.name }}</mat-option>
             </mat-select>
           </mat-form-field>
+
+          <ng-template #localDaSexta>
+            <mat-form-field appearance="outline" class="dia-campo">
+              <mat-label>Local</mat-label>
+              <input matInput disabled
+                     [value]="d.mode === 'presencial' ? (localSexta()?.name ?? 'Nenhuma unidade marcada como instituição de ensino') : '—'">
+              <mat-hint>Às sextas: UDF ou remoto.</mat-hint>
+            </mat-form-field>
+          </ng-template>
 
           <span class="dia-hint" *ngIf="d.ativo && d.mode === 'remoto'">
             Validação por código de atividade.
@@ -199,8 +224,14 @@
 <!-- Lista turmas -->
 <div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
 
+<mat-form-field appearance="outline" class="busca-turma" subscriptSizing="dynamic" *ngIf="!loading() && groups().length">
+  <mat-icon matPrefix>search</mat-icon>
+  <mat-label>Buscar turma por código ou nome</mat-label>
+  <input matInput [value]="buscaTurma()" (input)="buscaTurma.set($any($event.target).value)">
+</mat-form-field>
+
 <mat-accordion *ngIf="!loading()">
-  <mat-expansion-panel *ngFor="let g of groups()" class="group-panel">
+  <mat-expansion-panel *ngFor="let g of paginacao.pagina()" class="group-panel" (opened)="carregarMembros(g.id)">
     <mat-expansion-panel-header>
       <mat-panel-title>{{ g.name }}</mat-panel-title>
       <mat-panel-description>
@@ -286,6 +317,10 @@
     </mat-action-row>
   </mat-expansion-panel>
 </mat-accordion>
+
+<mat-paginator *ngIf="!loading() && turmasFiltradas().length" [length]="paginacao.total()"
+               [pageIndex]="paginacao.indice()" [pageSize]="paginacao.tamanho()"
+               [pageSizeOptions]="paginacao.opcoes" (page)="paginacao.mudar($event)"></mat-paginator>
 
 <div class="empty-state" *ngIf="!loading() && !groups().length">
   <mat-icon>group</mat-icon><p>Nenhuma turma cadastrada.</p>

@@ -38,6 +38,15 @@
 
 <ng-container *ngIf="!loading()">
 
+  <mat-form-field appearance="outline" class="busca-usuarios" subscriptSizing="dynamic">
+    <mat-icon matPrefix>search</mat-icon>
+    <mat-label>Buscar por nome, RGM ou e-mail</mat-label>
+    <input matInput [value]="busca()" (input)="busca.set($any($event.target).value)">
+    <button mat-icon-button matSuffix *ngIf="busca()" aria-label="Limpar busca" (click)="busca.set('')">
+      <mat-icon>close</mat-icon>
+    </button>
+  </mat-form-field>
+
   <!-- ══ Alunos ativos ═══════════════════════════════════════════════════════ -->
   <mat-card class="panel-card">
     <mat-card-header>
@@ -57,7 +66,7 @@
       <mat-tab-group animationDuration="150ms">
         <mat-tab *ngFor="let tab of tabs" [label]="tab.label + ' (' + countForTab(tab) + ')'">
           <div class="student-list" *ngIf="studentsForTab(tab).length; else emptyTab">
-            <div class="student-row" *ngFor="let s of studentsForTab(tab)">
+            <div class="student-row" *ngFor="let s of paginaDaAba(tab).pagina()">
               <div class="student-avatar">{{ s.fullName.charAt(0).toUpperCase() }}</div>
               <div class="student-info">
                 <div class="student-name">{{ s.fullName }}</div>
@@ -76,15 +85,18 @@
               <ng-container *ngTemplateOutlet="acoesAluno; context: { $implicit: s }"></ng-container>
             </div>
           </div>
+          <mat-paginator *ngIf="paginaDaAba(tab).total() > paginaDaAba(tab).opcoes[0]" [length]="paginaDaAba(tab).total()"
+                         [pageIndex]="paginaDaAba(tab).indice()" [pageSize]="paginaDaAba(tab).tamanho()"
+                         [pageSizeOptions]="paginaDaAba(tab).opcoes" (page)="paginaDaAba(tab).mudar($event)"></mat-paginator>
           <ng-template #emptyTab>
-            <div class="empty-state"><p>Nenhum aluno em {{ tab.label }}.</p></div>
+            <div class="empty-state"><p>{{ busca() ? 'Nenhum aluno encontrado em ' + tab.label + '.' : 'Nenhum aluno em ' + tab.label + '.' }}</p></div>
           </ng-template>
         </mat-tab>
 
         <!-- Sem categoria -->
         <mat-tab [label]="'Sem categoria (' + uncategorizedStudents().length + ')'">
           <div class="student-list" *ngIf="uncategorizedStudents().length; else emptyUncategorized">
-            <div class="student-row" *ngFor="let s of uncategorizedStudents()">
+            <div class="student-row" *ngFor="let s of paginaSemCategoria.pagina()">
               <div class="student-avatar">{{ s.fullName.charAt(0).toUpperCase() }}</div>
               <div class="student-info">
                 <div class="student-name">{{ s.fullName }}</div>
@@ -96,6 +108,9 @@
               <ng-container *ngTemplateOutlet="acoesAluno; context: { $implicit: s }"></ng-container>
             </div>
           </div>
+          <mat-paginator *ngIf="paginaSemCategoria.total() > paginaSemCategoria.opcoes[0]" [length]="paginaSemCategoria.total()"
+                         [pageIndex]="paginaSemCategoria.indice()" [pageSize]="paginaSemCategoria.tamanho()"
+                         [pageSizeOptions]="paginaSemCategoria.opcoes" (page)="paginaSemCategoria.mudar($event)"></mat-paginator>
           <ng-template #emptyUncategorized>
             <div class="empty-state"><p>Nenhum aluno sem categoria.</p></div>
           </ng-template>
@@ -113,7 +128,7 @@
     </mat-card-header>
     <mat-card-content>
       <div class="student-list" *ngIf="inactiveStudents().length; else emptyInactive">
-        <div class="student-row" *ngFor="let s of inactiveStudents()">
+        <div class="student-row" *ngFor="let s of paginaInativos.pagina()">
           <div class="student-avatar inactive-avatar">{{ s.fullName.charAt(0).toUpperCase() }}</div>
           <div class="student-info">
             <div class="student-name">{{ s.fullName }}</div>
@@ -130,6 +145,9 @@
           </button>
         </div>
       </div>
+      <mat-paginator *ngIf="paginaInativos.total() > paginaInativos.opcoes[0]" [length]="paginaInativos.total()"
+                     [pageIndex]="paginaInativos.indice()" [pageSize]="paginaInativos.tamanho()"
+                     [pageSizeOptions]="paginaInativos.opcoes" (page)="paginaInativos.mudar($event)"></mat-paginator>
       <ng-template #emptyInactive>
         <div class="empty-state"><p>Nenhum aluno inativo.</p></div>
       </ng-template>
@@ -143,7 +161,7 @@
       <mat-card-title>Preceptores, professores e coordenadoras</mat-card-title>
     </mat-card-header>
     <mat-card-content>
-      <table mat-table [dataSource]="staff()" class="full-width" *ngIf="staff().length; else emptyStaff">
+      <table mat-table [dataSource]="paginaStaff.pagina()" class="full-width" *ngIf="staff().length; else emptyStaff">
         <ng-container matColumnDef="name">
           <th mat-header-cell *matHeaderCellDef>Nome</th>
           <td mat-cell *matCellDef="let u"><strong>{{ u.fullName }}</strong></td>
@@ -163,6 +181,9 @@
         <tr mat-header-row *matHeaderRowDef="displayedStaffCols"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedStaffCols;"></tr>
       </table>
+      <mat-paginator *ngIf="paginaStaff.total() > paginaStaff.opcoes[0]" [length]="paginaStaff.total()"
+                     [pageIndex]="paginaStaff.indice()" [pageSize]="paginaStaff.tamanho()"
+                     [pageSizeOptions]="paginaStaff.opcoes" (page)="paginaStaff.mudar($event)"></mat-paginator>
       <ng-template #emptyStaff>
         <div class="empty-state"><mat-icon>badge</mat-icon><p>Nenhum preceptor ou supervisor.</p></div>
       </ng-template>
@@ -201,6 +222,12 @@
           [disabled]="alterandoCicloId() === s.id"
           (click)="concluirAluno(s)">
     <mat-icon>school</mat-icon>
+  </button>
+  <button mat-icon-button *ngIf="!somenteLeitura()"
+          matTooltip="Resetar senha para o RGM do aluno"
+          aria-label="Resetar senha para o RGM do aluno"
+          (click)="resetarSenha(s)">
+    <mat-icon>lock_reset</mat-icon>
   </button>
 </ng-template>
 

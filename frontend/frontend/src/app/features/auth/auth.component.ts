@@ -1,6 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AbstractControl, ReactiveFormsModule, FormBuilder, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -11,14 +11,6 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { AuthService } from '../../core/services/auth.service';
 import { mensagemErro } from '../../core/utils/api-error';
-
-function passwordMatchValidator(): ValidatorFn {
-  return (group: AbstractControl): ValidationErrors | null => {
-    const pw  = group.get('newPassword')?.value;
-    const cpw = group.get('confirmPassword')?.value;
-    return pw && cpw && pw !== cpw ? { mismatch: true } : null;
-  };
-}
 
 @Component({
   selector: 'app-auth',
@@ -34,28 +26,14 @@ function passwordMatchValidator(): ValidatorFn {
 })
 export class AuthComponent {
   busy       = signal(false);
-  view       = signal(0);   // 0=login 1=forgotEmail 2=forgotCode 3=resetPw
+  /** 0 = login; 1 = orientação para quem esqueceu a senha. */
+  view       = signal(0);
   hidePass    = true;
-  hideNewPass = true;
 
   loginForm = this.fb.group({
     email:    ['', [Validators.required]],
     password: ['', [Validators.required, Validators.minLength(6)]]
   });
-
-  forgotForm = this.fb.group({
-    // Preceptores externos podem recuperar a senha com e-mail próprio.
-    forgotEmail: ['', [Validators.required, Validators.email]]
-  });
-
-  codeForm = this.fb.group({
-    code: ['', [Validators.required, Validators.minLength(6), Validators.maxLength(6)]]
-  });
-
-  resetForm = this.fb.group({
-    newPassword:     ['', [Validators.required, Validators.minLength(8)]],
-    confirmPassword: ['', Validators.required]
-  }, { validators: passwordMatchValidator() });
 
   constructor(
     private fb: FormBuilder,
@@ -65,7 +43,7 @@ export class AuthComponent {
   ) {}
 
   goToForgot(): void { this.view.set(1); }
-  goToLogin():  void { this.view.set(0); this.forgotForm.reset(); this.codeForm.reset(); }
+  goToLogin():  void { this.view.set(0); }
 
   onLogin(): void {
     if (this.loginForm.invalid) return;
@@ -88,40 +66,4 @@ export class AuthComponent {
     });
   }
 
-  onSendCode(): void {
-    const email = this.forgotForm.get('forgotEmail')?.value;
-    if (!email) return;
-    this.busy.set(true);
-    this.auth.forgotPassword(email).subscribe({
-      next: () => { this.busy.set(false); this.view.set(2); },
-      error: (err) => { this.busy.set(false); this.snackBar.open(mensagemErro(err, 'Erro ao enviar código'), '', { duration: 4000, panelClass: 'snack-error' }); }
-    });
-  }
-
-  onVerifyCode(): void {
-    if (this.codeForm.invalid) return;
-    const email = this.forgotForm.get('forgotEmail')?.value!;
-    const code  = this.codeForm.get('code')?.value!;
-    this.busy.set(true);
-    this.auth.verifyResetCode(email, code).subscribe({
-      next: () => { this.busy.set(false); this.view.set(3); },
-      error: (err) => { this.busy.set(false); this.snackBar.open(mensagemErro(err, 'Código inválido ou expirado'), '', { duration: 4000, panelClass: 'snack-error' }); }
-    });
-  }
-
-  onResetPassword(): void {
-    if (this.resetForm.invalid) return;
-    const email       = this.forgotForm.get('forgotEmail')?.value!;
-    const code        = this.codeForm.get('code')?.value!;
-    const newPassword = this.resetForm.get('newPassword')?.value!;
-    this.busy.set(true);
-    this.auth.resetPassword(email, code, newPassword).subscribe({
-      next: () => {
-        this.busy.set(false);
-        this.snackBar.open('Senha redefinida com sucesso!', '', { duration: 3000, panelClass: 'snack-success' });
-        this.goToLogin();
-      },
-      error: (err) => { this.busy.set(false); this.snackBar.open(mensagemErro(err, 'Erro ao redefinir senha'), '', { duration: 4000, panelClass: 'snack-error' }); }
-    });
-  }
 }

@@ -7,7 +7,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatStepperModule } from '@angular/material/stepper';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -15,6 +14,7 @@ import { IrregularitiesService } from '../../core/services/irregularities.servic
 import { AttendanceService } from '../../core/services/attendance.service';
 import { AttendanceRecord, IrregularityType } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
+import { hojeIso } from '../../core/utils/data-br';
 
 /** Ponto já escolhido pela tela de origem (histórico), quando houver. */
 export interface RegistrarIrregularidadeData {
@@ -39,7 +39,7 @@ export interface RegistrarIrregularidadeData {
   imports: [
     CommonModule, ReactiveFormsModule,
     MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule,
-    MatSelectModule, MatDatepickerModule, MatNativeDateModule,
+    MatSelectModule, MatDatepickerModule,
     MatIconModule, MatStepperModule, MatProgressSpinnerModule
   ],
   template: `
@@ -59,7 +59,7 @@ export interface RegistrarIrregularidadeData {
       <mat-stepper #stepper linear [selectedIndex]="passo()" (selectionChange)="passo.set($event.selectedIndex)">
 
         <!-- ── 1. Qual ponto ─────────────────────────────────────────────── -->
-        <mat-step [completed]="passo() > 0" label="Qual ponto">
+        <mat-step [completed]="true" label="Qual ponto">
           <ng-container *ngIf="registroFixo() as r; else escolherPonto">
             <div class="ponto-fixo">
               <mat-icon>event_available</mat-icon>
@@ -223,7 +223,7 @@ export class RegistrarIrregularidadeDialogComponent implements OnInit {
   erro = signal('');
   passo = signal(0);
   registros = signal<AttendanceRecord[]>([]);
-  readonly hoje = new Date();
+  readonly hoje = hojeIso();
 
   /** Ponto informado pela tela de origem — o passo 1 vira só confirmação. */
   readonly registroFixo = signal<AttendanceRecord | null>(null);
@@ -240,7 +240,7 @@ export class RegistrarIrregularidadeDialogComponent implements OnInit {
 
   form = this.fb.nonNullable.group({
     type:               ['atraso' as IrregularityType, Validators.required],
-    occurredOn:         [new Date(), Validators.required],
+    occurredOn:         [hojeIso(), Validators.required],
     attendanceRecordId: this.fb.control<string | null>(null),
     description:        ['', [Validators.required, Validators.minLength(10), Validators.maxLength(2000)]]
   });
@@ -289,7 +289,7 @@ export class RegistrarIrregularidadeDialogComponent implements OnInit {
 
   /** Deduz data e tipo a partir do ponto, deixando o passo 2 quase pronto. */
   private aplicarContexto(r: AttendanceRecord): void {
-    this.form.controls.occurredOn.setValue(new Date(r.recordedAt));
+    this.form.controls.occurredOn.setValue(r.recordedAt.slice(0, 10));
     this.form.controls.type.setValue(
       r.status === 'irregular' ? 'fora_do_local'
         : r.type === 'check_in' ? 'atraso' : 'esquecimento_checkout');
@@ -307,7 +307,7 @@ export class RegistrarIrregularidadeDialogComponent implements OnInit {
     const v = this.form.getRawValue();
     this.service.create({
       type: v.type,
-      occurredOn: this.formatarData(v.occurredOn),
+      occurredOn: v.occurredOn,
       description: v.description,
       attendanceRecordId: v.attendanceRecordId ?? undefined
     }).subscribe({
@@ -317,12 +317,5 @@ export class RegistrarIrregularidadeDialogComponent implements OnInit {
         this.erro.set(mensagemErro(err, 'Erro ao registrar a irregularidade.'));
       }
     });
-  }
-
-  /** A API espera DateOnly ("yyyy-MM-dd"); usa a data local para não voltar um dia. */
-  private formatarData(d: Date): string {
-    const mes = `${d.getMonth() + 1}`.padStart(2, '0');
-    const dia = `${d.getDate()}`.padStart(2, '0');
-    return `${d.getFullYear()}-${mes}-${dia}`;
   }
 }

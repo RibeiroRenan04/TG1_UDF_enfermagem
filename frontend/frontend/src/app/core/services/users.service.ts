@@ -83,6 +83,11 @@ export class UsersService {
     return this.http.post<UserDto>(`${this.api}/${userId}/concluir`, {});
   }
 
+  /** Volta a senha do aluno para o RGM; ele cria uma nova no próximo acesso. */
+  resetarSenha(userId: string): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.api}/${userId}/reset-password`, {});
+  }
+
   /** Desfaz uma conclusão marcada por engano: o aluno volta para "Alunos ativos". */
   reativar(userId: string): Observable<UserDto> {
     return this.http.post<UserDto>(`${this.api}/${userId}/reativar`, {});

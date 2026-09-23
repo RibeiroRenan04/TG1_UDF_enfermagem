@@ -18,6 +18,7 @@ import { AtividadesRemotasService } from '../../core/services/atividades-remotas
 import { AtividadeRemotaAluno, ProgramacaoDia, ShiftPointStatus } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
 import { HoraPipe } from '../../core/utils/hora.pipe';
+import { SemColarDirective } from '../../core/utils/sem-colar.directive';
 
 /**
  * Registro de presença guiado pela programação do dia.
@@ -34,7 +35,7 @@ import { HoraPipe } from '../../core/utils/hora.pipe';
     CommonModule, ReactiveFormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatFormFieldModule, MatInputModule,
     MatIconModule, MatProgressSpinnerModule, MatSnackBarModule, MatDividerModule,
-    MatTooltipModule, MatChipsModule, HoraPipe
+    MatTooltipModule, MatChipsModule, HoraPipe, SemColarDirective
   ],
   templateUrl: './check-in.component.html',
   styleUrls: ['./check-in.component.scss']
@@ -318,6 +319,10 @@ export class CheckInComponent implements OnInit, OnDestroy {
    * (código errado, prazo encerrado, grupo não autorizado) e são exibidas como
    * chegam: é o que diz ao aluno o que fazer em seguida.
    */
+  avisarSemColar(): void {
+    this.snackBar.open('Colar texto não é permitido: digite a resposta.', '', { duration: 3000 });
+  }
+
   registrarRemoto(): void {
     if (this.remotoForm.invalid) {
       this.remotoForm.markAllAsTouched();

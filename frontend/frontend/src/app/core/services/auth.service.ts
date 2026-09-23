@@ -51,21 +51,6 @@ export class AuthService {
     );
   }
 
-  /** Envia código de recuperação de senha para o e-mail @cs.udf.edu.br */
-  forgotPassword(email: string): Observable<void> {
-    return this.http.post<void>(`${this.api}/forgot-password`, { email });
-  }
-
-  /** Verifica se o código recebido por e-mail é válido */
-  verifyResetCode(email: string, code: string): Observable<void> {
-    return this.http.post<void>(`${this.api}/verify-reset-code`, { email, code });
-  }
-
-  /** Redefine a senha usando o código validado */
-  resetPassword(email: string, code: string, newPassword: string): Observable<void> {
-    return this.http.post<void>(`${this.api}/reset-password`, { email, code, newPassword });
-  }
-
   /** Texto do termo de responsabilidade (mantido no backend para versionamento). */
   getTerms(): Observable<ResponsibilityTerms> {
     return this.http.get<ResponsibilityTerms>(`${this.api}/terms`);

@@ -1,4 +1,7 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
+import { MatPaginatorModule } from '@angular/material/paginator';
+import { Paginacao, normalizarBusca } from '../../core/utils/paginacao';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -31,6 +34,8 @@ import { aplicarErrosServidor, mensagemErro } from '../../core/utils/api-error';
  * Linha da programação semanal na tela. `ativo` separa o dia que faz parte do
  * rodízio daquele sem atividade nenhuma; só os ativos vão para a API.
  */
+const DIA_SEXTA = 5;
+
 interface LinhaDia {
   dayOfWeek: number;
   label: string;
@@ -44,11 +49,11 @@ interface LinhaDia {
   selector: 'app-rodizios',
   standalone: true,
   imports: [
-    CommonModule, ReactiveFormsModule,
+    MatDatepickerModule, CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatTableModule, MatExpansionModule, MatProgressSpinnerModule,
     MatSnackBarModule, MatTooltipModule, MatDividerModule, MatDialogModule,
-    MatCheckboxModule
+    MatCheckboxModule, MatPaginatorModule
   ],
   templateUrl: './rodizios.component.html',
   styleUrls: ['./rodizios.component.scss']
@@ -99,6 +104,22 @@ export class RodiziosComponent implements OnInit {
 
   /** A programação semanal só é enviada quando o supervisor marca algum dia. */
   temProgramacaoSemanal = computed(() => this.dias().some(d => d.ativo));
+
+  /** Às sextas o estágio presencial é sempre na UDF (Laboratórios de Enfermagem) — a API aplica o mesmo. */
+  readonly localSexta = computed<Location | null>(() => this.locations()
+    .filter(l => l.isInstitution)
+    .sort((a, b) => a.name.localeCompare(b.name))[0] ?? null);
+
+  readonly buscaLocal = signal('');
+  readonly buscaTurma = signal('');
+
+  readonly turmasFiltradas = computed(() => {
+    const termo = normalizarBusca(this.buscaTurma());
+    return termo
+      ? this.groups().filter(g => [g.code, g.name].some(c => normalizarBusca(c).includes(termo)))
+      : this.groups();
+  });
+  readonly paginacao = new Paginacao(this.turmasFiltradas);
 
   groupForm = this.fb.group({
     code: ['', Validators.required],
@@ -168,21 +189,28 @@ export class RodiziosComponent implements OnInit {
       next: (g) => {
         this.groups.set(g);
         this.loading.set(false);
-        g.forEach(grp => { this.loadSchedules(grp.id); this.loadMembers(grp.id); });
       },
       error: () => this.loading.set(false)
     });
   }
 
-  /** Escalas de todas as turmas — base do aviso de conflito de preceptor. */
+  /**
+   * Escalas de todas as turmas numa chamada só: alimentam a lista de cada turma e o aviso de
+   * conflito de preceptor. Antes a tela pedia as escalas e os alunos turma por turma (duas
+   * requisições por turma ao abrir).
+   */
   loadAllSchedules(): void {
-    this.groupsService.getSchedules().subscribe(s => this.allSchedules.set(s));
+    this.groupsService.getSchedules().subscribe(s => {
+      this.allSchedules.set(s);
+      const porTurma: Record<string, RotationSchedule[]> = {};
+      for (const escala of s) (porTurma[escala.groupId] ??= []).push(escala);
+      this.schedulesByGroup.set(porTurma);
+    });
   }
 
-  loadSchedules(groupId: string): void {
-    this.groupsService.getSchedules(groupId).subscribe(s => {
-      this.schedulesByGroup.update(cur => ({ ...cur, [groupId]: s }));
-    });
+  /** Os alunos da turma só são buscados quando o painel dela é aberto. */
+  carregarMembros(groupId: string): void {
+    if (!this.membersByGroup()[groupId]) this.loadMembers(groupId);
   }
 
   /** Carrega os alunos vinculados para conferência antes da alocação. */
@@ -272,6 +300,21 @@ export class RodiziosComponent implements OnInit {
         locationId: dia.locationId && dia.locationId !== schedule.locationId ? dia.locationId : ''
       };
     });
+  }
+
+  /** Opções do campo Local filtradas pela busca, sem esconder o local já escolhido. */
+  locaisFiltrados(selecionado?: string | null): Location[] {
+    const termo = normalizarBusca(this.buscaLocal());
+    if (!termo) return this.locations();
+    return this.locations().filter(l => l.id === selecionado || normalizarBusca(l.name).includes(termo));
+  }
+
+  ehSexta(d: LinhaDia): boolean {
+    return d.dayOfWeek === DIA_SEXTA;
+  }
+
+  modosDoDia(d: LinhaDia) {
+    return this.ehSexta(d) ? this.modos.filter(m => m.valor !== 'sem_atividade') : this.modos;
   }
 
   atualizarDia(dayOfWeek: number, mudanca: Partial<LinhaDia>): void {
@@ -409,7 +452,9 @@ export class RodiziosComponent implements OnInit {
         .map(d => ({
           dayOfWeek: d.dayOfWeek,
           mode: d.mode,
-          locationId: d.mode === 'presencial' && d.locationId ? d.locationId : undefined
+          locationId: d.mode !== 'presencial' ? undefined
+            : d.dayOfWeek === DIA_SEXTA ? this.localSexta()?.id
+            : d.locationId || undefined
         }))
     } satisfies RotationScheduleInput;
 
@@ -423,7 +468,6 @@ export class RodiziosComponent implements OnInit {
         this.savingSchedule.set(false);
         this.snackBar.open(atual ? 'Alocação atualizada!' : 'Rodízio alocado!', '', { duration: 2500, panelClass: 'snack-success' });
         this.showScheduleForm.set(false);
-        this.loadSchedules(v.groupId!);
         this.loadAllSchedules();
       },
       error: (err) => {
@@ -442,7 +486,6 @@ export class RodiziosComponent implements OnInit {
     this.groupsService.deleteSchedule(s.id).subscribe({
       next: () => {
         this.snackBar.open('Alocação removida.', '', { duration: 2000 });
-        this.loadSchedules(groupId);
         this.loadAllSchedules();
       },
       error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao excluir alocação'), '', { duration: 3000, panelClass: 'snack-error' })

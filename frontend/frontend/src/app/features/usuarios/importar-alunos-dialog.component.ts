@@ -12,6 +12,7 @@ import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import * as XLSX from 'xlsx';
 import { UsersService } from '../../core/services/users.service';
 import { BulkImportStudent, BulkImportResult, ImportedStudentLogin } from '../../core/models/models';
+import { hojeIso } from '../../core/utils/data-br';
 
 @Component({
   selector: 'app-importar-alunos-dialog',
@@ -341,6 +342,6 @@ export class ImportarAlunosDialogComponent {
     ws['!cols'] = [{ wch: 32 }, { wch: 12 }, { wch: 34 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Logins');
-    XLSX.writeFile(wb, `logins-alunos-${new Date().toISOString().substring(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `logins-alunos-${hojeIso()}.xlsx`);
   }
 }

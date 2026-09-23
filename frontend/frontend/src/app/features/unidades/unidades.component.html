@@ -57,7 +57,7 @@
       <input matInput [(ngModel)]="filtroCidade" (keyup.enter)="carregar()">
     </mat-form-field>
 
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" *ngIf="ehGestao()">
       <mat-label>Situação</mat-label>
       <mat-select [(ngModel)]="filtroAtivo" (selectionChange)="carregar()">
         <mat-option [value]="true">Ativas</mat-option>
@@ -84,7 +84,7 @@
 <!-- ══ Tabela ═══════════════════════════════════════════════════════════════ -->
 <mat-card *ngIf="!loading()">
   <mat-card-content>
-    <table mat-table [dataSource]="unidades()" class="full-width" *ngIf="unidades().length; else vazio">
+    <table mat-table [dataSource]="paginacao.pagina()" class="full-width" *ngIf="unidades().length; else vazio">
 
       <ng-container matColumnDef="nome">
         <th mat-header-cell *matHeaderCellDef>Unidade</th>
@@ -154,6 +154,10 @@
       <tr mat-header-row *matHeaderRowDef="colunas()"></tr>
       <tr mat-row *matRowDef="let row; columns: colunas();"></tr>
     </table>
+
+    <mat-paginator *ngIf="unidades().length" [length]="paginacao.total()" [pageIndex]="paginacao.indice()"
+                   [pageSize]="paginacao.tamanho()" [pageSizeOptions]="paginacao.opcoes"
+                   (page)="paginacao.mudar($event)"></mat-paginator>
 
     <ng-template #vazio>
       <div class="empty-state">

@@ -1,4 +1,6 @@
 import { Component, OnInit, ViewChild, computed, signal } from '@angular/core';
+import { MatPaginatorModule } from '@angular/material/paginator';
+import { Paginacao } from '../../core/utils/paginacao';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -37,7 +39,7 @@ import { mensagemErro } from '../../core/utils/api-error';
     MatCardModule, MatButtonModule, MatIconModule, MatChipsModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatTabsModule,
     MatTooltipModule, MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule,
-    IrregularidadesPainelComponent
+    IrregularidadesPainelComponent, MatPaginatorModule
   ],
   templateUrl: './irregularidades.component.html',
   styleUrls: ['./irregularidades.component.scss']
@@ -106,6 +108,8 @@ export class IrregularidadesComponent implements OnInit {
       ? this.inicioDaEspera(a) - this.inicioDaEspera(b)
       : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   });
+
+  readonly paginacao = new Paginacao(this.itensFiltrados);
 
   temFiltroExtra = computed(() => !!this.busca().trim() || this.filtroTipo() !== 'todos');
 
@@ -248,6 +252,15 @@ export class IrregularidadesComponent implements OnInit {
     const desde = item.status === 'aguardando_professor' && item.preceptorAcknowledgedAt
       ? item.preceptorAcknowledgedAt : item.createdAt;
     return new Date(desde).getTime();
+  }
+
+  /** Deixa claro de que etapa é a espera: "hoje" sozinho parecia a data de abertura. */
+  rotuloEspera(item: Irregularity): string {
+    const dias = this.diasEsperando(item) ?? 0;
+    const tempo = dias === 0 ? 'desde hoje' : dias === 1 ? 'há 1 dia' : `há ${dias} dias`;
+    return item.status === 'aguardando_professor'
+      ? `Com o professor ${tempo}`
+      : `Com o preceptor ${tempo}`;
   }
 
   /** Dias parada na etapa atual; nulo quando já foi decidida. */

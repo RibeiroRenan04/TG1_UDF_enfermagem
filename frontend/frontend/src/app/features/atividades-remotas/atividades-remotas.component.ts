@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -25,6 +26,10 @@ import {
 } from '../../core/models/models';
 import { aplicarErrosServidor, mensagemErro } from '../../core/utils/api-error';
 import { HoraPipe } from '../../core/utils/hora.pipe';
+import { HoraInputDirective } from '../../core/utils/hora-input.directive';
+import { hojeIso } from '../../core/utils/data-br';
+import { MatPaginatorModule } from '@angular/material/paginator';
+import { Paginacao, normalizarBusca } from '../../core/utils/paginacao';
 
 /**
  * Atividades remotas.
@@ -38,16 +43,25 @@ import { HoraPipe } from '../../core/utils/hora.pipe';
   selector: 'app-atividades-remotas',
   standalone: true,
   imports: [
-    CommonModule, ReactiveFormsModule,
+    MatDatepickerModule, CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatCheckboxModule, MatExpansionModule, MatTableModule,
-    MatProgressSpinnerModule, MatSnackBarModule, MatTooltipModule, MatDividerModule, HoraPipe
+    MatProgressSpinnerModule, MatSnackBarModule, MatTooltipModule, MatDividerModule, HoraPipe, HoraInputDirective, MatPaginatorModule
   ],
   templateUrl: './atividades-remotas.component.html',
   styleUrls: ['./atividades-remotas.component.scss']
 })
 export class AtividadesRemotasComponent implements OnInit {
   atividades = signal<AtividadeRemota[]>([]);
+  readonly busca = signal('');
+  readonly filtradas = computed(() => {
+    const termo = normalizarBusca(this.busca());
+    return termo
+      ? this.atividades().filter(a =>
+          [a.title, a.groupCode, a.presenceCode].some(c => normalizarBusca(c).includes(termo)))
+      : this.atividades();
+  });
+  readonly paginacao = new Paginacao(this.filtradas);
   minhas = signal<AtividadeRemotaAluno[]>([]);
   groups = signal<StudentGroup[]>([]);
   schedules = signal<RotationSchedule[]>([]);
@@ -137,7 +151,7 @@ export class AtividadesRemotasComponent implements OnInit {
     this.editando.set(null);
     this.form.reset({
       title: '', description: '', groupId: '', scheduleId: '',
-      activityDate: new Date().toISOString().substring(0, 10),
+      activityDate: hojeIso(),
       startTime: '08:00', endTime: '12:00', estimatedHours: 4,
       requiresTask: false, taskType: '', taskInstructions: ''
     });

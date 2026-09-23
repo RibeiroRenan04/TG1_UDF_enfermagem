@@ -147,3 +147,19 @@ mat-progress-bar { border-radius: 4px; }
 
 .snack-success .mdc-snackbar__surface { background-color: #166534 !important; }
 .snack-error   .mdc-snackbar__surface { background-color: #991b1b !important; }
+
+// Busca dentro do painel de um mat-select (campo Local do rodízio).
+.select-busca {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--mat-select-panel-background-color, #fff);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+
+  mat-icon { color: rgba(0, 0, 0, 0.54); }
+  input { flex: 1; border: none; outline: none; font: inherit; background: transparent; }
+}

@@ -11,13 +11,20 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { CertificatesService } from '../../core/services/certificates.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Certificate } from '../../core/models/models';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { MatPaginatorModule } from '@angular/material/paginator';
+import { Paginacao, normalizarBusca } from '../../core/utils/paginacao';
+import { mensagemErro } from '../../core/utils/api-error';
 
 @Component({
   selector: 'app-certificados',
   standalone: true,
   imports: [
     CommonModule, MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
-    MatProgressSpinnerModule, MatProgressBarModule, MatChipsModule, MatSnackBarModule
+    MatProgressSpinnerModule, MatProgressBarModule, MatChipsModule, MatSnackBarModule,
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatPaginatorModule
   ],
   templateUrl: './certificados.component.html',
   styleUrls: ['./certificados.component.scss']
@@ -27,6 +34,19 @@ export class CertificadosComponent implements OnInit {
   myCert = signal<Certificate | null>(null);
   list = signal<Certificate[]>([]);
   selected = signal<Certificate | null>(null);
+  erro = signal<string | null>(null);
+
+  readonly busca = signal('');
+  readonly situacao = signal<'todos' | 'concluidos' | 'andamento'>('todos');
+  readonly filtrados = computed(() => {
+    const termo = normalizarBusca(this.busca());
+    const situacao = this.situacao();
+    return this.list().filter(c =>
+      (situacao === 'todos' || c.eligible === (situacao === 'concluidos'))
+      && (!termo || [c.studentName, c.rgm, c.groupName].some(v => normalizarBusca(v).includes(termo))));
+  });
+  readonly concluidos = computed(() => this.filtrados().filter(c => c.eligible).length);
+  readonly paginacao = new Paginacao(this.filtrados);
 
   role = this.auth.role;
   isAluno = computed(() => this.role() === 'aluno');
@@ -42,14 +62,20 @@ export class CertificadosComponent implements OnInit {
     if (this.isAluno()) {
       this.certs.me().subscribe({
         next: (c) => { this.myCert.set(c); this.loading.set(false); },
-        error: () => this.loading.set(false)
+        error: (err) => this.falhou(err)
       });
     } else {
       this.certs.all().subscribe({
         next: (l) => { this.list.set(l); this.loading.set(false); },
-        error: () => this.loading.set(false)
+        error: (err) => this.falhou(err)
       });
     }
+  }
+
+  private falhou(err: unknown): void {
+    this.loading.set(false);
+    this.erro.set(mensagemErro(err, 'Não foi possível carregar os certificados.'));
+    this.snack.open(this.erro()!, 'OK', { duration: 6000, panelClass: 'snack-error' });
   }
 
   abrir(cert: Certificate): void {

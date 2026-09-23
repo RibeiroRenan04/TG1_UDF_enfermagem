@@ -1,6 +1,6 @@
 <div class="page-header">
   <h1>Calendário de exceções</h1>
-  <button mat-raised-button color="primary" *ngIf="podeEditar()" (click)="novo()">
+  <button mat-raised-button color="primary" *ngIf="podeEditar() && !showForm()" (click)="novo()">
     <mat-icon>add</mat-icon> Nova exceção
   </button>
 </div>
@@ -40,13 +40,17 @@
 
       <mat-form-field appearance="outline">
         <mat-label>Data inicial</mat-label>
-        <input matInput type="date" formControlName="startDate">
+        <input matInput [matDatepicker]="dp1" formControlName="startDate" placeholder="dd/mm/aaaa">
+        <mat-datepicker-toggle matIconSuffix [for]="dp1"></mat-datepicker-toggle>
+        <mat-datepicker #dp1></mat-datepicker>
         <mat-error>Informe a data inicial</mat-error>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>Data final</mat-label>
-        <input matInput type="date" formControlName="endDate">
+        <input matInput [matDatepicker]="dp2" formControlName="endDate" placeholder="dd/mm/aaaa">
+        <mat-datepicker-toggle matIconSuffix [for]="dp2"></mat-datepicker-toggle>
+        <mat-datepicker #dp2></mat-datepicker>
         <mat-hint>Vazia, a exceção vale só no dia inicial.</mat-hint>
       </mat-form-field>
 

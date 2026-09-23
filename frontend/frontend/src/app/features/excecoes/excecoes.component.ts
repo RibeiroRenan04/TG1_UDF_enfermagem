@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -23,6 +24,7 @@ import {
   StudentGroup, TipoExcecao, UserDto
 } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
+import { hojeIso } from '../../core/utils/data-br';
 
 /**
  * Calendário de exceções.
@@ -35,7 +37,7 @@ import { mensagemErro } from '../../core/utils/api-error';
   selector: 'app-excecoes',
   standalone: true,
   imports: [
-    CommonModule, ReactiveFormsModule,
+    MatDatepickerModule, CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatTableModule, MatProgressSpinnerModule, MatSnackBarModule,
     MatTooltipModule
@@ -156,7 +158,7 @@ export class ExcecoesComponent implements OnInit {
     this.editando.set(null);
     this.form.reset({
       type: 'feriado', scope: 'faculdade',
-      startDate: new Date().toISOString().substring(0, 10),
+      startDate: hojeIso(),
       endDate: '', shift: '', groupId: '', scheduleId: '', studentId: '',
       locationId: '', description: ''
     });

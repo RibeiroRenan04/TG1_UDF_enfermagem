@@ -77,3 +77,8 @@ mat-chip {
 
   mat-icon { font-size: 40px; height: 40px; width: 40px; }
 }
+
+.filtros-lista { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
+.filtros-lista .busca { flex: 1; min-width: 260px; max-width: 420px; }
+.filtros-lista .contagem { color: #6B7280; font-size: 0.85rem; }
+.rgm { color: #6B7280; font-size: 0.75rem; }

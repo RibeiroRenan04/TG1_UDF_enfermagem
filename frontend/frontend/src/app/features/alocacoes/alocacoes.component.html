@@ -47,12 +47,16 @@
 
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Início a partir de</mat-label>
-      <input matInput type="date" [(ngModel)]="filtroDe" (change)="filtrar()">
+      <input matInput [matDatepicker]="dp1" [(ngModel)]="filtroDe" (dateChange)="filtrar()" placeholder="dd/mm/aaaa">
+      <mat-datepicker-toggle matIconSuffix [for]="dp1"></mat-datepicker-toggle>
+      <mat-datepicker #dp1></mat-datepicker>
     </mat-form-field>
 
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Início até</mat-label>
-      <input matInput type="date" [(ngModel)]="filtroAte" (change)="filtrar()">
+      <input matInput [matDatepicker]="dp2" [(ngModel)]="filtroAte" (dateChange)="filtrar()" placeholder="dd/mm/aaaa">
+      <mat-datepicker-toggle matIconSuffix [for]="dp2"></mat-datepicker-toggle>
+      <mat-datepicker #dp2></mat-datepicker>
     </mat-form-field>
 
     <button mat-icon-button matTooltip="Limpar filtros" (click)="limparFiltros()">

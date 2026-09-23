@@ -8,6 +8,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { DashboardService } from '../../core/services/dashboard.service';
 import { PainelGestao, PresencaDia } from '../../core/models/painel-gestao';
 import { mensagemErro } from '../../core/utils/api-error';
+import { MatPaginatorModule } from '@angular/material/paginator';
+import { Paginacao } from '../../core/utils/paginacao';
 
 /**
  * Painel do professor e da coordenadora. Cada bloco responde a uma pergunta,
@@ -23,7 +25,7 @@ import { mensagemErro } from '../../core/utils/api-error';
 @Component({
   selector: 'app-painel-gestao',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatCardModule, MatIconModule, MatButtonModule, MatProgressSpinnerModule],
+  imports: [CommonModule, RouterLink, MatCardModule, MatIconModule, MatButtonModule, MatProgressSpinnerModule, MatPaginatorModule],
   templateUrl: './painel-gestao.component.html',
   styleUrls: ['./painel-gestao.component.scss']
 })
@@ -35,8 +37,21 @@ export class PainelGestaoComponent implements OnInit {
   /** Dia com o ponteiro ou o foco do teclado no gráfico de presença. */
   diaEmFoco = signal<PresencaDia | null>(null);
 
-  /** Rampa ordinal das faixas de carga (azul, claro → escuro), validada na skill de dataviz. */
-  readonly corFaixa = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281'];
+  /**
+   * Rampa ordinal das faixas de carga (azul, claro → escuro), validada na skill de dataviz.
+   * Onze tons de um só azul não se distinguem; as faixas de 10% compartilham cinco tons por
+   * proximidade (0–20%, 20–50%, 50–80%, 80–99%, concluída).
+   */
+  private readonly rampaCarga = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281'];
+  private readonly tomDaFaixa = [0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 4];
+
+  corFaixa(indice: number): string {
+    return this.rampaCarga[this.tomDaFaixa[indice] ?? this.rampaCarga.length - 1];
+  }
+
+  readonly alunosSemRegistro = computed(() => this.painel()?.hoje.alunosSemRegistro ?? []);
+  /** 12 por página, a mesma altura dos cards vizinhos; o paginador mostra o restante. */
+  readonly paginaSemRegistro = new Paginacao(this.alunosSemRegistro, 12);
 
   percentualHoje = computed(() => {
     const h = this.painel()?.hoje;

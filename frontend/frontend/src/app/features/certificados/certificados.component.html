@@ -65,10 +65,27 @@
 <!-- Visão do supervisor -->
 <mat-card *ngIf="!loading() && !selected() && !isAluno()">
   <mat-card-content>
-    <table mat-table [dataSource]="list()" class="full-width" *ngIf="list().length; else vazio">
+    <div class="filtros-lista" *ngIf="list().length">
+      <mat-form-field appearance="outline" class="busca" subscriptSizing="dynamic">
+        <mat-icon matPrefix>search</mat-icon>
+        <mat-label>Buscar por nome, RGM ou turma</mat-label>
+        <input matInput [value]="busca()" (input)="busca.set($any($event.target).value)">
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Situação</mat-label>
+        <mat-select [value]="situacao()" (selectionChange)="situacao.set($event.value)">
+          <mat-option value="todos">Todos</mat-option>
+          <mat-option value="concluidos">Concluídos</mat-option>
+          <mat-option value="andamento">Em andamento</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <span class="contagem">{{ filtrados().length }} aluno(s) · {{ concluidos() }} concluído(s)</span>
+    </div>
+
+    <table mat-table [dataSource]="paginacao.pagina()" class="full-width" *ngIf="filtrados().length; else vazio">
       <ng-container matColumnDef="name">
         <th mat-header-cell *matHeaderCellDef>Aluno</th>
-        <td mat-cell *matCellDef="let c">{{ c.studentName }}</td>
+        <td mat-cell *matCellDef="let c">{{ c.studentName }}<div class="rgm" *ngIf="c.rgm">RGM {{ c.rgm }}</div></td>
       </ng-container>
       <ng-container matColumnDef="group">
         <th mat-header-cell *matHeaderCellDef>Turma</th>
@@ -76,7 +93,7 @@
       </ng-container>
       <ng-container matColumnDef="hours">
         <th mat-header-cell *matHeaderCellDef>Carga horária</th>
-        <td mat-cell *matCellDef="let c">{{ c.completedHours }}h / {{ c.requiredHours }}h ({{ c.progressPercent }}%)</td>
+        <td mat-cell *matCellDef="let c">{{ c.completedHours | number:'1.0-1' }}h / {{ c.requiredHours }}h ({{ c.progressPercent | number:'1.0-1' }}%)</td>
       </ng-container>
       <ng-container matColumnDef="status">
         <th mat-header-cell *matHeaderCellDef>Situação</th>
@@ -97,8 +114,11 @@
       <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
       <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
     </table>
+    <mat-paginator *ngIf="filtrados().length" [length]="paginacao.total()" [pageIndex]="paginacao.indice()"
+                   [pageSize]="paginacao.tamanho()" [pageSizeOptions]="paginacao.opcoes"
+                   (page)="paginacao.mudar($event)"></mat-paginator>
     <ng-template #vazio>
-      <div class="empty-state"><mat-icon>workspace_premium</mat-icon><p>Nenhum aluno vinculado a turmas.</p></div>
+      <div class="empty-state"><mat-icon>workspace_premium</mat-icon><p>{{ erro() ?? (list().length ? 'Nenhum aluno encontrado com esses filtros.' : 'Nenhum aluno vinculado a turmas.') }}</p></div>
     </ng-template>
   </mat-card-content>
 </mat-card>

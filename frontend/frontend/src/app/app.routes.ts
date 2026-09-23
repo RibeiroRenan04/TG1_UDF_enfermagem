@@ -60,6 +60,7 @@ export const routes: Routes = [
       // as ações de escrita são bloqueadas na API e escondidas nas telas.
       {
         path: 'unidades',
+        canActivate: [roleGuard(['aluno', 'supervisor', 'coordenadora'])],
         loadComponent: () => import('./features/unidades/unidades.component').then(m => m.UnidadesComponent)
       },
       {
@@ -74,6 +75,7 @@ export const routes: Routes = [
       },
       {
         path: 'unidades/:id',
+        canActivate: [roleGuard(['aluno', 'supervisor', 'coordenadora'])],
         loadComponent: () => import('./features/unidades/unidade-detalhe.component').then(m => m.UnidadeDetalheComponent)
       },
       {
@@ -98,6 +100,7 @@ export const routes: Routes = [
       // gestão cadastra as atividades e as exceções do calendário.
       {
         path: 'atividades-remotas',
+        canActivate: [roleGuard(['aluno', 'supervisor', 'coordenadora'])],
         loadComponent: () => import('./features/atividades-remotas/atividades-remotas.component')
           .then(m => m.AtividadesRemotasComponent)
       },

@@ -1,4 +1,6 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
+import { MatPaginatorModule } from '@angular/material/paginator';
+import { Paginacao } from '../../core/utils/paginacao';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -26,7 +28,7 @@ import { mensagemErro } from '../../core/utils/api-error';
   selector: 'app-unidades',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, RouterLink,
+    CommonModule, FormsModule, RouterLink, MatPaginatorModule,
     MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule
@@ -36,6 +38,7 @@ import { mensagemErro } from '../../core/utils/api-error';
 })
 export class UnidadesComponent implements OnInit {
   unidades = signal<UnidadeSaude[]>([]);
+  readonly paginacao = new Paginacao(this.unidades);
   loading = signal(true);
 
   filtroNome = '';

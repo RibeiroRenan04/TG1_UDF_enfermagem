@@ -84,7 +84,7 @@
 <ng-container *ngIf="!loading()">
   <div class="lista" *ngIf="itensFiltrados().length; else vazio">
 
-    <mat-card class="ocorrencia" *ngFor="let item of itensFiltrados()">
+    <mat-card class="ocorrencia" *ngFor="let item of paginacao.pagina()">
 
       <div class="ocorrencia-topo">
         <div class="ocorrencia-titulo">
@@ -97,7 +97,7 @@
                 [class.atrasada]="diasEsperando(item)! > prazoAtencao"
                 [matTooltip]="diasEsperando(item)! > prazoAtencao ? 'Parada há mais de ' + prazoAtencao + ' dias nesta etapa' : ''">
             <mat-icon>schedule</mat-icon>
-            {{ diasEsperando(item) === 0 ? 'hoje' : 'há ' + diasEsperando(item) + ' dia(s)' }}
+            {{ rotuloEspera(item) }}
           </span>
           <span class="status status-{{ item.status }}">
             <mat-icon>{{ iconeStatus(item.status) }}</mat-icon>
@@ -227,6 +227,10 @@
       </div>
 
     </mat-card>
+
+    <mat-paginator [length]="paginacao.total()" [pageIndex]="paginacao.indice()"
+                   [pageSize]="paginacao.tamanho()" [pageSizeOptions]="paginacao.opcoes"
+                   (page)="paginacao.mudar($event)"></mat-paginator>
   </div>
 
   <ng-template #vazio>

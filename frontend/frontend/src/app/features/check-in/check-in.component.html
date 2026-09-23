@@ -260,10 +260,10 @@
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Resposta da atividade</mat-label>
             <textarea matInput rows="4" [formControl]="remotoForm.controls['taskResponse']"
-                      placeholder="Escreva aqui a resposta, o resumo ou o link da entrega."></textarea>
+                      appSemColar (bloqueado)="avisarSemColar()"
+                      placeholder="Digite aqui a resposta ou o resumo da atividade."></textarea>
             <mat-hint>
-              Obrigatória nas atividades que pedem questionário, discursiva, estudo de caso,
-              formulário ou envio de arquivo.
+              Digite a resposta: colar texto não é permitido neste campo.
             </mat-hint>
           </mat-form-field>
         </div>

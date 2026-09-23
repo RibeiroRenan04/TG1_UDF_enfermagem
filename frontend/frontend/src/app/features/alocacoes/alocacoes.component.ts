@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, signal } from '@angular/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -23,7 +24,7 @@ import { mensagemErro } from '../../core/utils/api-error';
   selector: 'app-alocacoes',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, RouterLink,
+    MatDatepickerModule, CommonModule, FormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatPaginatorModule
