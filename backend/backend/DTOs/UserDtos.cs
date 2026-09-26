@@ -51,7 +51,7 @@ public record CreateStaffDto(
     [Required, MinLength(2), MaxLength(200)] string FullName,
     [Required, EmailAddress, MaxLength(255)] string Email,
     [Required, MinLength(6), MaxLength(100)] string Password,
-    [Required] string Role,   // "preceptor" | "supervisor" | "coordenadora"
+    [Required] string Role,   // "preceptor" | "supervisor" | "secretaria"
     [MaxLength(200)] string? Institution,
     [MaxLength(30)] string? Phone
 );

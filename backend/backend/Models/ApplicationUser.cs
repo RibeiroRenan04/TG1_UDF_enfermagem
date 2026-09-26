@@ -9,7 +9,7 @@ public class ApplicationUser
     public string? Email { get; set; }
     public string PasswordHash { get; set; } = string.Empty;
 
-    /// <summary>"aluno" | "preceptor" | "supervisor" | "coordenadora"</summary>
+    /// <summary>"aluno" | "preceptor" | "supervisor" | "secretaria"</summary>
     public string Role { get; set; } = Roles.Aluno;
 
     /// <summary>A própria matrícula do aluno.</summary>

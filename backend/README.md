@@ -135,7 +135,7 @@ Fluxo de autenticação:
 | Aluno | `aluno` | Check-in/out, histórico próprio, dashboard pessoal, registro de irregularidades |
 | Preceptor | `preceptor` | Acompanhamentos, visualização do grupo, ciência e observação de irregularidades |
 | Professor (supervisor) | `supervisor` | Acesso total ao sistema; única decisão sobre presenças e irregularidades |
-| Coordenadora | `coordenadora` | Mesma visão do professor, **somente leitura** (secretaria/estagiária) |
+| Secretaria | `secretaria` | Mesma visão do professor, **somente leitura** (equipe da secretaria e estagiárias) |
 
 O controle de acesso é aplicado tanto no frontend (route guards) quanto no backend (claims JWT + `[Authorize(Roles)]`).
 
@@ -201,7 +201,7 @@ vale apenas para o check-in; o check-out segue a janela normal do turno.
 
 ### Termo de responsabilidade
 
-Preceptores, professores e coordenadoras precisam aceitar, no primeiro acesso, o termo
+Preceptores, professores e secretarias precisam aceitar, no primeiro acesso, o termo
 que registra que a senha é pessoal e intransferível e que respondem pelas ações feitas
 com a própria conta (`GET /api/auth/terms`, `POST /api/auth/accept-terms`).
 
@@ -487,7 +487,7 @@ database/
 ├── 003_rename_to_portuguese.sql          # Schema em português
 ├── 004_consolidar_rgm_remover_matricula.sql
 ├── 005_irregularidades_e_perfis.sql      # Irregularidades, permissão de atraso,
-│                                         # perfil coordenadora, RGM sem o "14"
+│                                         # perfil de consulta (hoje secretaria), RGM sem o "14"
 ├── 006_fuso_brasilia.sql                 # Registros de ponto em GMT-3 (executar UMA vez)
 ├── 007_unidades_saude.sql                # Unidades de saúde, alocações e cache
 │                                         # de geocodificação

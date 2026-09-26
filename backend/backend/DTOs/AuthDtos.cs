@@ -7,7 +7,7 @@ public record RegisterDto(
     [Required, EmailAddress, MaxLength(255)] string Email,
     [Required, MinLength(6), MaxLength(100)] string Password,
     [MaxLength(50)] string? Matricula,
-    [Required] string Role  // "aluno" | "preceptor" | "supervisor" | "coordenadora"
+    [Required] string Role  // "aluno" | "preceptor" | "supervisor" | "secretaria"
 );
 
 public record LoginDto(

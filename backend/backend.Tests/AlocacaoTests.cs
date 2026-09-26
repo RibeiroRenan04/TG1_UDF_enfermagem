@@ -62,7 +62,7 @@ public class AlocacaoTests
     [Theory]
     [InlineData(Roles.Preceptor)]
     [InlineData(Roles.Supervisor)]
-    [InlineData(Roles.Coordenadora)]
+    [InlineData(Roles.Secretaria)]
     public async Task Usuario_que_nao_e_aluno_nao_pode_ser_alocado(string papel)
     {
         using var db = TestSupport.NovoContexto();

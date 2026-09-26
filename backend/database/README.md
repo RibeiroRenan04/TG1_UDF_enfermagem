@@ -9,7 +9,7 @@ Há **duas fontes** de mudança no banco, e a distinção importa:
 | Origem | O que é | Como é aplicado |
 |---|---|---|
 | `backend/Migrations/` (EF Core) | O schema base. Fonte de verdade. | **Automático**: a API roda `db.Database.Migrate()` no startup (`backend/Program.cs`). |
-| `database/002` … `013` | Evoluções posteriores. | **Manual**: executadas à mão, na ordem. Não são migrations do EF. |
+| `database/002` … `014` | Evoluções posteriores. | **Manual**: executadas à mão, na ordem. Não são migrations do EF. |
 
 Por isso `migration.sql` normalmente **não é necessário**: aponte a connection
 string para um banco vazio, suba a API e o schema base se cria sozinho. O arquivo
@@ -22,7 +22,7 @@ migration.sql   →  schema base (equivalente à migration 20260507011153_Initia
 002             →  colunas UDF em Usuários, códigos de redefinição de senha, CNES
 003             →  renomeia tabelas e colunas para português
 004             →  consolida Matrícula no RGM
-005             →  irregularidades, permissão de atraso, perfil coordenadora
+005             →  irregularidades, permissão de atraso, perfil de consulta (coordenadora, hoje secretaria)
 006             →  converte registros de ponto de UTC para horário de Brasília
 007             →  módulo de Unidades de Saúde e geocodificação
 008             →  alocação por turno e travas do ponto
@@ -31,6 +31,7 @@ migration.sql   →  schema base (equivalente à migration 20260507011153_Initia
 011             →  permite o aluno em mais de uma turma (vínculo único por aluno + turma)
 012             →  remove o curso do aluno e a abrangência "curso" das exceções
 013             →  todos os horários do sistema em Brasília (dados, tipos e defaults)
+014             →  renomeia o perfil "coordenadora" para "secretaria"
 ```
 
 A ordem não é negociável: `003` renomeia o que `migration.sql` e `002` criaram, e
@@ -43,7 +44,7 @@ tudo a partir dali assume os nomes em português.
 1. Crie o banco vazio (ex.: projeto novo no Supabase).
 2. Aponte `ConnectionStrings__DefaultConnection` para ele.
 3. Suba a API. O EF Core cria o schema base e registra em `__EFMigrationsHistory`.
-4. Aplique `002` … `013` na ordem (ou rode o `apply_all.sh`: o `migration.sql` percebe
+4. Aplique `002` … `014` na ordem (ou rode o `apply_all.sh`: o `migration.sql` percebe
    que o schema base já existe e é pulado).
 
 ### Opção B — tudo por SQL, sem executar a API
@@ -52,7 +53,7 @@ tudo a partir dali assume os nomes em português.
 ./apply_all.sh "postgresql://usuario:senha@host:5432/postgres"
 ```
 
-O script executa `migration.sql` e depois `002` … `013`, parando no primeiro erro.
+O script executa `migration.sql` e depois `002` … `014`, parando no primeiro erro.
 
 ## Por que `migration.sql` registra a própria migration
 

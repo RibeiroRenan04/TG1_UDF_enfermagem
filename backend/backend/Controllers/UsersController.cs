@@ -206,8 +206,8 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<ActionResult<UserDto>> CreateStaff([FromBody] CreateStaffDto dto)
     {
-        if (dto.Role is not (Roles.Preceptor or Roles.Supervisor or Roles.Coordenadora))
-            return BadRequest(new { message = "Papel deve ser 'preceptor', 'supervisor' ou 'coordenadora'." });
+        if (dto.Role is not (Roles.Preceptor or Roles.Supervisor or Roles.Secretaria))
+            return BadRequest(new { message = "Papel deve ser 'preceptor', 'supervisor' ou 'secretaria'." });
 
         var vinculo = dto.Institution?.Trim();
         if (!string.IsNullOrEmpty(vinculo))

@@ -13,7 +13,7 @@ namespace EstagioCheck.API.Controllers;
 /// Acompanhamento formativo. Fluxo de responsabilidades:
 ///   • Preceptor  → cria, preenche e finaliza o acompanhamento do aluno;
 ///   • Aluno      → dá ciência do acompanhamento finalizado pelo preceptor;
-///   • Professor e coordenadora → consultam somente relatórios já finalizados.
+///   • Professor e secretaria → consultam somente relatórios já finalizados.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -43,7 +43,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
 
             Roles.Preceptor => query.Where(f => f.PreceptorId == userId),
 
-            Roles.Supervisor or Roles.Coordenadora => query.Where(f => f.Status != StatusRascunho),
+            Roles.Supervisor or Roles.Secretaria => query.Where(f => f.Status != StatusRascunho),
 
             _ => query.Where(_ => false)
         };
@@ -319,7 +319,7 @@ public class FollowupsController(AppDbContext db, IHttpContextAccessor httpConte
     {
         Roles.Aluno => f.StudentId == userId && f.Status != StatusRascunho,
         Roles.Preceptor => f.PreceptorId == userId,
-        Roles.Supervisor or Roles.Coordenadora => f.Status != StatusRascunho,
+        Roles.Supervisor or Roles.Secretaria => f.Status != StatusRascunho,
         _ => false
     };
 

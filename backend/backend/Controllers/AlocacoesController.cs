@@ -314,7 +314,9 @@ public class AlocacoesController(
         [FromQuery] DateOnly? ate,
         [FromQuery] string? busca,
         [FromQuery] int pagina = 1,
-        [FromQuery] int tamanhoPagina = 50)
+        [FromQuery] int tamanhoPagina = 50,
+        [FromQuery] string? ordenarPor = null,
+        [FromQuery] string? direcao = null)
     {
         pagina = Math.Max(1, pagina);
         tamanhoPagina = Math.Clamp(tamanhoPagina, 10, 200);
@@ -337,15 +339,10 @@ public class AlocacoesController(
         var total = await query.CountAsync();
         var ativas = await query.CountAsync(a => a.Ativo);
 
-        var alocacoes = await query
+        var alocacoes = await Ordenar(query, ordenarPor, direcao)
             .Include(a => a.Student)
             .Include(a => a.Location)
             .Include(a => a.CreatedBy)
-            .OrderByDescending(a => a.Ativo)
-            .ThenByDescending(a => a.StartDate)
-            .ThenBy(a => a.Shift)
-            .ThenBy(a => a.Student.FullName)
-            .ThenBy(a => a.Id)
             .Skip((pagina - 1) * tamanhoPagina)
             .Take(tamanhoPagina)
             .ToListAsync();
@@ -358,6 +355,44 @@ public class AlocacoesController(
             Pagina = pagina,
             TamanhoPagina = tamanhoPagina
         });
+    }
+
+    /// <summary>
+    /// Ordenação escolhida no cabeçalho da tabela. A lista é paginada aqui, então a
+    /// ordem precisa sair do banco: ordenar só a página na tela misturaria as demais.
+    /// Sem coluna reconhecida, vale a ordem padrão (ativas e mais recentes primeiro).
+    /// O desempate por aluno e Id mantém a paginação estável.
+    /// </summary>
+    private static IQueryable<StudentAllocation> Ordenar(
+        IQueryable<StudentAllocation> query, string? ordenarPor, string? direcao)
+    {
+        var desc = string.Equals(direcao, "desc", StringComparison.OrdinalIgnoreCase);
+
+        IOrderedQueryable<StudentAllocation> Por<T>(System.Linq.Expressions.Expression<Func<StudentAllocation, T>> chave)
+            => desc ? query.OrderByDescending(chave) : query.OrderBy(chave);
+
+        IOrderedQueryable<StudentAllocation>? ordenada = ordenarPor?.ToLowerInvariant() switch
+        {
+            "estagiario" => Por(a => a.Student.FullName),
+            "rgm" => Por(a => a.Student.Rgm),
+            "unidade" => Por(a => a.Location.Name),
+            // Turno na ordem do dia, não alfabética (manhã, tarde, noite).
+            "turno" => Por(a => a.Shift == Turnos.Manha ? 0 : a.Shift == Turnos.Tarde ? 1 : 2),
+            "inicio" => Por(a => a.StartDate),
+            "fim" => Por(a => a.EndDate),
+            "situacao" => Por(a => a.Ativo),
+            _ => null
+        };
+
+        if (ordenada == null)
+            return query
+                .OrderByDescending(a => a.Ativo)
+                .ThenByDescending(a => a.StartDate)
+                .ThenBy(a => a.Shift)
+                .ThenBy(a => a.Student.FullName)
+                .ThenBy(a => a.Id);
+
+        return ordenada.ThenBy(a => a.Student.FullName).ThenBy(a => a.Id);
     }
 
     /// <summary>O aluno só enxerga a própria. Sem <paramref name="turno"/>, vale o turno cadastrado.</summary>

@@ -272,7 +272,7 @@ Regras validadas na API (não só na tela):
 
 ## Permissões
 
-| Ação | Professor (`supervisor`) | Coordenadora | Preceptor | Aluno |
+| Ação | Professor (`supervisor`) | Secretaria | Preceptor | Aluno |
 |---|:---:|:---:|:---:|:---:|
 | Ver unidades | ✓ | ✓ | ✓ | ✓ |
 | Cadastrar / editar / desativar | ✓ | — | — | — |
@@ -282,7 +282,7 @@ Regras validadas na API (não só na tela):
 | Alocar / encerrar alocação | ✓ | — | — | — |
 | Ver a própria unidade | — | — | — | ✓ |
 
-A coordenadora enxerga tudo que o professor enxerga e **não altera nada** — a
+A secretaria enxerga tudo que o professor enxerga e **não altera nada** — a
 regra vale na API, não apenas no frontend.
 
 ---

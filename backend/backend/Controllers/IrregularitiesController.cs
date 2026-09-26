@@ -19,7 +19,7 @@ namespace EstagioCheck.API.Controllers;
 public class IrregularitiesController(
     AppDbContext db, IrregularidadesPainelService painel, EscopoPreceptorService escopo) : ControllerBase
 {
-    /// <summary>Aluno vê as próprias; preceptor, as dos alunos das escalas dele; professor e coordenadora, todas.</summary>
+    /// <summary>Aluno vê as próprias; preceptor, as dos alunos das escalas dele; professor e secretaria, todas.</summary>
     [HttpGet]
     public async Task<ActionResult<List<IrregularityDto>>> GetAll(
         [FromQuery] string? status,

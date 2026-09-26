@@ -34,7 +34,7 @@ public class DashboardController(
 
         // A gestão não vê horas no painel: para ela basta contar por situação no próprio banco, em vez
         // de trazer o ponto da faculdade inteira (dezenas de milhares de linhas) para somar em memória.
-        var ehGestao = role is Roles.Supervisor or Roles.Coordenadora;
+        var ehGestao = role is Roles.Supervisor or Roles.Secretaria;
         var recs = ehGestao
             ? []
             : await query.AsNoTracking()
@@ -282,7 +282,7 @@ public class DashboardController(
                 Count = contagens.AwaitingPreceptor
             });
         }
-        else if ((role is Roles.Supervisor or Roles.Coordenadora) && contagens.AwaitingProfessor > 0)
+        else if ((role is Roles.Supervisor or Roles.Secretaria) && contagens.AwaitingProfessor > 0)
         {
             avisos.Add(new PendingStatusDto
             {

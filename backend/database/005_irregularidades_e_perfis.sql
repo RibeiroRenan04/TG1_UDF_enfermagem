@@ -20,12 +20,14 @@ ALTER TABLE "Usuarios"
     ADD COLUMN IF NOT EXISTS "ObservacaoAtraso" TEXT        NULL,
     ADD COLUMN IF NOT EXISTS "TermoAceitoEm"    TIMESTAMP   NULL;
 
--- 2) Perfil "coordenadora" (o bloqueio de escrita é feito na API)
+-- 2) Perfil "coordenadora" (o bloqueio de escrita é feito na API). O 014 o renomeia para
+--    "secretaria": se a trava já aceita "secretaria", o 014 rodou e ela não é recriada aqui.
 DO $$
 DECLARE
     v_constraint TEXT;
+    v_definicao  TEXT;
 BEGIN
-    SELECT con.conname INTO v_constraint
+    SELECT con.conname, pg_get_constraintdef(con.oid) INTO v_constraint, v_definicao
     FROM   pg_constraint con
     JOIN   pg_class      rel ON rel.oid = con.conrelid
     WHERE  rel.relname = 'Usuarios'
@@ -33,14 +35,18 @@ BEGIN
       AND  pg_get_constraintdef(con.oid) ILIKE '%Papel%'
     LIMIT  1;
 
+    IF v_definicao ILIKE '%secretaria%' THEN
+        RETURN;
+    END IF;
+
     IF v_constraint IS NOT NULL THEN
         EXECUTE format('ALTER TABLE "Usuarios" DROP CONSTRAINT %I', v_constraint);
     END IF;
-END $$;
 
-ALTER TABLE "Usuarios"
-    ADD CONSTRAINT "CK_Usuarios_Papel"
-    CHECK ("Papel" IN ('aluno', 'preceptor', 'supervisor', 'coordenadora'));
+    ALTER TABLE "Usuarios"
+        ADD CONSTRAINT "CK_Usuarios_Papel"
+        CHECK ("Papel" IN ('aluno', 'preceptor', 'supervisor', 'coordenadora'));
+END $$;
 
 -- 3) RGM sem o "14" do início
 --    A senha inicial de quem ainda não acessou continua sendo o RGM antigo: reimporte a
@@ -163,8 +169,3 @@ GROUP  BY "Status"
 ORDER  BY "Status";
 
 COMMIT;
-
--- Opcional: primeiro usuário "coordenadora" (prefira a tela de Usuários).
--- UPDATE "Usuarios"
--- SET    "Papel" = 'coordenadora', "AtualizadoEm" = (NOW() AT TIME ZONE 'America/Sao_Paulo')
--- WHERE  "Email" = 'coordenacao@cs.udf.edu.br';

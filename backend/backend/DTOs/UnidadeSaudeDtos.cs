@@ -47,15 +47,15 @@ public record CriarUnidadeSaudeDto(
     [MaxLength(200)] string? Complemento,
     [MaxLength(100)] string? Bairro,
     [MaxLength(100)] string? Cidade,
-    [MaxLength(2)] string? Uf,
-    [MaxLength(10)] string? Cep,
+    [MaxLength(2), RegularExpression(FormatoUnidade.Uf, ErrorMessage = FormatoUnidade.UfMensagem)] string? Uf,
+    [MaxLength(10), RegularExpression(FormatoUnidade.Cep, ErrorMessage = FormatoUnidade.CepMensagem)] string? Cep,
     [MaxLength(30)] string? Telefone,
     double? Latitude,
     double? Longitude,
     [Range(10, 5000, ErrorMessage = "O raio deve estar entre 10 e 5000 metros.")] int? RaioMetros,
     bool EhInstituicao = false,
-    [MaxLength(5)] string? InicioTurno = null,
-    [MaxLength(5)] string? FimTurno = null,
+    [MaxLength(5), RegularExpression(FormatoUnidade.Hora, ErrorMessage = "Início do turno inválido: use HH:mm (24h).")] string? InicioTurno = null,
+    [MaxLength(5), RegularExpression(FormatoUnidade.Hora, ErrorMessage = "Fim do turno inválido: use HH:mm (24h).")] string? FimTurno = null,
     /// <summary>Geocodificar logo após criar. Ignorado se latitude/longitude vierem preenchidas.</summary>
     bool GeocodificarAgora = true
 );
@@ -68,13 +68,13 @@ public record AtualizarUnidadeSaudeDto(
     [MaxLength(200)] string? Complemento,
     [MaxLength(100)] string? Bairro,
     [MaxLength(100)] string? Cidade,
-    [MaxLength(2)] string? Uf,
-    [MaxLength(10)] string? Cep,
+    [MaxLength(2), RegularExpression(FormatoUnidade.Uf, ErrorMessage = FormatoUnidade.UfMensagem)] string? Uf,
+    [MaxLength(10), RegularExpression(FormatoUnidade.Cep, ErrorMessage = FormatoUnidade.CepMensagem)] string? Cep,
     [MaxLength(30)] string? Telefone,
     [Range(10, 5000)] int? RaioMetros,
     bool EhInstituicao,
-    [MaxLength(5)] string? InicioTurno,
-    [MaxLength(5)] string? FimTurno,
+    [MaxLength(5), RegularExpression(FormatoUnidade.Hora, ErrorMessage = "Início do turno inválido: use HH:mm (24h).")] string? InicioTurno,
+    [MaxLength(5), RegularExpression(FormatoUnidade.Hora, ErrorMessage = "Fim do turno inválido: use HH:mm (24h).")] string? FimTurno,
     bool? Ativo
 );
 
@@ -102,7 +102,7 @@ public record PreverEnderecoDto(
     [MaxLength(20)] string? Numero,
     [MaxLength(100)] string? Bairro,
     [MaxLength(100)] string? Cidade,
-    [MaxLength(2)] string? Uf,
+    [MaxLength(2), RegularExpression(FormatoUnidade.Uf, ErrorMessage = FormatoUnidade.UfMensagem)] string? Uf,
     [MaxLength(10)] string? Cep
 );
 
@@ -161,4 +161,20 @@ public class ImportacaoProgressoDto
     public int Erro { get; init; }
     public int PercentualConcluido { get; init; }
     public bool Concluido { get; init; }
+}
+
+/// <summary>
+/// Formatos aceitos no cadastro da unidade. O tamanho máximo sozinho deixava passar
+/// "abc" como horário de turno e texto qualquer no CEP; a tela já aplica as mesmas
+/// máscaras, isto protege quem chama a API direto. Vazio continua valendo (campo opcional).
+/// </summary>
+public static class FormatoUnidade
+{
+    public const string Cep = @"^\d{5}-?\d{3}$";
+    public const string CepMensagem = "CEP inválido: use 8 dígitos (00000-000).";
+
+    public const string Uf = "^[A-Za-z]{2}$";
+    public const string UfMensagem = "UF inválida: use a sigla com 2 letras.";
+
+    public const string Hora = "^([01][0-9]|2[0-3]):[0-5][0-9]$";
 }

@@ -66,7 +66,10 @@ public class CertificateService(AppDbContext db)
             var meus = vinculosPorAluno[aluno.Id].ToList();
             var rodizios = meus.SelectMany(v => rodiziosPorGrupo[v.GroupId]).ToList();
             var exigidas = rodizios.Sum(s => s.RequiredHours);
-            var cumpridas = CalcularHorasAprovadas(registrosPorAluno[aluno.Id]);
+            var registros = registrosPorAluno[aluno.Id].ToList();
+            var cumpridas = CalcularHorasAprovadas(registros);
+
+            DateTime? ultimoDia = registros.Count == 0 ? null : registros.Max(r => r.RecordedAt).Date;
 
             var turmas = TurmasDoAluno.Ordenados(meus.Select(v => new GroupMembership
             {
@@ -87,7 +90,7 @@ public class CertificateService(AppDbContext db)
                 Eligible = exigidas > 0 && cumpridas >= exigidas,
                 PeriodLabel = rodizios.Count == 0
                     ? null
-                    : $"{rodizios.Min(s => s.StartDate):dd/MM/yyyy} a {rodizios.Max(s => s.EndDate):dd/MM/yyyy}",
+                    : $"{rodizios.Min(s => s.StartDate):dd/MM/yyyy} a {ultimoDia ?? rodizios.Max(s => s.EndDate).ToDateTime(TimeOnly.MinValue):dd/MM/yyyy}",
                 Locations = [.. rodizios.Select(s => s.Local).Distinct(StringComparer.OrdinalIgnoreCase).Order()],
                 Institution = aluno.Institution,
                 IssuedAt = emissao,
