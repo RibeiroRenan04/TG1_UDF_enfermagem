@@ -26,6 +26,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ImportarAlunosDialogComponent } from './importar-alunos-dialog.component';
 import { PermissaoAtrasoDialogComponent } from './permissao-atraso-dialog.component';
 import { CadastrarStaffDialogComponent } from './cadastrar-staff-dialog.component';
+import { SenhaProvisoriaDialogComponent, SenhaProvisoriaDialogData } from './senha-provisoria-dialog.component';
 import { ConfirmarDialogComponent, ConfirmarDialogData } from '../../shared/confirmar-dialog.component';
 import { mensagemErro } from '../../core/utils/api-error';
 import { hojeIso } from '../../core/utils/data-br';
@@ -66,6 +67,9 @@ export class UsuariosComponent implements OnInit {
    * para consulta: nenhuma ação de escrita fica disponível para ela.
    */
   somenteLeitura = this.auth.somenteLeitura;
+
+  /** O próprio professor não redefine a senha por aqui (o backend também recusa). */
+  meuId = this.auth.userId;
 
   readonly turnos: { valor: 'manha' | 'tarde' | 'noite'; rotulo: string }[] = [
     { valor: 'manha', rotulo: 'Manhã' },
@@ -139,7 +143,7 @@ export class UsuariosComponent implements OnInit {
     return this.paginasPorAba.get(tab.label)!;
   }
 
-  displayedStaffCols = ['name', 'email', 'role'];
+  displayedStaffCols = ['name', 'email', 'role', 'actions'];
 
   constructor(
     private usersService: UsersService,
@@ -265,6 +269,42 @@ export class UsuariosComponent implements OnInit {
         this.usersService.resetarSenha(student.id).subscribe({
           next: (r) => this.snackBar.open(r.message, '', { duration: 5000, panelClass: 'snack-success' }),
           error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao resetar a senha'), 'OK',
+            { duration: 6000, panelClass: 'snack-error' })
+        });
+      });
+  }
+
+  /**
+   * Equipe não tem senha padrão: o backend gera uma provisória, mostrada uma única vez
+   * para o professor repassar. É a recuperação de senha enquanto o e-mail está desligado.
+   */
+  resetarSenhaEquipe(membro: UserDto): void {
+    const data: ConfirmarDialogData = {
+      titulo: 'Redefinir senha',
+      icone: 'lock_reset',
+      mensagem: `Gerar uma senha provisória para ${membro.fullName}?`,
+      detalhe: 'A senha atual deixa de funcionar na hora. A provisória aparece uma única vez para você '
+             + 'repassar, e a pessoa precisará criar uma nova no próximo acesso.',
+      textoConfirmar: 'Gerar senha provisória',
+      cor: 'warn'
+    };
+
+    this.dialog.open(ConfirmarDialogComponent, { width: '480px', data })
+      .afterClosed().subscribe((confirmado: boolean) => {
+        if (!confirmado) return;
+        this.usersService.resetarSenha(membro.id).subscribe({
+          next: (r) => {
+            if (!r.senhaProvisoria) {
+              this.snackBar.open(r.message, '', { duration: 5000, panelClass: 'snack-success' });
+              return;
+            }
+            const dados: SenhaProvisoriaDialogData = {
+              nome: membro.fullName, email: membro.email ?? '', senha: r.senhaProvisoria
+            };
+            // Sem fechar ao clicar fora: a senha não é exibida de novo.
+            this.dialog.open(SenhaProvisoriaDialogComponent, { width: '480px', data: dados, disableClose: true });
+          },
+          error: (err) => this.snackBar.open(mensagemErro(err, 'Erro ao redefinir a senha'), 'OK',
             { duration: 6000, panelClass: 'snack-error' })
         });
       });

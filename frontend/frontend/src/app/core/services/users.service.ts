@@ -83,9 +83,13 @@ export class UsersService {
     return this.http.post<UserDto>(`${this.api}/${userId}/concluir`, {});
   }
 
-  /** Volta a senha do aluno para o RGM; ele cria uma nova no próximo acesso. */
-  resetarSenha(userId: string): Observable<{ message: string }> {
-    return this.http.post<{ message: string }>(`${this.api}/${userId}/reset-password`, {});
+  /**
+   * Aluno volta para o RGM; equipe recebe `senhaProvisoria`, devolvida só nesta resposta.
+   * Nos dois casos a troca é obrigatória no próximo acesso.
+   */
+  resetarSenha(userId: string): Observable<{ message: string; senhaProvisoria?: string | null }> {
+    return this.http.post<{ message: string; senhaProvisoria?: string | null }>(
+      `${this.api}/${userId}/reset-password`, {});
   }
 
   /** Desfaz uma conclusão marcada por engano: o aluno volta para "Alunos ativos". */
