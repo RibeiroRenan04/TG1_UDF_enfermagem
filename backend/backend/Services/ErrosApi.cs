@@ -88,7 +88,8 @@ public class TratadorErrosApi(ILogger<TratadorErrosApi> logger) : IExceptionHand
             http.Request.Method, http.Request.Path, status);
 
         http.Response.StatusCode = status;
-        await http.Response.WriteAsJsonAsync(new { message, code }, ct);
+        // traceId = X-Correlation-Id: o usuário informa ao suporte e o log exato é encontrado.
+        await http.Response.WriteAsJsonAsync(new { message, code, traceId = http.TraceIdentifier }, ct);
         return true;
     }
 }

@@ -22,6 +22,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RemoteActivity> RemoteActivities => Set<RemoteActivity>();
     public DbSet<RemoteActivityParticipation> RemoteActivityParticipations => Set<RemoteActivityParticipation>();
     public DbSet<CalendarException> CalendarExceptions => Set<CalendarException>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     // Entidades em inglês, schema do banco em português.
     protected override void OnModelCreating(ModelBuilder mb)
@@ -553,6 +554,29 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
              .HasForeignKey(x => x.CreatedById)
              .OnDelete(DeleteBehavior.SetNull)
              .IsRequired(false);
+        });
+
+        // Sem FK para Usuarios de propósito: a trilha sobrevive à anonimização e à exclusão do usuário.
+        mb.Entity<AuditLog>(e =>
+        {
+            e.ToTable("LogsAuditoria");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("IdLog").UseIdentityByDefaultColumn();
+            e.Property(x => x.OccurredAt).HasColumnName("OcorridoEm");
+            e.Property(x => x.UserId).HasColumnName("IdUsuario");
+            e.Property(x => x.UserRole).HasColumnName("Papel").HasMaxLength(20);
+            e.Property(x => x.Action).HasColumnName("Acao").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Entity).HasColumnName("Entidade").HasMaxLength(60).IsRequired();
+            e.Property(x => x.EntityId).HasColumnName("IdEntidade").HasMaxLength(64);
+            e.Property(x => x.Details).HasColumnName("Detalhes");
+            // Sem HasDefaultValue: com default no banco o EF não distingue false de "não informado".
+            e.Property(x => x.Success).HasColumnName("Sucesso");
+            e.Property(x => x.IpAddress).HasColumnName("Ip").HasMaxLength(45);
+            e.Property(x => x.UserAgent).HasColumnName("UserAgent").HasMaxLength(300);
+            e.Property(x => x.CorrelationId).HasColumnName("IdCorrelacao").HasMaxLength(64);
+            e.HasIndex(x => x.OccurredAt);
+            e.HasIndex(x => new { x.UserId, x.OccurredAt });
+            e.HasIndex(x => new { x.Entity, x.EntityId });
         });
     }
 }

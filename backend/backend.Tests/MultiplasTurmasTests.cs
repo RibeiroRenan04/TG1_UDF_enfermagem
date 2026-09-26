@@ -16,7 +16,7 @@ public class MultiplasTurmasTests
         new(db, new ConflitoTurmasService(db));
 
     private static UsersController MontarUsuarios(AppDbContext db) =>
-        new(db, new ConflitoTurmasService(db));
+        new(db, new ConflitoTurmasService(db), TestSupport.Protecao());
 
     private static RotationSchedule Escala(
         StudentGroup turma, Location local, string turno,

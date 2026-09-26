@@ -2,27 +2,75 @@ using EstagioCheck.API.Data;
 using EstagioCheck.API.DTOs;
 using EstagioCheck.API.Models;
 using EstagioCheck.API.Services;
+using EstagioCheck.API.Services.Auditoria;
+using EstagioCheck.API.Services.Privacidade;
+using EstagioCheck.API.Services.Seguranca;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Security.Cryptography;
 
 namespace EstagioCheck.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController(AppDbContext db, TokenService tokenService, EmailService emailService) : ControllerBase
+[EnableRateLimiting(LimitesRequisicao.Autenticacao)]
+public class AuthController(
+    AppDbContext db,
+    TokenService tokenService,
+    EmailService emailService,
+    AuditoriaService auditoria,
+    ProtecaoAcessoService protecao) : ControllerBase
 {
     // Sem autocadastro: alunos vêm da importação e os demais perfis, do cadastro do professor.
+
+    private const string AreaAuditoria = "Autenticacao";
+
+    /// <summary>Hash descartável: com ele o login de e-mail inexistente leva o mesmo tempo que o de senha errada.</summary>
+    private static readonly string HashFicticio = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString());
 
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
     {
+        var email = dto.Email.Trim().ToLower();
+        var chave = $"login:{email}";
+
+        if (protecao.Bloqueado(chave, out var restante))
+        {
+            await auditoria.RegistrarAsync(AcoesAuditoria.LoginBloqueado, AreaAuditoria,
+                detalhes: new { email = Mascara.Email(email) }, sucesso: false);
+            return StatusCode(StatusCodes.Status429TooManyRequests, ErrosApi.Corpo(
+                $"Muitas tentativas de acesso sem sucesso. Tente novamente em {ProtecaoAcessoService.Minutos(restante)} minuto(s) ou recupere a senha.",
+                code: "login_bloqueado"));
+        }
+
         var user = await db.Users
             .Include(u => u.GroupMemberships).ThenInclude(m => m.Group).ThenInclude(g => g.Schedules)
-            .FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
-        if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
+            .FirstOrDefaultAsync(u => u.Email == email);
+
+        var senhaConfere = BCrypt.Net.BCrypt.Verify(dto.Password, user?.PasswordHash ?? HashFicticio);
+        if (user == null || !senhaConfere)
+        {
+            protecao.RegistrarFalha(chave);
+            await auditoria.RegistrarAsync(AcoesAuditoria.LoginFalha, AreaAuditoria, user?.Id.ToString(),
+                new { email = Mascara.Email(email) }, sucesso: false, usuarioId: user?.Id, papel: user?.Role);
             return Unauthorized(new { message = "Credenciais inválidas." });
+        }
+
+        // Aluno concluinte e preceptor desligado perdem o acesso (ISO 27001 A.5.18).
+        if (!user.IsActive)
+        {
+            await auditoria.RegistrarAsync(AcoesAuditoria.LoginContaInativa, AreaAuditoria, user.Id.ToString(),
+                sucesso: false, usuarioId: user.Id, papel: user.Role);
+            return StatusCode(StatusCodes.Status403Forbidden, ErrosApi.Corpo(
+                "Sua conta está inativa. Procure a coordenação do estágio.", code: "conta_inativa"));
+        }
+
+        protecao.Limpar(chave);
+        await auditoria.RegistrarAsync(AcoesAuditoria.LoginSucesso, AreaAuditoria, user.Id.ToString(),
+            usuarioId: user.Id, papel: user.Role);
 
         return Ok(Resposta(user));
     }
@@ -75,6 +123,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
 
         user.TermsAcceptedAt = BrasiliaTime.Agora;
         user.UpdatedAt = BrasiliaTime.Agora;
+        auditoria.Registrar(AcoesAuditoria.TermoAceito, AreaAuditoria, user.Id.ToString(), new { versao = TermoVersao });
         await db.SaveChangesAsync();
 
         return Ok(new { acceptedAt = user.TermsAcceptedAt, versao = TermoVersao });
@@ -102,6 +151,10 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         if (user.Role == "aluno" && !EhEmailInstitucional(dto.Email))
             return BadRequest(new { message = "O e-mail deve ser institucional (@cs.udf.edu.br)." });
 
+        var problemaSenha = PoliticaSenha.Validar(dto.NewPassword, user.Rgm, dto.Email);
+        if (problemaSenha != null)
+            return BadRequest(ErrosApi.Corpo(problemaSenha, "newPassword", "senha_fraca"));
+
         var emailTaken = await db.Users.AnyAsync(u => u.Email == dto.Email.ToLower() && u.Id != user.Id);
         if (emailTaken)
             return Conflict(new { message = "E-mail já cadastrado." });
@@ -112,6 +165,7 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
         user.MustSetEmail = false;
         user.UpdatedAt = BrasiliaTime.Agora;
 
+        auditoria.Registrar(AcoesAuditoria.PrimeiroAcesso, AreaAuditoria, user.Id.ToString());
         await db.SaveChangesAsync();
 
         return Ok(Resposta(user));
@@ -120,38 +174,54 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
     {
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
+        // Antes de consultar o usuário: a resposta é igual para qualquer e-mail e não revela cadastro.
+        if (!emailService.Habilitado)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, ErrosApi.Corpo(
+                "A recuperação de senha por e-mail está temporariamente desativada. "
+                + "Procure a coordenação do estágio para redefinir sua senha.",
+                code: "email_desativado"));
 
-        // Retorna 200 mesmo se o e-mail não existir para não revelar cadastros
-        if (user == null)
-            return Ok(new { message = "Se o e-mail estiver cadastrado, você receberá o código em breve." });
+        // Mesma resposta em todos os casos, para não revelar quais e-mails têm cadastro.
+        var resposta = new { message = "Se o e-mail estiver cadastrado, você receberá o código em breve." };
 
-        var code = Random.Shared.Next(100000, 999999).ToString();
+        var email = dto.Email.Trim().ToLower();
+        var chave = $"recuperacao:{email}";
+
+        // Limita os envios por conta: sem isso, dá para inundar a caixa de alguém com códigos.
+        if (protecao.Bloqueado(chave, out _)) return Ok(resposta);
+        protecao.RegistrarFalha(chave);
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (user == null || !user.IsActive) return Ok(resposta);
+
+        // Só o código mais recente vale: os anteriores deixam de ser aceitos.
+        await foreach (var anterior in db.PasswordResetCodes
+            .Where(r => r.Email == email && !r.Used).AsAsyncEnumerable())
+            anterior.Used = true;
+
+        // Gerador criptográfico: Random não é imprevisível o bastante para um código de acesso.
+        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
         db.PasswordResetCodes.Add(new PasswordResetCode
         {
-            Email = dto.Email.Trim().ToLower(),
+            Email = email,
             Code = code,
             ExpiresAt = BrasiliaTime.Agora.AddMinutes(15)
         });
+        auditoria.Registrar(AcoesAuditoria.RecuperacaoSolicitada, AreaAuditoria, user.Id.ToString(),
+            usuarioId: user.Id, papel: user.Role);
         await db.SaveChangesAsync();
 
         await emailService.SendResetCodeAsync(user.Email!, code);
 
-        return Ok(new { message = "Se o e-mail estiver cadastrado, você receberá o código em breve." });
+        return Ok(resposta);
     }
 
     [HttpPost("verify-reset-code")]
     public async Task<IActionResult> VerifyResetCode([FromBody] VerifyResetCodeDto dto)
     {
-        var record = await db.PasswordResetCodes.FirstOrDefaultAsync(r =>
-            r.Email == dto.Email.ToLower() &&
-            r.Code == dto.Code &&
-            !r.Used &&
-            r.ExpiresAt > BrasiliaTime.Agora);
-
-        if (record == null)
-            return BadRequest(new { message = "Código inválido ou expirado." });
+        var (record, erro) = await ConferirCodigoAsync(dto.Email, dto.Code);
+        if (record == null) return erro!;
 
         return Ok(new { message = "Código válido." });
     }
@@ -159,27 +229,60 @@ public class AuthController(AppDbContext db, TokenService tokenService, EmailSer
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
     {
-        var record = await db.PasswordResetCodes.FirstOrDefaultAsync(r =>
-            r.Email == dto.Email.ToLower() &&
-            r.Code == dto.Code &&
-            !r.Used &&
-            r.ExpiresAt > BrasiliaTime.Agora);
+        var (record, erro) = await ConferirCodigoAsync(dto.Email, dto.Code);
+        if (record == null) return erro!;
 
-        if (record == null)
-            return BadRequest(new { message = "Código inválido ou expirado." });
-
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email.ToLower());
+        var email = dto.Email.Trim().ToLower();
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user == null)
             return NotFound(new { message = "Usuário não encontrado." });
+
+        var problemaSenha = PoliticaSenha.Validar(dto.NewPassword, user.Rgm, user.Email);
+        if (problemaSenha != null)
+            return BadRequest(ErrosApi.Corpo(problemaSenha, "newPassword", "senha_fraca"));
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
         user.UpdatedAt = BrasiliaTime.Agora;
 
         record.Used = true;
 
+        auditoria.Registrar(AcoesAuditoria.SenhaRedefinida, AreaAuditoria, user.Id.ToString(),
+            usuarioId: user.Id, papel: user.Role);
         await db.SaveChangesAsync();
 
+        // Senha nova destrava a conta: quem esqueceu a senha normalmente acabou de errar várias vezes.
+        protecao.Limpar($"login:{email}");
+        protecao.Limpar($"codigo:{email}");
+
         return Ok(new { message = "Senha redefinida com sucesso." });
+    }
+
+    /// <summary>
+    /// Código de 6 dígitos tem só 900 mil combinações: sem limite de tentativas, cai por força
+    /// bruta dentro dos 15 minutos de validade. Depois de 5 erros a conta fica bloqueada.
+    /// </summary>
+    private async Task<(PasswordResetCode? Registro, IActionResult? Erro)> ConferirCodigoAsync(string emailInformado, string code)
+    {
+        var email = emailInformado.Trim().ToLower();
+        var chave = $"codigo:{email}";
+
+        if (protecao.Bloqueado(chave, out var restante))
+            return (null, StatusCode(StatusCodes.Status429TooManyRequests, ErrosApi.Corpo(
+                $"Muitas tentativas com código inválido. Aguarde {ProtecaoAcessoService.Minutos(restante)} minuto(s) e solicite um novo código.",
+                code: "codigo_bloqueado")));
+
+        var record = await db.PasswordResetCodes.FirstOrDefaultAsync(r =>
+            r.Email == email &&
+            r.Code == code &&
+            !r.Used &&
+            r.ExpiresAt > BrasiliaTime.Agora);
+
+        if (record != null) return (record, null);
+
+        protecao.RegistrarFalha(chave);
+        await auditoria.RegistrarAsync(AcoesAuditoria.RecuperacaoCodigoInvalido, AreaAuditoria,
+            detalhes: new { email = Mascara.Email(email) }, sucesso: false);
+        return (null, BadRequest(new { message = "Código inválido ou expirado." }));
     }
 
     private const string DominioInstitucional = "@cs.udf.edu.br";

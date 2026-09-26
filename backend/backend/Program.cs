@@ -2,7 +2,11 @@ using EstagioCheck.API.Data;
 using EstagioCheck.API.Services;
 using EstagioCheck.API.Services.Geocoding;
 using EstagioCheck.API.Services.Import;
+using EstagioCheck.API.Services.Auditoria;
+using EstagioCheck.API.Services.Privacidade;
+using EstagioCheck.API.Services.Seguranca;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -20,11 +24,18 @@ if (!string.IsNullOrEmpty(railwayPort))
     builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
 }
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Toda gravação do EF passa pela trilha de auditoria (ver AuditoriaInterceptor).
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<AuditoriaInterceptor>();
+var connectionString = ConexaoBanco.ComCertificadoRaiz(builder.Configuration.GetConnectionString("DefaultConnection"));
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+    options.UseNpgsql(connectionString)
+           .AddInterceptors(sp.GetRequiredService<AuditoriaInterceptor>()));
 
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("JWT Key is not configured.");
+var jwtKey = builder.Configuration["Jwt:Key"];
+// HMAC-SHA256 exige chave de 256 bits; chave curta é quebrável por força bruta offline.
+if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+    throw new InvalidOperationException("Jwt:Key não configurada ou com menos de 32 bytes.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -40,9 +51,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ClockSkew = TimeSpan.Zero
         };
+        // Conta desativada perde o acesso em até 1 minuto, sem esperar o token expirar.
+        options.Events = new JwtBearerEvents { OnTokenValidated = ValidacaoUsuarioAtivo.AoValidarToken };
     });
 
 builder.Services.AddAuthorization();
+
+builder.Services.AddSingleton<ProtecaoAcessoService>();
+builder.Services.AddScoped<AuditoriaService>();
+builder.Services.AddScoped<PrivacidadeService>();
+builder.Services.AddHostedService<RetencaoDadosService>();
+builder.Services.AddLimitesRequisicao(builder.Configuration);
+
+// Railway/Vercel terminam o TLS no proxy: sem isto o IP registrado seria o do proxy
+// e o esquema seria sempre http. ForwardLimit = 1 confia só no último salto (o proxy da plataforma).
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+    o.ForwardLimit = 1;
+});
+builder.Services.AddHsts(o => o.MaxAge = TimeSpan.FromDays(365));
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<GeoService>();
@@ -87,7 +117,6 @@ builder.Services.AddHttpClient("BuscaSaude", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
-builder.Services.AddHttpContextAccessor();
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
     ?? ["http://localhost:4200"];
@@ -97,7 +126,9 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials()));
+              .AllowCredentials()
+              // O front pode mostrar o código ao usuário para ele informar ao suporte.
+              .WithExposedHeaders(CorrelacaoMiddleware.Cabecalho, "Retry-After")));
 
 builder.Services.AddScoped<PendenciasService>();
 builder.Services.AddScoped<EscopoPreceptorService>();
@@ -131,7 +162,13 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
+app.UseMiddleware<CorrelacaoMiddleware>();
 app.UseExceptionHandler();
+
+if (!app.Environment.IsDevelopment())
+    app.UseHsts();
+app.UseMiddleware<CabecalhosSegurancaMiddleware>();
 
 var connStr = app.Configuration.GetConnectionString("DefaultConnection");
 if (!string.IsNullOrWhiteSpace(connStr))
@@ -141,17 +178,41 @@ if (!string.IsNullOrWhiteSpace(connStr))
     db.Database.Migrate();
 }
 
-app.UseSwagger();
-app.UseSwaggerUI();
+// Em produção o Swagger expõe o mapa completo da API; só liga com Swagger:Habilitado=true.
+if (!app.Environment.IsProduction() || app.Configuration.GetValue("Swagger:Habilitado", false))
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 // CORS deve vir antes de autenticação e controllers.
 app.UseCors("Angular");
 
+// Depois do CORS, para a resposta 429 chegar legível ao navegador.
+app.UseRateLimiter();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
+var versao = typeof(Program).Assembly
+    .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+    .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+    .FirstOrDefault()?.InformationalVersion ?? "desconhecida";
+
 app.MapGet("/", () => "API ONLINE");
+// Liveness: o processo responde. É o que o Railway consulta para reiniciar o serviço.
 app.MapGet("/health", () => Results.Ok("Healthy"));
+// Readiness: o banco responde. Para monitoramento externo do SLA (ver docs/SLA_SUPORTE.md).
+app.MapGet("/health/ready", async (AppDbContext db, CancellationToken ct) =>
+{
+    var inicio = System.Diagnostics.Stopwatch.StartNew();
+    bool banco;
+    try { banco = await db.Database.CanConnectAsync(ct); }
+    catch { banco = false; }
+
+    var corpo = new { status = banco ? "Healthy" : "Unhealthy", banco, latenciaMs = inicio.ElapsedMilliseconds, versao };
+    return banco ? Results.Ok(corpo) : Results.Json(corpo, statusCode: StatusCodes.Status503ServiceUnavailable);
+});
 
 app.MapControllers();
 app.Run();

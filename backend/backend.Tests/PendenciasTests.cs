@@ -223,7 +223,7 @@ public class ConclusaoAlunoTests
         db.Add(aluno);
         await db.SaveChangesAsync();
 
-        var controller = new UsersController(db, new ConflitoTurmasService(db));
+        var controller = new UsersController(db, new ConflitoTurmasService(db), TestSupport.Protecao());
 
         var concluido = Assert.IsType<OkObjectResult>((await controller.Concluir(aluno.Id)).Result);
         Assert.False(Assert.IsType<UserDto>(concluido.Value).IsActive);
@@ -247,7 +247,7 @@ public class ConclusaoAlunoTests
         db.Add(preceptor);
         await db.SaveChangesAsync();
 
-        var r = await new UsersController(db, new ConflitoTurmasService(db)).Concluir(preceptor.Id);
+        var r = await new UsersController(db, new ConflitoTurmasService(db), TestSupport.Protecao()).Concluir(preceptor.Id);
 
         Assert.IsType<BadRequestObjectResult>(r.Result);
         Assert.True(db.Users.Single().IsActive);

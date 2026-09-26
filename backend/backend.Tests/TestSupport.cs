@@ -1,7 +1,10 @@
 using EstagioCheck.API.Data;
 using EstagioCheck.API.Models;
 using EstagioCheck.API.Services.Geocoding;
+using EstagioCheck.API.Services.Seguranca;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -24,6 +27,11 @@ public static class TestSupport
     }
 
     public static ILogger<T> Logger<T>() => NullLogger<T>.Instance;
+
+    /// <summary>Trava de tentativas com a configuração padrão (5 erros, 15 min).</summary>
+    public static ProtecaoAcessoService Protecao() => new(
+        new MemoryCache(new MemoryCacheOptions()),
+        new ConfigurationBuilder().Build());
 
     public static ApplicationUser Aluno(string nome = "Aluno Teste", string? rgm = "12345678") => new()
     {

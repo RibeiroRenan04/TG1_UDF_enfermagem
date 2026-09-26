@@ -38,7 +38,7 @@ public record AcceptTermsDto(
 
 public record FirstAccessDto(
     [Required, EmailAddress, MaxLength(255)] string Email,
-    [Required, MinLength(6), MaxLength(100)] string NewPassword
+    [Required, MinLength(8, ErrorMessage = "A senha deve ter pelo menos 8 caracteres."), MaxLength(100)] string NewPassword
 );
 
 public record ForgotPasswordDto(
@@ -53,5 +53,5 @@ public record VerifyResetCodeDto(
 public record ResetPasswordDto(
     [Required, EmailAddress, MaxLength(255)] string Email,
     [Required, MinLength(6), MaxLength(6)] string Code,
-    [Required, MinLength(6), MaxLength(100)] string NewPassword
+    [Required, MinLength(8, ErrorMessage = "A senha deve ter pelo menos 8 caracteres."), MaxLength(100)] string NewPassword
 );

@@ -21,4 +21,11 @@
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- CA raiz do Supabase: permite SSL Mode=VerifyFull (ver Services/Seguranca/ConexaoBanco.cs). -->
+    <None Include="certs\**\*.crt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Os exemplos de configuração documentam o repositório; não vão para o deploy. -->
+    <Content Update="appsettings.*.example.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
 </Project>

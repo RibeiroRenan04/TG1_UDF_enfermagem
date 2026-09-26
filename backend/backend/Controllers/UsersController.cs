@@ -2,16 +2,18 @@ using EstagioCheck.API.Data;
 using EstagioCheck.API.DTOs;
 using EstagioCheck.API.Models;
 using EstagioCheck.API.Services;
+using EstagioCheck.API.Services.Seguranca;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace EstagioCheck.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = Roles.Gestao)]
-public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) : ControllerBase
+public class UsersController(AppDbContext db, ConflitoTurmasService conflitos, ProtecaoAcessoService protecao) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<UserDto>>> GetAll()
@@ -72,7 +74,12 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         return Ok(new { id = user.Id, isActive = user.IsActive });
     }
 
-    /// <summary>Volta a senha do aluno para o RGM; a troca é exigida no próximo acesso.</summary>
+    /// <summary>
+    /// Aluno volta para o RGM; equipe (preceptor, professor, secretaria) recebe uma senha provisória,
+    /// devolvida só nesta resposta para o professor repassar. Nos dois casos a troca é exigida no
+    /// próximo acesso e o bloqueio por tentativas é liberado. É o caminho de recuperação enquanto o
+    /// envio de e-mail está desativado.
+    /// </summary>
     [HttpPost("{id}/reset-password")]
     [Authorize(Roles = Roles.Supervisor)]
     public async Task<IActionResult> ResetarSenha(Guid id)
@@ -80,19 +87,40 @@ public class UsersController(AppDbContext db, ConflitoTurmasService conflitos) :
         var user = await db.Users.FindAsync(id);
         if (user == null) return NotFound();
 
-        if (user.Role != Roles.Aluno)
-            return BadRequest(ErrosApi.Corpo("Só a senha de alunos volta para o padrão do RGM."));
+        if (HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier) == id.ToString())
+            return BadRequest(ErrosApi.Corpo(
+                "Você não pode redefinir a própria senha por aqui. Peça a outro professor.", code: "redefinir_propria_senha"));
 
-        var rgm = NormalizarRgm(user.Rgm);
-        if (string.IsNullOrEmpty(rgm))
-            return BadRequest(ErrosApi.Corpo("O aluno não tem RGM cadastrado."));
+        if (string.IsNullOrEmpty(user.Email))
+            return BadRequest(ErrosApi.Corpo("O usuário não tem e-mail de login cadastrado."));
 
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(rgm);
+        string? senhaProvisoria = null;
+        string message;
+
+        if (user.Role == Roles.Aluno)
+        {
+            var rgm = NormalizarRgm(user.Rgm);
+            if (string.IsNullOrEmpty(rgm))
+                return BadRequest(ErrosApi.Corpo("O aluno não tem RGM cadastrado."));
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(rgm);
+            message = $"Senha de {user.FullName} redefinida para o RGM.";
+        }
+        else
+        {
+            senhaProvisoria = SenhaProvisoria.Gerar();
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(senhaProvisoria);
+            message = $"Senha provisória de {user.FullName} gerada. Repasse-a pessoalmente: ela não será exibida de novo.";
+        }
+
         user.MustChangePassword = true;
         user.UpdatedAt = BrasiliaTime.Agora;
 
         await db.SaveChangesAsync();
-        return Ok(new { message = $"Senha de {user.FullName} redefinida para o RGM." });
+        // Quem pediu ajuda normalmente acabou de errar a senha várias vezes.
+        protecao.Limpar($"login:{user.Email.ToLower()}");
+
+        return Ok(new { message, senhaProvisoria });
     }
 
     /// <summary>
