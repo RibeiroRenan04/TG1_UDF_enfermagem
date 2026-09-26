@@ -1,4 +1,4 @@
-import { Directive, ElementRef, HostListener, OnInit, inject } from '@angular/core';
+import { AfterContentInit, Directive, ElementRef, HostListener, inject } from '@angular/core';
 import { NgControl, Validators } from '@angular/forms';
 
 /** "HH:mm" de 00:00 a 23:59. */
@@ -13,12 +13,22 @@ export const HORA_24H = /^([01]\d|2[0-3]):[0-5]\d$/;
   standalone: true,
   host: { inputmode: 'numeric', maxlength: '5', placeholder: 'HH:mm', autocomplete: 'off' }
 })
-export class HoraInputDirective implements OnInit {
+export class HoraInputDirective implements AfterContentInit {
   private readonly el = inject<ElementRef<HTMLInputElement>>(ElementRef);
   private readonly controle = inject(NgControl, { optional: true, self: true });
 
-  ngOnInit(): void {
-    this.controle?.control?.addValidators(Validators.pattern(HORA_24H));
+  // Depois do OnInit do formControlName: antes disso o controle pode ainda não existir.
+  ngAfterContentInit(): void {
+    const c = this.controle?.control;
+    if (!c) return;
+    c.addValidators(Validators.pattern(HORA_24H));
+    c.updateValueAndValidity({ emitEvent: false });
+  }
+
+  /** Só dígitos: letras não chegam a aparecer no campo. */
+  @HostListener('beforeinput', ['$event'])
+  aoInserir(e: InputEvent): void {
+    if (e.inputType === 'insertText' && e.data && /\D/.test(e.data)) e.preventDefault();
   }
 
   @HostListener('input')

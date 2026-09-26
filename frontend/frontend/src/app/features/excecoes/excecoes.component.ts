@@ -25,6 +25,9 @@ import {
 } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
 import { hojeIso } from '../../core/utils/data-br';
+import { Ordenacao } from '../../core/utils/ordenacao';
+import { CAMPOS_TIPADOS } from '../../core/utils/campos.directive';
+import { MatSortModule } from '@angular/material/sort';
 
 /**
  * Calendário de exceções.
@@ -40,7 +43,7 @@ import { hojeIso } from '../../core/utils/data-br';
     MatDatepickerModule, CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatTableModule, MatProgressSpinnerModule, MatSnackBarModule,
-    MatTooltipModule
+    MatTooltipModule, MatSortModule, ...CAMPOS_TIPADOS
   ],
   templateUrl: './excecoes.component.html',
   styleUrls: ['./excecoes.component.scss']
@@ -60,6 +63,14 @@ export class ExcecoesComponent implements OnInit {
   private formValue = signal<Record<string, unknown>>({});
 
   readonly colunas = ['periodo', 'tipo', 'abrangencia', 'alvo', 'descricao', 'acoes'];
+
+  readonly ordenacao = new Ordenacao(this.excecoes, {
+    periodo: e => e.startDate,
+    tipo: e => e.typeLabel,
+    abrangencia: e => e.scopeLabel,
+    alvo: e => this.alvo(e),
+    descricao: e => e.description
+  });
 
   readonly tipos: { valor: TipoExcecao; rotulo: string; dispensa: boolean }[] = [
     { valor: 'feriado', rotulo: 'Feriado', dispensa: true },

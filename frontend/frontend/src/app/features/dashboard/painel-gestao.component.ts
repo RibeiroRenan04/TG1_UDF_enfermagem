@@ -10,6 +10,8 @@ import { PainelGestao, PresencaDia } from '../../core/models/painel-gestao';
 import { mensagemErro } from '../../core/utils/api-error';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { Paginacao } from '../../core/utils/paginacao';
+import { MatSortModule, Sort } from '@angular/material/sort';
+import { ordenarLista } from '../../core/utils/ordenacao';
 
 /**
  * Painel do professor e da secretaria. Cada bloco responde a uma pergunta,
@@ -25,7 +27,8 @@ import { Paginacao } from '../../core/utils/paginacao';
 @Component({
   selector: 'app-painel-gestao',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatCardModule, MatIconModule, MatButtonModule, MatProgressSpinnerModule, MatPaginatorModule],
+  imports: [CommonModule, RouterLink, MatCardModule, MatIconModule, MatButtonModule, MatProgressSpinnerModule, MatPaginatorModule,
+    MatSortModule],
   templateUrl: './painel-gestao.component.html',
   styleUrls: ['./painel-gestao.component.scss']
 })
@@ -36,6 +39,10 @@ export class PainelGestaoComponent implements OnInit {
 
   /** Dia com o ponteiro ou o foco do teclado no gráfico de presença. */
   diaEmFoco = signal<PresencaDia | null>(null);
+
+  /** Ordem da tabela "Ver em tabela" do gráfico de presença. */
+  readonly ordemDias = signal<Sort>({ active: 'data', direction: 'asc' });
+  readonly diasOrdenados = computed(() => ordenarLista(this.painel()?.ultimosDias ?? [], this.ordemDias()));
 
   /**
    * Rampa ordinal das faixas de carga (azul, claro → escuro), validada na skill de dataviz.

@@ -26,7 +26,9 @@ import {
 } from '../../core/models/models';
 import { aplicarErrosServidor, mensagemErro } from '../../core/utils/api-error';
 import { HoraPipe } from '../../core/utils/hora.pipe';
-import { HoraInputDirective } from '../../core/utils/hora-input.directive';
+import { CAMPOS_TIPADOS } from '../../core/utils/campos.directive';
+import { ordenarLista } from '../../core/utils/ordenacao';
+import { MatSortModule, Sort } from '@angular/material/sort';
 import { hojeIso } from '../../core/utils/data-br';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { Paginacao, normalizarBusca } from '../../core/utils/paginacao';
@@ -46,7 +48,8 @@ import { Paginacao, normalizarBusca } from '../../core/utils/paginacao';
     MatDatepickerModule, CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatCheckboxModule, MatExpansionModule, MatTableModule,
-    MatProgressSpinnerModule, MatSnackBarModule, MatTooltipModule, MatDividerModule, HoraPipe, HoraInputDirective, MatPaginatorModule
+    MatProgressSpinnerModule, MatSnackBarModule, MatTooltipModule, MatDividerModule, HoraPipe, MatPaginatorModule,
+    MatSortModule, ...CAMPOS_TIPADOS
   ],
   templateUrl: './atividades-remotas.component.html',
   styleUrls: ['./atividades-remotas.component.scss']
@@ -327,6 +330,29 @@ export class AtividadesRemotasComponent implements OnInit {
     if (this.participacoes()[a.id]) return;
     this.service.getParticipacoes(a.id).subscribe(p =>
       this.participacoes.update(cur => ({ ...cur, [a.id]: p })));
+  }
+
+  /** Ordenação de cada tabela de participações (uma por atividade aberta). */
+  private ordemParticipantes = signal<Record<string, Sort>>({});
+
+  ordenarParticipantes(id: string, s: Sort): void {
+    this.ordemParticipantes.update(cur => ({ ...cur, [id]: s }));
+  }
+
+  /** Calculado uma vez por mudança: a tabela não recebe uma lista nova a cada ciclo. */
+  private readonly participantesPorAtividade = computed(() => {
+    const ordens = this.ordemParticipantes();
+    return Object.fromEntries(Object.entries(this.participacoes()).map(([id, lista]) =>
+      [id, ordenarLista(lista, ordens[id] ?? { active: 'registro', direction: 'asc' }, {
+        aluno: p => p.studentName,
+        rgm: p => p.studentRgm,
+        registro: p => p.registeredAt,
+        entrega: p => p.taskResponse
+      })]));
+  });
+
+  participantesOrdenados(id: string): ParticipacaoAtividade[] {
+    return this.participantesPorAtividade()[id] ?? [];
   }
 
   participantes(id: string): ParticipacaoAtividade[] {

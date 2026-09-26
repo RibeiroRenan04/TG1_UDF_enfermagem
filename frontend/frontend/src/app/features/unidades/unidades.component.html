@@ -84,10 +84,12 @@
 <!-- ══ Tabela ═══════════════════════════════════════════════════════════════ -->
 <mat-card *ngIf="!loading()">
   <mat-card-content>
-    <table mat-table [dataSource]="paginacao.pagina()" class="full-width" *ngIf="unidades().length; else vazio">
+    <div class="tabela-rolavel" *ngIf="unidades().length; else vazio">
+    <table mat-table [dataSource]="paginacao.pagina()" class="full-width"
+           matSort matSortDisableClear (matSortChange)="ordenacao.mudar($event)">
 
       <ng-container matColumnDef="nome">
-        <th mat-header-cell *matHeaderCellDef>Unidade</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Unidade</th>
         <td mat-cell *matCellDef="let u">
           <a class="unidade-link" [routerLink]="['/app/unidades', u.id]">{{ u.nome }}</a>
           <div class="unidade-endereco">{{ u.enderecoCompleto || '—' }}</div>
@@ -95,17 +97,17 @@
       </ng-container>
 
       <ng-container matColumnDef="tipo">
-        <th mat-header-cell *matHeaderCellDef>Tipo</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Tipo</th>
         <td mat-cell *matCellDef="let u">{{ u.tipo || '—' }}</td>
       </ng-container>
 
       <ng-container matColumnDef="cidade">
-        <th mat-header-cell *matHeaderCellDef>Cidade</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Cidade</th>
         <td mat-cell *matCellDef="let u">{{ u.cidade || '—' }}<span *ngIf="u.uf">/{{ u.uf }}</span></td>
       </ng-container>
 
       <ng-container matColumnDef="coordenadas">
-        <th mat-header-cell *matHeaderCellDef>Coordenadas</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Coordenadas</th>
         <td mat-cell *matCellDef="let u">
           <mat-icon *ngIf="u.temCoordenadas" class="icone-ok"
                     [matTooltip]="u.latitude + ', ' + u.longitude">check_circle</mat-icon>
@@ -115,12 +117,12 @@
       </ng-container>
 
       <ng-container matColumnDef="estagiarios">
-        <th mat-header-cell *matHeaderCellDef class="col-num">Estagiários</th>
+        <th mat-header-cell *matHeaderCellDef class="col-num" mat-sort-header>Estagiários</th>
         <td mat-cell *matCellDef="let u" class="col-num">{{ u.estagiariosAtivos }}</td>
       </ng-container>
 
       <ng-container matColumnDef="status">
-        <th mat-header-cell *matHeaderCellDef>Status</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th>
         <td mat-cell *matCellDef="let u">
           <span class="geo-chip {{ classeStatus(u.statusGeocodificacao) }}">
             <mat-icon>{{ iconeStatus(u.statusGeocodificacao) }}</mat-icon>
@@ -154,6 +156,7 @@
       <tr mat-header-row *matHeaderRowDef="colunas()"></tr>
       <tr mat-row *matRowDef="let row; columns: colunas();"></tr>
     </table>
+    </div>
 
     <mat-paginator *ngIf="unidades().length" [length]="paginacao.total()" [pageIndex]="paginacao.indice()"
                    [pageSize]="paginacao.tamanho()" [pageSizeOptions]="paginacao.opcoes"

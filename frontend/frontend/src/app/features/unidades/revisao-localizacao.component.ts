@@ -13,6 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { UnidadeSaude } from '../../core/models/models';
 import { STATUS_GEO } from './status-geocodificacao';
+import { NumeroInputDirective } from '../../core/utils/campos.directive';
 import { mensagemErro } from '../../core/utils/api-error';
 
 /**
@@ -27,7 +28,7 @@ import { mensagemErro } from '../../core/utils/api-error';
   imports: [
     CommonModule, FormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule,
-    MatInputModule, MatTooltipModule, MatProgressSpinnerModule, MatSnackBarModule
+    MatInputModule, MatTooltipModule, MatProgressSpinnerModule, MatSnackBarModule, NumeroInputDirective
   ],
   templateUrl: './revisao-localizacao.component.html',
   styleUrls: ['./revisao-localizacao.component.scss']

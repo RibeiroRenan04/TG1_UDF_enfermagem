@@ -243,7 +243,7 @@
           <span class="step-label">1. Código de presença <span class="obrigatorio">*</span></span>
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Código</mat-label>
-            <input matInput required autocomplete="off" placeholder="ENF-7K92"
+            <input matInput appMascara="codigo" maxlength="12" required autocomplete="off" placeholder="ENF-7K92"
                    [formControl]="remotoForm.controls['code']">
             <mat-hint>O código vale uma vez só e apenas dentro do prazo da atividade.</mat-hint>
             <mat-error *ngIf="remotoForm.controls['code'].hasError('required')">

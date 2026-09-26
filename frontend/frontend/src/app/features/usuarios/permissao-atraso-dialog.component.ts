@@ -92,7 +92,7 @@ import { mensagemErro } from '../../core/utils/api-error';
       mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
     }
     .toggle { display: block; margin-bottom: 14px; }
-    .campo { width: 100%; min-width: 380px; }
+    .campo { width: 100%; min-width: min(380px, 100%); }
     .erro { color: #b91c1c; font-size: 0.85rem; margin: 8px 0 0; }
   `]
 })

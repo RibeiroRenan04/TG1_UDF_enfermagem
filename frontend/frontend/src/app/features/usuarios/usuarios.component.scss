@@ -114,10 +114,14 @@
 
 .turma-spinner { flex-shrink: 0; }
 
-// Em telas estreitas a linha do aluno quebra e o seletor ocupa a largura toda.
+// Em telas estreitas a linha do aluno quebra: nome em cima, e-mail, depois os
+// seletores de turno e turma lado a lado e as ações.
 @media (max-width: 768px) {
-  .student-row { flex-wrap: wrap; }
-  .turma-select { width: 100%; }
+  .student-row { flex-wrap: wrap; row-gap: 8px; }
+  .student-info { flex: 1 1 calc(100% - 48px); }
+  .student-email { flex: 1 1 100%; max-width: none; text-align: left; padding-left: 48px; }
+  .turno-select { flex: 1 1 110px; width: auto; }
+  .turma-select { flex: 2 1 190px; width: auto; }
 }
 
 // ── Perfil de consulta (secretaria) ────────────────────────────────────────
@@ -156,3 +160,22 @@
 }
 
 .busca-usuarios { width: 100%; max-width: 480px; margin-bottom: 16px; }
+
+.lista-controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+
+  .busca-usuarios { flex: 1 1 280px; margin-bottom: 0; }
+}
+
+.ordenar-alunos {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  mat-form-field { width: 170px; }
+  .direcao { white-space: nowrap; }
+}

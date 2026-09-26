@@ -17,6 +17,7 @@ import { ProgramacaoService } from '../../core/services/programacao.service';
 import { AtividadesRemotasService } from '../../core/services/atividades-remotas.service';
 import { AtividadeRemotaAluno, ProgramacaoDia, ShiftPointStatus } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
+import { MascaraDirective } from '../../core/utils/campos.directive';
 import { HoraPipe } from '../../core/utils/hora.pipe';
 import { SemColarDirective } from '../../core/utils/sem-colar.directive';
 
@@ -35,7 +36,7 @@ import { SemColarDirective } from '../../core/utils/sem-colar.directive';
     CommonModule, ReactiveFormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatFormFieldModule, MatInputModule,
     MatIconModule, MatProgressSpinnerModule, MatSnackBarModule, MatDividerModule,
-    MatTooltipModule, MatChipsModule, HoraPipe, SemColarDirective
+    MatTooltipModule, MatChipsModule, HoraPipe, SemColarDirective, MascaraDirective
   ],
   templateUrl: './check-in.component.html',
   styleUrls: ['./check-in.component.scss']

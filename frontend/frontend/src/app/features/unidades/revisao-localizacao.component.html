@@ -47,11 +47,11 @@
     <div class="coordenadas">
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Latitude</mat-label>
-        <input matInput type="number" [(ngModel)]="edicao[u.id].lat" placeholder="-15.7401">
+        <input matInput type="number" step="any" min="-90" max="90" [(ngModel)]="edicao[u.id].lat" placeholder="-15.7401">
       </mat-form-field>
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Longitude</mat-label>
-        <input matInput type="number" [(ngModel)]="edicao[u.id].lon" placeholder="-47.8829">
+        <input matInput type="number" step="any" min="-180" max="180" [(ngModel)]="edicao[u.id].lon" placeholder="-47.8829">
       </mat-form-field>
       <a mat-icon-button *ngIf="u.temCoordenadas" [href]="urlMapa(u.latitude, u.longitude)"
          target="_blank" rel="noopener" matTooltip="Ver a sugestão no mapa">

@@ -9,9 +9,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { UnidadeSaude, GeocodificacaoResposta } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
+import { CAMPOS_TIPADOS, formatarComMascara } from '../../core/utils/campos.directive';
 
 /**
  * Cadastro e edição da unidade de saúde.
@@ -25,7 +27,8 @@ import { mensagemErro } from '../../core/utils/api-error';
   imports: [
     CommonModule, ReactiveFormsModule,
     MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule,
-    MatSelectModule, MatIconModule, MatCheckboxModule, MatProgressSpinnerModule
+    MatSelectModule, MatIconModule, MatCheckboxModule, MatProgressSpinnerModule, MatTooltipModule,
+    ...CAMPOS_TIPADOS
   ],
   templateUrl: './unidade-form-dialog.component.html',
   styleUrls: ['./unidade-form-dialog.component.scss']
@@ -50,12 +53,12 @@ export class UnidadeFormDialogComponent {
     uf:          ['DF', [Validators.maxLength(2)]],
     cep:         [''],
     telefone:    [''],
-    raioMetros:  [150, [Validators.min(10), Validators.max(5000)]],
+    raioMetros:  [150, [Validators.required, Validators.min(10), Validators.max(5000)]],
     inicioTurno: ['07:00'],
     fimTurno:    ['13:00'],
     ehInstituicao: [false],
-    latitude:    [null as number | null],
-    longitude:   [null as number | null]
+    latitude:    [null as number | null, [Validators.min(-90), Validators.max(90)]],
+    longitude:   [null as number | null, [Validators.min(-180), Validators.max(180)]]
   });
 
   constructor(
@@ -71,8 +74,8 @@ export class UnidadeFormDialogComponent {
         nome: u.nome, tipo: u.tipo ?? '', endereco: u.endereco ?? '', numero: u.numero ?? '',
         complemento: u.complemento ?? '', bairro: u.bairro ?? '', cidade: u.cidade ?? '',
         uf: u.uf ?? '', cep: u.cep ?? '', telefone: u.telefone ?? '',
-        raioMetros: u.raioMetros, inicioTurno: u.inicioTurno ?? '07:00',
-        fimTurno: u.fimTurno ?? '13:00', ehInstituicao: u.ehInstituicao,
+        raioMetros: u.raioMetros, inicioTurno: hhmm(u.inicioTurno) ?? '07:00',
+        fimTurno: hhmm(u.fimTurno) ?? '13:00', ehInstituicao: u.ehInstituicao,
         latitude: u.temCoordenadas ? u.latitude : null,
         longitude: u.temCoordenadas ? u.longitude : null
       });
@@ -130,8 +133,8 @@ export class UnidadeFormDialogComponent {
       complemento: v.complemento || undefined,
       bairro: v.bairro || undefined,
       cidade: v.cidade || undefined,
-      uf: v.uf || undefined,
-      cep: v.cep || undefined,
+      uf: formatarComMascara('uf', v.uf) || undefined,
+      cep: formatarComMascara('cep', v.cep) || undefined,
       telefone: v.telefone || undefined,
       raioMetros: v.raioMetros ?? undefined,
       ehInstituicao: v.ehInstituicao ?? false,
@@ -157,4 +160,10 @@ export class UnidadeFormDialogComponent {
       }
     });
   }
+}
+
+/** "7:00" ou "07:00:00" vindos do cadastro antigo viram "07:00", o formato que o campo aceita. */
+function hhmm(valor?: string | null): string | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(valor ?? '');
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : null;
 }

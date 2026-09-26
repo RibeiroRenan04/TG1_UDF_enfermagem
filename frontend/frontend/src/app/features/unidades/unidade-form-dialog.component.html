@@ -6,7 +6,7 @@
     <div class="linha">
       <mat-form-field appearance="outline" class="f2">
         <mat-label>Nome da unidade</mat-label>
-        <input matInput formControlName="nome" placeholder="Ex.: UBS 1 Asa Norte">
+        <input matInput formControlName="nome" maxlength="200" placeholder="Ex.: UBS 1 Asa Norte">
         <mat-error *ngIf="form.get('nome')?.hasError('required')">Informe o nome</mat-error>
       </mat-form-field>
       <mat-form-field appearance="outline">
@@ -20,60 +20,66 @@
     <div class="linha">
       <mat-form-field appearance="outline" class="f2">
         <mat-label>Endereço</mat-label>
-        <input matInput formControlName="endereco" placeholder="SGAN 906">
+        <input matInput formControlName="endereco" maxlength="300" placeholder="SGAN 906">
       </mat-form-field>
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" class="f-curto">
         <mat-label>Número</mat-label>
-        <input matInput formControlName="numero" placeholder="S/N">
+        <input matInput formControlName="numero" maxlength="20" placeholder="S/N">
       </mat-form-field>
     </div>
 
     <div class="linha">
       <mat-form-field appearance="outline">
         <mat-label>Complemento</mat-label>
-        <input matInput formControlName="complemento">
+        <input matInput formControlName="complemento" maxlength="200">
       </mat-form-field>
       <mat-form-field appearance="outline">
         <mat-label>Bairro</mat-label>
-        <input matInput formControlName="bairro">
+        <input matInput formControlName="bairro" maxlength="100">
       </mat-form-field>
     </div>
 
     <div class="linha">
       <mat-form-field appearance="outline" class="f2">
         <mat-label>Cidade</mat-label>
-        <input matInput formControlName="cidade">
+        <input matInput appMascara="nome" formControlName="cidade" maxlength="100">
       </mat-form-field>
       <mat-form-field appearance="outline" class="f-uf">
         <mat-label>UF</mat-label>
-        <input matInput formControlName="uf" maxlength="2">
+        <input matInput appMascara="uf" formControlName="uf" placeholder="DF">
+        <mat-error *ngIf="form.get('uf')?.getError('mascara') as e">{{ e }}</mat-error>
       </mat-form-field>
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" class="f-curto">
         <mat-label>CEP</mat-label>
-        <input matInput formControlName="cep" placeholder="70790-060">
+        <input matInput appMascara="cep" formControlName="cep" placeholder="70790-060">
+        <mat-error *ngIf="form.get('cep')?.getError('mascara') as e">{{ e }}</mat-error>
       </mat-form-field>
     </div>
 
     <div class="linha">
       <mat-form-field appearance="outline">
         <mat-label>Telefone</mat-label>
-        <input matInput formControlName="telefone">
+        <input matInput appMascara="telefone" formControlName="telefone" placeholder="(61) 3333-4444">
+        <mat-error *ngIf="form.get('telefone')?.getError('mascara') as e">{{ e }}</mat-error>
       </mat-form-field>
       <mat-form-field appearance="outline">
-        <mat-label>Raio do check-in (m)</mat-label>
-        <input matInput type="number" formControlName="raioMetros">
+        <mat-label>Raio do check-in (metros)</mat-label>
+        <input matInput type="number" min="10" max="5000" formControlName="raioMetros">
         <mat-hint>Distância máxima aceita no registro de ponto</mat-hint>
+        <mat-error *ngIf="form.get('raioMetros')?.invalid">Informe de 10 a 5000 metros</mat-error>
       </mat-form-field>
     </div>
 
     <div class="linha">
       <mat-form-field appearance="outline">
         <mat-label>Início do turno</mat-label>
-        <input matInput formControlName="inicioTurno" placeholder="07:00">
+        <input matInput appHora formControlName="inicioTurno">
+        <mat-error *ngIf="form.get('inicioTurno')?.invalid">Horário inválido (HH:mm, 24h)</mat-error>
       </mat-form-field>
       <mat-form-field appearance="outline">
         <mat-label>Fim do turno</mat-label>
-        <input matInput formControlName="fimTurno" placeholder="13:00">
+        <input matInput appHora formControlName="fimTurno">
+        <mat-error *ngIf="form.get('fimTurno')?.invalid">Horário inválido (HH:mm, 24h)</mat-error>
       </mat-form-field>
     </div>
 
@@ -129,11 +135,11 @@
       <div class="linha">
         <mat-form-field appearance="outline">
           <mat-label>Latitude</mat-label>
-          <input matInput type="number" formControlName="latitude" placeholder="-15.7401">
+          <input matInput type="number" step="any" min="-90" max="90" formControlName="latitude" placeholder="-15.7401">
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>Longitude</mat-label>
-          <input matInput type="number" formControlName="longitude" placeholder="-47.8829">
+          <input matInput type="number" step="any" min="-180" max="180" formControlName="longitude" placeholder="-47.8829">
         </mat-form-field>
         <button mat-icon-button type="button" matTooltip="Limpar coordenadas" (click)="limparCoordenadas()">
           <mat-icon>backspace</mat-icon>

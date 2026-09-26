@@ -272,3 +272,11 @@ h4 {
 }
 
 .busca-turma { width: 100%; max-width: 420px; margin-bottom: 12px; }
+
+// ── Lista de turmas: a linha inteira abre a página da turma ────────────────
+.linha-turma {
+  cursor: pointer;
+  &:hover, &:focus-visible { background: #f0f9ff; outline: none; }
+}
+.col-nome { min-width: 180px; }
+.col-abrir { width: 40px; text-align: right; color: #9ca3af; }

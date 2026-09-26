@@ -72,7 +72,7 @@
   flex-wrap: wrap;
   margin-bottom: 12px;
 
-  mat-form-field { width: 180px; }
+  mat-form-field { flex: 1 1 150px; max-width: 220px; }
 }
 
 .acoes { display: flex; gap: 8px; flex-wrap: wrap; }

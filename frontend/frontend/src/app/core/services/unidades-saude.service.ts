@@ -147,6 +147,8 @@ export class UnidadesSaudeService {
   getAlocacoes(filtros?: {
     unidadeId?: string; estagiarioId?: string; ativo?: boolean; turno?: Turno;
     de?: string; ate?: string; busca?: string; pagina?: number; tamanhoPagina?: number;
+    /** Coluna da ordenação (estagiario, rgm, unidade, turno, inicio, fim, situacao) e direção. */
+    ordenarPor?: string; direcao?: 'asc' | 'desc';
   }): Observable<AlocacoesPagina> {
     let params = new HttpParams();
     if (filtros?.unidadeId) params = params.set('unidadeId', filtros.unidadeId);
@@ -159,6 +161,9 @@ export class UnidadesSaudeService {
     if (filtros?.busca) params = params.set('busca', filtros.busca);
     if (filtros?.pagina) params = params.set('pagina', filtros.pagina);
     if (filtros?.tamanhoPagina) params = params.set('tamanhoPagina', filtros.tamanhoPagina);
+    if (filtros?.ordenarPor && filtros.direcao) {
+      params = params.set('ordenarPor', filtros.ordenarPor).set('direcao', filtros.direcao);
+    }
     return this.http.get<AlocacoesPagina>(`${this.apiBase}/alocacoes`, { params });
   }
 

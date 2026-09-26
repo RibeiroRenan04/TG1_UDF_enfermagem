@@ -17,6 +17,7 @@ import { FollowupsService } from '../../core/services/followups.service';
 import { AuthService } from '../../core/services/auth.service';
 import { FormativeFollowup, StudentLookup } from '../../core/models/models';
 import { SelecionarAlunoDialogComponent } from './selecionar-aluno-dialog.component';
+import { CAMPOS_TIPADOS } from '../../core/utils/campos.directive';
 import { mensagemErro } from '../../core/utils/api-error';
 
 /** Escala de frequência usada nas dimensões comportamentais. */
@@ -32,7 +33,7 @@ interface Bloco { titulo: string; itens: Dimensao[]; }
     MatDatepickerModule, CommonModule, ReactiveFormsModule,
     MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule,
-    MatTooltipModule, MatDividerModule, MatDialogModule
+    MatTooltipModule, MatDividerModule, MatDialogModule, ...CAMPOS_TIPADOS
   ],
   templateUrl: './acompanhamentos.component.html',
   styleUrls: ['./acompanhamentos.component.scss']

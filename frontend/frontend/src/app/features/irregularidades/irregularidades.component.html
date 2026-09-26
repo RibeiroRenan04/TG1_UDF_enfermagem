@@ -71,12 +71,23 @@
       <mat-option *ngFor="let t of tiposDisponiveis()" [value]="t.valor">{{ t.rotulo }}</mat-option>
     </mat-select>
   </mat-form-field>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Ordenar por</mat-label>
+    <mat-select [value]="ordem().active" (selectionChange)="mudarOrdem($event.value)">
+      <mat-option *ngFor="let c of camposOrdem" [value]="c.valor">{{ c.rotulo }}</mat-option>
+    </mat-select>
+  </mat-form-field>
+  <button mat-stroked-button *ngIf="ordem().active !== 'padrao'" (click)="mudarOrdem()"
+          [attr.aria-label]="ordem().direction === 'asc' ? 'Ordem crescente' : 'Ordem decrescente'">
+    <mat-icon>{{ ordem().direction === 'asc' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>
+    {{ ordem().direction === 'asc' ? 'Crescente' : 'Decrescente' }}
+  </button>
   <span class="contagem-lista">{{ itensFiltrados().length }} ocorrência(s)</span>
   <button mat-button *ngIf="temFiltroExtra() || filtroStatus() !== 'todas'" (click)="limparFiltros()">
     <mat-icon>filter_alt_off</mat-icon> Limpar filtros
   </button>
 </div>
-<p class="ordem-nota" *ngIf="filtroStatus() === 'aguardando_professor' || filtroStatus() === 'aguardando_preceptor'">
+<p class="ordem-nota" *ngIf="ordem().active === 'padrao' && (filtroStatus() === 'aguardando_professor' || filtroStatus() === 'aguardando_preceptor')">
   <mat-icon>sort</mat-icon> Mais antigas primeiro — a ordem em que a fila deve ser trabalhada.
 </p>
 

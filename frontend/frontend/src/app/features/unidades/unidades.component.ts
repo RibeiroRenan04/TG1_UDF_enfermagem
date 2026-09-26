@@ -1,6 +1,8 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { Paginacao } from '../../core/utils/paginacao';
+import { Ordenacao } from '../../core/utils/ordenacao';
+import { MatSortModule } from '@angular/material/sort';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -28,7 +30,7 @@ import { mensagemErro } from '../../core/utils/api-error';
   selector: 'app-unidades',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, RouterLink, MatPaginatorModule,
+    CommonModule, FormsModule, RouterLink, MatPaginatorModule, MatSortModule,
     MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule
@@ -38,7 +40,14 @@ import { mensagemErro } from '../../core/utils/api-error';
 })
 export class UnidadesComponent implements OnInit {
   unidades = signal<UnidadeSaude[]>([]);
-  readonly paginacao = new Paginacao(this.unidades);
+  readonly ordenacao = new Ordenacao(this.unidades, {
+    nome: u => u.nome,
+    cidade: u => u.cidade,
+    coordenadas: u => u.temCoordenadas,
+    estagiarios: u => u.estagiariosAtivos,
+    status: u => this.rotuloStatus(u.statusGeocodificacao)
+  });
+  readonly paginacao = new Paginacao(this.ordenacao.itens);
   loading = signal(true);
 
   filtroNome = '';

@@ -29,6 +29,8 @@ import { CadastrarStaffDialogComponent } from './cadastrar-staff-dialog.componen
 import { ConfirmarDialogComponent, ConfirmarDialogData } from '../../shared/confirmar-dialog.component';
 import { mensagemErro } from '../../core/utils/api-error';
 import { hojeIso } from '../../core/utils/data-br';
+import { Ordenacao, ordenarLista } from '../../core/utils/ordenacao';
+import { MatSortModule, Sort } from '@angular/material/sort';
 
 type Shift = 'manha' | 'tarde' | 'noite';
 type Sem   = 7 | 8;
@@ -44,7 +46,7 @@ interface TabKey { sem: Sem; shift: Shift; label: string }
     MatSelectModule, MatFormFieldModule, MatInputModule,
     MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule,
     MatTabsModule, MatChipsModule, MatDividerModule, MatTooltipModule,
-    MatSlideToggleModule, MatPaginatorModule
+    MatSlideToggleModule, MatPaginatorModule, MatSortModule
   ],
   templateUrl: './usuarios.component.html',
   styleUrls: ['./usuarios.component.scss']
@@ -83,12 +85,29 @@ export class UsuariosComponent implements OnInit {
   /** Busca por nome, RGM ou e-mail; vale para todas as seções da tela. */
   readonly busca = signal('');
 
-  private readonly filtrados = computed(() => {
+  /** Ordem das listas de alunos (ativos, sem categoria e inativos). */
+  readonly ordemAlunos = signal<Sort>({ active: 'fullName', direction: 'asc' });
+  readonly camposOrdemAlunos = [
+    { valor: 'fullName', rotulo: 'Nome' },
+    { valor: 'rgm', rotulo: 'RGM' },
+    { valor: 'email', rotulo: 'E-mail' }
+  ];
+
+  mudarOrdemAlunos(campo?: string): void {
+    this.ordemAlunos.update(o => campo
+      ? { active: campo, direction: o.direction || 'asc' }
+      : { ...o, direction: o.direction === 'asc' ? 'desc' : 'asc' });
+  }
+
+  private readonly filtradosSemOrdem = computed(() => {
     const termo = normalizarBusca(this.busca());
     return termo
       ? this.users().filter(u => [u.fullName, u.rgm, u.email].some(c => normalizarBusca(c).includes(termo)))
       : this.users();
   });
+
+  private readonly filtrados = computed(() =>
+    ordenarLista(this.filtradosSemOrdem(), this.ordemAlunos()));
 
   activeStudents = computed(() =>
     this.filtrados().filter(u => u.role === 'aluno' && u.isActive !== false && (u.semester === 7 || u.semester === 8))
@@ -110,7 +129,11 @@ export class UsuariosComponent implements OnInit {
     [tab.label, new Paginacao(computed(() => this.studentsForTab(tab)))] as const));
   readonly paginaSemCategoria = new Paginacao(this.uncategorizedStudents);
   readonly paginaInativos = new Paginacao(this.inactiveStudents);
-  readonly paginaStaff = new Paginacao(this.staff);
+  readonly ordenacaoStaff = new Ordenacao(this.staff, {
+    name: u => u.fullName,
+    role: u => this.perfilLabel(u.role)
+  }, { active: 'name', direction: 'asc' });
+  readonly paginaStaff = new Paginacao(this.ordenacaoStaff.itens);
 
   paginaDaAba(tab: TabKey): Paginacao<UserDto> {
     return this.paginasPorAba.get(tab.label)!;

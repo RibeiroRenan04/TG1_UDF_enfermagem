@@ -17,6 +17,8 @@ import { UnidadeSaude, Alocacao } from '../../core/models/models';
 import { AlocarEstagiarioDialogComponent } from './alocar-estagiario-dialog.component';
 import { STATUS_GEO, ORIGEM_COORDENADAS } from './status-geocodificacao';
 import { mensagemErro } from '../../core/utils/api-error';
+import { MatSortModule } from '@angular/material/sort';
+import { Ordenacao } from '../../core/utils/ordenacao';
 
 /** Detalhes da unidade e os estagiários alocados nela. */
 @Component({
@@ -25,7 +27,7 @@ import { mensagemErro } from '../../core/utils/api-error';
   imports: [
     CommonModule, FormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatIconModule, MatTableModule, MatTooltipModule,
-    MatSlideToggleModule, MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule
+    MatSlideToggleModule, MatProgressSpinnerModule, MatSnackBarModule, MatDialogModule, MatSortModule
   ],
   templateUrl: './unidade-detalhe.component.html',
   styleUrls: ['./unidade-detalhe.component.scss']
@@ -37,6 +39,15 @@ export class UnidadeDetalheComponent implements OnInit {
   mostrarEncerradas = false;
 
   colunas = ['nome', 'rgm', 'turnoAlocacao', 'periodo', 'inicio', 'situacao', 'acoes'];
+
+  readonly ordenacao = new Ordenacao(this.alocacoes, {
+    nome: a => a.estagiarioNome,
+    rgm: a => a.estagiarioRgm,
+    turnoAlocacao: a => ({ manha: 0, tarde: 1, noite: 2 } as Record<string, number>)[a.turno ?? ''],
+    periodo: a => a.estagiarioSemestre,
+    inicio: a => a.dataInicio,
+    situacao: a => a.ativo
+  });
 
   readonly statusGeo = STATUS_GEO;
   readonly origens = ORIGEM_COORDENADAS;

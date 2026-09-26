@@ -127,9 +127,10 @@
         </div>
         <details class="tabela-view">
           <summary>Ver em tabela</summary>
-          <table>
-            <thead><tr><th>Período</th><th>Ocorrências abertas</th></tr></thead>
-            <tbody><tr *ngFor="let b of p.evolucao"><td>{{ b.rotulo }}</td><td>{{ b.abertas }}</td></tr></tbody>
+          <table matSort matSortActive="periodo" matSortDirection="asc" matSortDisableClear
+                 (matSortChange)="ordemEvolucao.set($event)">
+            <thead><tr><th mat-sort-header="periodo">Período</th><th mat-sort-header="abertas">Ocorrências abertas</th></tr></thead>
+            <tbody><tr *ngFor="let b of evolucaoOrdenada()"><td>{{ b.rotulo }}</td><td>{{ b.abertas }}</td></tr></tbody>
           </table>
         </details>
       </ng-container>

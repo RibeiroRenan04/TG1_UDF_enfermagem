@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnDestroy, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -16,6 +16,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { Paginacao, normalizarBusca } from '../../core/utils/paginacao';
+import { Ordenacao } from '../../core/utils/ordenacao';
+import { MatSortModule } from '@angular/material/sort';
+import { LiberarCamada, VoltarService } from '../../core/services/voltar.service';
 import { mensagemErro } from '../../core/utils/api-error';
 
 @Component({
@@ -24,12 +27,16 @@ import { mensagemErro } from '../../core/utils/api-error';
   imports: [
     CommonModule, MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
     MatProgressSpinnerModule, MatProgressBarModule, MatChipsModule, MatSnackBarModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatPaginatorModule
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatPaginatorModule, MatSortModule
   ],
   templateUrl: './certificados.component.html',
   styleUrls: ['./certificados.component.scss']
 })
-export class CertificadosComponent implements OnInit {
+export class CertificadosComponent implements OnInit, OnDestroy {
+  private readonly voltarService = inject(VoltarService);
+  /** A pré-visualização é uma "tela" sem rota: o voltar do celular a fecha. */
+  private liberarPrevia?: LiberarCamada;
+
   loading = signal(true);
   myCert = signal<Certificate | null>(null);
   list = signal<Certificate[]>([]);
@@ -46,7 +53,13 @@ export class CertificadosComponent implements OnInit {
       && (!termo || [c.studentName, c.rgm, c.groupName].some(v => normalizarBusca(v).includes(termo))));
   });
   readonly concluidos = computed(() => this.filtrados().filter(c => c.eligible).length);
-  readonly paginacao = new Paginacao(this.filtrados);
+  readonly ordenacao = new Ordenacao(this.filtrados, {
+    name: c => c.studentName,
+    group: c => c.groupName,
+    hours: c => c.progressPercent,
+    status: c => c.eligible
+  });
+  readonly paginacao = new Paginacao(this.ordenacao.itens);
 
   role = this.auth.role;
   isAluno = computed(() => this.role() === 'aluno');
@@ -84,9 +97,18 @@ export class CertificadosComponent implements OnInit {
       return;
     }
     this.selected.set(cert);
+    this.liberarPrevia = this.voltarService.abrir(() => this.fecharPrevia());
   }
 
-  voltar(): void { this.selected.set(null); }
+  voltar(): void {
+    this.fecharPrevia();
+    this.liberarPrevia?.();
+    this.liberarPrevia = undefined;
+  }
+
+  private fecharPrevia(): void { this.selected.set(null); }
+
+  ngOnDestroy(): void { this.liberarPrevia?.({ semVoltar: true }); }
 
   /** Abre o certificado em nova janela, formatado para impressão / salvar em PDF. */
   imprimir(cert: Certificate): void {

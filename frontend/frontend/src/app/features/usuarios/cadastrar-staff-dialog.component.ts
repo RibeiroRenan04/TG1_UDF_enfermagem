@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
+import { CAMPOS_TIPADOS } from '../../core/utils/campos.directive';
 import { UsersService } from '../../core/services/users.service';
 import { mensagemErro } from '../../core/utils/api-error';
 
@@ -17,7 +18,7 @@ import { mensagemErro } from '../../core/utils/api-error';
   imports: [
     CommonModule, ReactiveFormsModule,
     MatDialogModule, MatButtonModule, MatSelectModule,
-    MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatIconModule
+    MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatIconModule, ...CAMPOS_TIPADOS
   ],
   template: `
     <h2 mat-dialog-title>Cadastrar preceptor, professor ou secretaria</h2>
@@ -37,7 +38,7 @@ import { mensagemErro } from '../../core/utils/api-error';
       <form [formGroup]="form" class="form">
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Nome completo</mat-label>
-          <input matInput formControlName="fullName">
+          <input matInput appMascara="nome" maxlength="200" formControlName="fullName">
         </mat-form-field>
 
         <div class="row-two">
@@ -73,7 +74,7 @@ import { mensagemErro } from '../../core/utils/api-error';
 
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>E-mail (login)</mat-label>
-          <input matInput type="email" formControlName="email" placeholder="pode ser e-mail externo">
+          <input matInput type="email" maxlength="255" formControlName="email" placeholder="pode ser e-mail externo">
           <mat-hint>
             E-mail institucional não é obrigatório: preceptores externos podem usar o e-mail próprio.
           </mat-hint>
@@ -83,12 +84,13 @@ import { mensagemErro } from '../../core/utils/api-error';
         <div class="row-two">
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Senha inicial</mat-label>
-            <input matInput type="password" formControlName="password" placeholder="Mínimo 6 caracteres">
+            <input matInput type="password" maxlength="100" formControlName="password" placeholder="Mínimo 6 caracteres">
             <mat-error *ngIf="form.get('password')?.hasError('minlength')">Mínimo 6 caracteres</mat-error>
           </mat-form-field>
           <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Telefone (opcional)</mat-label>
-            <input matInput formControlName="phone">
+            <input matInput appMascara="telefone" formControlName="phone" placeholder="(61) 99999-9999">
+            <mat-error *ngIf="form.get('phone')?.getError('mascara') as e">{{ e }}</mat-error>
           </mat-form-field>
         </div>
       </form>
@@ -112,12 +114,12 @@ import { mensagemErro } from '../../core/utils/api-error';
       mat-icon { font-size: 20px; width: 20px; height: 20px; flex-shrink: 0; }
       strong:first-child { display: block; margin-bottom: 2px; }
     }
-    .form { display: flex; flex-direction: column; gap: 16px; min-width: 380px; }
+    .form { display: flex; flex-direction: column; gap: 16px; min-width: min(380px, 100%); }
     /* Campos lado a lado têm textos de apoio de alturas diferentes; alinhados
        pelo topo, um não empurra o outro. */
     .row-two {
-      display: flex; gap: 12px; align-items: flex-start;
-      mat-form-field { flex: 1; min-width: 0; }
+      display: flex; flex-wrap: wrap; gap: 0 12px; align-items: flex-start;
+      mat-form-field { flex: 1 1 180px; min-width: 0; }
     }
     /* O Material reserva uma linha só para o texto de apoio. Estes textos ocupam
        duas (em meia largura, três) e vinham por cima do campo seguinte: o

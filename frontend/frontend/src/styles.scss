@@ -163,3 +163,60 @@ mat-progress-bar { border-radius: 4px; }
   mat-icon { color: rgba(0, 0, 0, 0.54); }
   input { flex: 1; border: none; outline: none; font: inherit; background: transparent; }
 }
+
+// ── Responsividade ────────────────────────────────────────────────────────────
+
+// Dica ou erro com mais de uma linha: o Material posiciona o texto por cima do
+// campo seguinte ("Distância máxima aceita…" em cima do "Fim do turno"). Aqui
+// ele continua ocupando a linha reservada, mas empurra o layout se crescer.
+.mat-mdc-form-field-subscript-wrapper:not(.mat-mdc-form-field-subscript-dynamic-size) {
+  .mat-mdc-form-field-hint-wrapper,
+  .mat-mdc-form-field-error-wrapper {
+    position: static;
+    margin-top: calc(-1 * var(--mat-form-field-subscript-text-line-height, 20px));
+  }
+}
+
+// Tabela larga rola dentro do próprio cartão, sem alargar a página no celular.
+.tabela-rolavel {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+
+  > table { min-width: 100%; }
+}
+
+// Cabeçalho ordenável: a seta aparece ao lado do texto, sem quebrar a coluna.
+.mat-sort-header-container { gap: 2px; }
+th.mat-sort-header { cursor: pointer; user-select: none; }
+
+@media (max-width: 599.98px) {
+  // Diálogos usam quase toda a largura do celular, com uma margem mínima.
+  .cdk-overlay-pane.mat-mdc-dialog-panel {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+  }
+  .mat-mdc-dialog-container .mat-mdc-dialog-content { padding-left: 16px; padding-right: 16px; }
+  .mat-mdc-dialog-container .mat-mdc-dialog-actions { flex-wrap: wrap; gap: 4px; padding-left: 12px; padding-right: 12px; }
+
+  // Células mais justas: mais colunas cabem antes de a tabela precisar rolar.
+  .mat-mdc-table .mat-mdc-cell,
+  .mat-mdc-table .mat-mdc-header-cell,
+  .mat-mdc-table .mat-mdc-footer-cell { padding: 0 8px; }
+  .mat-mdc-table .mat-mdc-cell:first-of-type,
+  .mat-mdc-table .mat-mdc-header-cell:first-of-type { padding-left: 12px; }
+
+  // Cabeçalho da página: título em cima, botões embaixo ocupando a largura.
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 16px;
+  }
+
+  .mat-mdc-card-actions { flex-wrap: wrap; gap: 4px; }
+
+  // Paginador: o seletor de itens por página vai para a linha de cima.
+  .mat-mdc-paginator-container { justify-content: center !important; padding: 0 !important; }
+  .mat-mdc-paginator-page-size { margin-right: 0 !important; }
+}

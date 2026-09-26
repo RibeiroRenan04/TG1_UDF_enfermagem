@@ -191,7 +191,7 @@ import { hojeIso } from '../../core/utils/data-br';
     .logins td { padding: 4px 8px; border-bottom: 1px solid #f3f4f6; }
     .logins .email { font-family: ui-monospace, monospace; font-size: 0.76rem; }
     code { background: #f3f4f6; padding: 1px 4px; border-radius: 4px; font-size: 0.8rem; }
-    .defaults-row { display: flex; gap: 12px; }
+    .defaults-row { display: flex; flex-wrap: wrap; gap: 0 12px; }
     .defaults-row mat-form-field { flex: 1; }
     .file-area {
       border: 2px dashed #d1d5db; border-radius: 8px;

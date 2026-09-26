@@ -13,13 +13,16 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { AttendanceService } from '../../core/services/attendance.service';
 import { AttendanceRecord } from '../../core/models/models';
 import { RegistrarIrregularidadeDialogComponent } from '../irregularidades/registrar-irregularidade-dialog.component';
+import { MatSortModule } from '@angular/material/sort';
+import { Ordenacao } from '../../core/utils/ordenacao';
 
 @Component({
   selector: 'app-historico',
   standalone: true,
   imports: [
     CommonModule, RouterLink, MatCardModule, MatTableModule, MatChipsModule, MatIconModule,
-    MatProgressSpinnerModule, MatButtonModule, MatTooltipModule, MatDialogModule, MatSnackBarModule
+    MatProgressSpinnerModule, MatButtonModule, MatTooltipModule, MatDialogModule, MatSnackBarModule,
+    MatSortModule
   ],
   templateUrl: './historico.component.html',
   styleUrls: ['./historico.component.scss']
@@ -28,6 +31,14 @@ export class HistoricoComponent implements OnInit {
   records = signal<AttendanceRecord[]>([]);
   loading = signal(true);
   displayedColumns = ['date', 'shift', 'type', 'location', 'distance', 'status', 'actions'];
+
+  readonly ordenacao = new Ordenacao(this.records, {
+    date: r => r.recordedAt,
+    shift: r => this.rotuloTurno(r.shift),
+    location: r => r.remoteActivityId ? (r.remoteActivityTitle || 'Atividade remota') : r.locationName,
+    distance: r => r.remoteActivityId ? null : r.distanceMeters,
+    status: r => this.rotuloStatus(r.status)
+  }, { active: 'date', direction: 'desc' });
 
   constructor(
     private attendanceService: AttendanceService,

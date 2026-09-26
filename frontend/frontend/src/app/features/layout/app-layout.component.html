@@ -1,16 +1,26 @@
 <mat-sidenav-container class="app-container">
 
-  <!-- Sidenav -->
-  <mat-sidenav #sidenav mode="side" [opened]="sidenavOpen" class="sidenav">
+  <!-- Sidenav: fixa ao lado no computador; no celular abre por cima, em tela cheia. -->
+  <mat-sidenav #sidenav class="sidenav"
+               [mode]="compacto() ? 'over' : 'side'"
+               [opened]="!compacto() && menuAberto()"
+               [fixedInViewport]="compacto()"
+               (openedChange)="aoMudarMenu($event)">
     <div class="brand">
       <img src="assets/logo.png" alt="EstágioCheck" class="brand-logo">
       <span class="brand-title">EstágioCheck</span>
+      <button mat-icon-button class="fechar-menu" *ngIf="compacto()" (click)="sidenav.close()"
+              aria-label="Fechar menu">
+        <mat-icon>close</mat-icon>
+      </button>
     </div>
 
     <mat-nav-list>
       <a mat-list-item
          *ngFor="let item of navItems()"
          [routerLink]="item.path"
+         [replaceUrl]="compacto() && !ativo(item)"
+         (click)="aoEscolherItem(item)"
          routerLinkActive="active-link"
          [routerLinkActiveOptions]="{ exact: item.path === '/app' }">
         <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
@@ -37,13 +47,13 @@
   <!-- Main content -->
   <mat-sidenav-content>
     <mat-toolbar color="primary" class="toolbar">
-      <button mat-icon-button (click)="sidenav.toggle(); sidenavOpen = !sidenavOpen">
+      <button mat-icon-button (click)="alternarMenu()" aria-label="Menu">
         <mat-icon>menu</mat-icon>
       </button>
       <span class="toolbar-title">EstágioCheck</span>
       <span class="toolbar-spacer"></span>
       <span class="readonly-badge" *ngIf="somenteLeitura()" matTooltip="Perfil de consulta: alterações estão desabilitadas">
-        <mat-icon>visibility</mat-icon> Somente leitura
+        <mat-icon>visibility</mat-icon> <span class="readonly-texto">Somente leitura</span>
       </span>
     </mat-toolbar>
 
@@ -53,4 +63,3 @@
   </mat-sidenav-content>
 
 </mat-sidenav-container>
-

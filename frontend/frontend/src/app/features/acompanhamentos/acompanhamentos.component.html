@@ -36,7 +36,7 @@
 
         <mat-form-field appearance="outline" class="rgm-field">
           <mat-label>RGM do aluno</mat-label>
-          <input matInput formControlName="rgm" (change)="lookupRgm()" (keyup.enter)="lookupRgm()"
+          <input matInput appMascara="inteiro" maxlength="20" formControlName="rgm" (change)="lookupRgm()" (keyup.enter)="lookupRgm()"
                  [readonly]="!!selectedFollowup()">
           <mat-spinner matSuffix *ngIf="lookingUp()" diameter="18"></mat-spinner>
         </mat-form-field>
@@ -59,7 +59,7 @@
       <div class="row-three">
         <mat-form-field appearance="outline">
           <mat-label>Período</mat-label>
-          <input matInput formControlName="periodLabel" placeholder="Preenchido pelo RGM">
+          <input matInput formControlName="periodLabel" maxlength="100" placeholder="Preenchido pelo RGM">
           <mat-hint>Vem do rodízio da turma do aluno</mat-hint>
         </mat-form-field>
         <mat-form-field appearance="outline">

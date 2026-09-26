@@ -10,6 +10,8 @@ import { IrregularitiesService } from '../../core/services/irregularities.servic
 import { IrregularidadesPainel } from '../../core/models/irregularidades-painel';
 import { IrregularityStatus } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
+import { MatSortModule, Sort } from '@angular/material/sort';
+import { ordenarLista } from '../../core/utils/ordenacao';
 
 /** A partir de quantos dias parada uma ocorrência pede atenção. */
 export const PRAZO_ATENCAO_DIAS = 3;
@@ -31,7 +33,7 @@ type Balde = IrregularidadesPainel['evolucao'][number];
   selector: 'app-irregularidades-painel',
   standalone: true,
   imports: [CommonModule, RouterLink, MatCardModule, MatIconModule, MatButtonModule,
-    MatProgressSpinnerModule, MatTooltipModule],
+    MatProgressSpinnerModule, MatTooltipModule, MatSortModule],
   templateUrl: './irregularidades-painel.component.html',
   styleUrls: ['./irregularidades-painel.component.scss']
 })
@@ -52,6 +54,12 @@ export class IrregularidadesPainelComponent implements OnInit {
   carregando = signal(true);
   erro = signal('');
   baldeEmFoco = signal<Balde | null>(null);
+
+  /** Ordem da tabela "Ver em tabela" da evolução; o período segue a ordem do gráfico. */
+  readonly ordemEvolucao = signal<Sort>({ active: 'periodo', direction: 'asc' });
+  readonly evolucaoOrdenada = computed(() => ordenarLista(
+    (this.painel()?.evolucao ?? []).map((b, i) => ({ ...b, indice: i })),
+    this.ordemEvolucao(), { periodo: b => b.indice }));
 
   rotuloPeriodo = computed(() => this.periodos.find(p => p.dias === this.periodo())?.rotulo ?? '');
 

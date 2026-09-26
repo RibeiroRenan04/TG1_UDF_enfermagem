@@ -1,6 +1,8 @@
 import { Component, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { Paginacao } from '../../core/utils/paginacao';
+import { ordenarLista } from '../../core/utils/ordenacao';
+import { Sort } from '@angular/material/sort';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -93,7 +95,24 @@ export class IrregularidadesComponent implements OnInit {
    * Lista filtrada. Nas situações em aberto, a mais antiga vem primeiro — é a
    * ordem em que a fila deve ser trabalhada; nas demais, a mais recente.
    */
-  itensFiltrados = computed(() => {
+  /** Ordem escolhida pelo usuário; "padrao" mantém a ordem da fila descrita acima. */
+  readonly ordem = signal<Sort>({ active: 'padrao', direction: 'asc' });
+  readonly camposOrdem = [
+    { valor: 'padrao', rotulo: 'Padrão da fila' },
+    { valor: 'occurredOn', rotulo: 'Data da ocorrência' },
+    { valor: 'createdAt', rotulo: 'Aberta em' },
+    { valor: 'studentName', rotulo: 'Aluno' },
+    { valor: 'tipo', rotulo: 'Tipo' },
+    { valor: 'espera', rotulo: 'Tempo na etapa' }
+  ];
+
+  mudarOrdem(campo?: string): void {
+    this.ordem.update(o => campo
+      ? { active: campo, direction: o.direction || 'asc' }
+      : { ...o, direction: o.direction === 'asc' ? 'desc' : 'asc' });
+  }
+
+  private itensNaOrdemDaFila = computed(() => {
     const status = this.filtroStatus();
     const termo = this.normalizar(this.busca());
     const tipo = this.filtroTipo();
@@ -107,6 +126,15 @@ export class IrregularidadesComponent implements OnInit {
     return [...filtrados].sort((a, b) => emAberto
       ? this.inicioDaEspera(a) - this.inicioDaEspera(b)
       : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  });
+
+  itensFiltrados = computed(() => {
+    const ordem = this.ordem();
+    if (ordem.active === 'padrao') return this.itensNaOrdemDaFila();
+    return ordenarLista(this.itensNaOrdemDaFila(), ordem, {
+      tipo: i => this.tipoLabel(i.type),
+      espera: i => this.diasEsperando(i)
+    });
   });
 
   readonly paginacao = new Paginacao(this.itensFiltrados);

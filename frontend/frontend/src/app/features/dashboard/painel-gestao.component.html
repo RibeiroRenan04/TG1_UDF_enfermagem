@@ -106,10 +106,14 @@
 
       <details class="tabela-view">
         <summary>Ver em tabela</summary>
-        <table>
-          <thead><tr><th>Dia</th><th>Turnos programados</th><th>Com check-in</th><th>Presença</th></tr></thead>
+        <table matSort matSortActive="data" matSortDirection="asc" matSortDisableClear
+               (matSortChange)="ordemDias.set($event)">
+          <thead><tr>
+            <th mat-sort-header="data">Dia</th><th mat-sort-header="esperados">Turnos programados</th>
+            <th mat-sort-header="registrados">Com check-in</th><th mat-sort-header="percentual">Presença</th>
+          </tr></thead>
           <tbody>
-            <tr *ngFor="let d of p.ultimosDias">
+            <tr *ngFor="let d of diasOrdenados()">
               <td>{{ diaDaSemana(d.data) }}, {{ rotuloDia(d.data) }}</td>
               <td>{{ d.esperados }}</td>
               <td>{{ d.registrados }}</td>

@@ -13,6 +13,8 @@ import { AttendanceService } from '../../core/services/attendance.service';
 import { IrregularitiesService } from '../../core/services/irregularities.service';
 import { AttendanceRecord, Irregularity } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
+import { MatSortModule } from '@angular/material/sort';
+import { Ordenacao } from '../../core/utils/ordenacao';
 
 /**
  * Painel do preceptor. Ele acompanha os registros de ponto dos alunos e as
@@ -25,7 +27,7 @@ import { mensagemErro } from '../../core/utils/api-error';
   imports: [
     CommonModule, RouterLink,
     MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
-    MatChipsModule, MatTooltipModule, MatProgressSpinnerModule, MatSnackBarModule
+    MatChipsModule, MatTooltipModule, MatProgressSpinnerModule, MatSnackBarModule, MatSortModule
   ],
   templateUrl: './preceptor.component.html',
   styleUrls: ['./preceptor.component.scss']
@@ -36,6 +38,13 @@ export class PreceptorComponent implements OnInit {
   aguardandoCiencia = signal<Irregularity[]>([]);
   loading = signal(true);
   displayedColumns = ['date', 'student', 'type', 'distance', 'status'];
+
+  readonly ordenacao = new Ordenacao(this.pending, {
+    date: r => r.recordedAt,
+    student: r => r.studentName,
+    distance: r => r.distanceMeters,
+    status: r => this.rotuloStatus(r.status)
+  });
 
   constructor(
     private attendanceService: AttendanceService,

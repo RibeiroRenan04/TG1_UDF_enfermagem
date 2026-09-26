@@ -108,7 +108,7 @@ import { mensagemErro } from '../../core/utils/api-error';
     </mat-dialog-actions>
   `,
   styles: [`
-    .busca { width: 100%; min-width: 480px; margin-bottom: 14px; }
+    .busca { width: 100%; min-width: min(480px, 100%); margin-bottom: 14px; }
     .carregando { display: flex; justify-content: center; padding: 28px; }
     .vazio {
       text-align: center; color: #6B7280; padding: 28px 8px;

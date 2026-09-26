@@ -1,15 +1,22 @@
-import { Component, computed } from '@angular/core';
+import { Component, ViewChild, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSidenav, MatSidenavModule } from '@angular/material/sidenav';
 import { MatListModule } from '@angular/material/list';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../../core/services/auth.service';
+import { LiberarCamada, VoltarService } from '../../core/services/voltar.service';
 import { rotuloTurma, turnoDaTurma } from '../../core/utils/turma';
+
+/** Abaixo desta largura o menu deixa de ficar fixo ao lado e abre por cima. */
+const TELA_COMPACTA = '(max-width: 1023.98px)';
 
 interface NavItem {
   path: string;
@@ -30,7 +37,25 @@ interface NavItem {
   styleUrls: ['./app-layout.component.scss']
 })
 export class AppLayoutComponent {
-  sidenavOpen = true;
+  @ViewChild('sidenav') private sidenav?: MatSidenav;
+
+  private readonly voltar = inject(VoltarService);
+
+  /**
+   * Celular e tablet: o menu fixo ao lado espremia a página (tabelas cortadas,
+   * campos sobrepostos). Nessas telas ele abre por cima, em tela cheia no celular.
+   */
+  readonly compacto = toSignal(
+    inject(BreakpointObserver).observe(TELA_COMPACTA).pipe(map(r => r.matches)),
+    { initialValue: window.matchMedia(TELA_COMPACTA).matches });
+
+  /** Menu aberto no computador (lá ele pode ser recolhido pelo botão da barra). */
+  readonly menuAberto = signal(true);
+
+  /** Tira do histórico a entrada que o menu aberto ocupa (ver VoltarService). */
+  private liberarMenu?: LiberarCamada;
+  /** O menu fechou porque uma página foi escolhida: a navegação ocupa a entrada dele. */
+  private escolheuPagina = false;
 
   private readonly allNav: NavItem[] = [
     { path: '/app',             label: 'Painel',            icon: 'dashboard',        roles: ['aluno','preceptor','supervisor','secretaria'] },
@@ -94,5 +119,40 @@ export class AppLayoutComponent {
 
   constructor(private auth: AuthService, private router: Router) {}
 
-  logout(): void { this.auth.logout(); }
+  alternarMenu(): void {
+    if (this.compacto()) this.sidenav?.toggle();
+    else this.menuAberto.update(v => !v);
+  }
+
+  /** Com o menu por cima, o voltar do celular fecha o menu em vez de sair da página. */
+  aoMudarMenu(aberto: boolean): void {
+    if (aberto && this.compacto()) {
+      this.liberarMenu = this.voltar.abrir(() => this.sidenav?.close());
+    } else if (!aberto) {
+      this.liberarMenu?.({ semVoltar: this.escolheuPagina });
+      this.liberarMenu = undefined;
+      this.escolheuPagina = false;
+    }
+  }
+
+  /**
+   * Escolher uma página fecha o menu. A navegação substitui (replaceUrl) a
+   * entrada do menu no histórico: voltar leva à página em que se estava antes.
+   */
+  aoEscolherItem(item: NavItem): void {
+    if (!this.compacto()) return;
+    this.escolheuPagina = !this.ativo(item);
+    this.sidenav?.close();
+  }
+
+  ativo(item: NavItem): boolean {
+    return this.router.isActive(item.path,
+      { paths: 'exact', queryParams: 'ignored', fragment: 'ignored', matrixParams: 'ignored' });
+  }
+
+  logout(): void {
+    this.escolheuPagina = true;
+    this.sidenav?.close();
+    this.auth.logout();
+  }
 }

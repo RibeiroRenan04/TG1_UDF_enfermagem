@@ -11,6 +11,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { LocationsService } from '../../core/services/locations.service';
 import { BuscaSaudeEstabelecimento } from '../../core/models/models';
 import { mensagemErro } from '../../core/utils/api-error';
+import { MatSortModule } from '@angular/material/sort';
+import { Ordenacao } from '../../core/utils/ordenacao';
 
 /**
  * Busca de unidades de saúde do DF no CNES/OpenDataSUS e importação delas como
@@ -26,7 +28,7 @@ import { mensagemErro } from '../../core/utils/api-error';
   imports: [
     CommonModule, FormsModule,
     MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule,
-    MatIconModule, MatTableModule, MatProgressSpinnerModule
+    MatIconModule, MatTableModule, MatProgressSpinnerModule, MatSortModule
   ],
   template: `
     <h2 mat-dialog-title>Buscar unidade de saúde no CNES</h2>
@@ -49,18 +51,19 @@ import { mensagemErro } from '../../core/utils/api-error';
 
       <div *ngIf="buscando()" class="carregando"><mat-spinner diameter="32"></mat-spinner></div>
 
-      <table mat-table [dataSource]="resultados()" class="full-width"
-             *ngIf="!buscando() && resultados().length; else vazio">
+      <div class="tabela-rolavel" *ngIf="!buscando() && resultados().length; else vazio">
+      <table mat-table [dataSource]="ordenacao.itens()" class="full-width"
+             matSort matSortDisableClear (matSortChange)="ordenacao.mudar($event)">
         <ng-container matColumnDef="nome">
-          <th mat-header-cell *matHeaderCellDef>Unidade</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Unidade</th>
           <td mat-cell *matCellDef="let e">{{ e.nome }}</td>
         </ng-container>
         <ng-container matColumnDef="endereco">
-          <th mat-header-cell *matHeaderCellDef>Endereço</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Endereço</th>
           <td mat-cell *matCellDef="let e">{{ e.endereco }}</td>
         </ng-container>
         <ng-container matColumnDef="telefone">
-          <th mat-header-cell *matHeaderCellDef>Telefone</th>
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Telefone</th>
           <td mat-cell *matCellDef="let e">{{ e.telefone || '—' }}</td>
         </ng-container>
         <ng-container matColumnDef="acoes">
@@ -76,6 +79,7 @@ import { mensagemErro } from '../../core/utils/api-error';
         <tr mat-header-row *matHeaderRowDef="colunas"></tr>
         <tr mat-row *matRowDef="let row; columns: colunas;"></tr>
       </table>
+      </div>
 
       <ng-template #vazio>
         <div class="empty-state" *ngIf="!buscando()">
@@ -96,10 +100,11 @@ import { mensagemErro } from '../../core/utils/api-error';
     </mat-dialog-actions>
   `,
   styles: [`
-    :host { display: block; min-width: 620px; }
+    /* No celular o diálogo é mais estreito que 620px: a tabela rola dentro dele. */
+    :host { display: block; min-width: min(620px, 100%); }
     .ajuda { font-size: 0.8rem; color: #6B7280; line-height: 1.5; margin: 0 0 14px; }
-    .busca { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
-    .campo { flex: 1; }
+    .busca { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+    .campo { flex: 1 1 220px; }
     .carregando { display: flex; justify-content: center; padding: 28px; }
     .full-width { width: 100%; }
     .empty-state {
@@ -120,6 +125,7 @@ export class BuscaCnesDialogComponent {
   importouAlguma = false;
 
   colunas = ['nome', 'endereco', 'telefone', 'acoes'];
+  readonly ordenacao = new Ordenacao(this.resultados);
 
   /** CNES já presentes no cadastro — o botão de importar fica inativo neles. */
   private jaCadastrados = signal<Set<string>>(new Set());

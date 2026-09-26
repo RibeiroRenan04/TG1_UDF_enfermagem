@@ -89,7 +89,7 @@ import { ScheduleStudents, StudentLookup } from '../../core/models/models';
     </mat-dialog-actions>
   `,
   styles: [`
-    .busca { width: 100%; min-width: 420px; margin-bottom: 14px; }
+    .busca { width: 100%; min-width: min(420px, 100%); margin-bottom: 14px; }
     .carregando { display: flex; justify-content: center; padding: 32px; }
     .vazio {
       text-align: center; color: #6B7280; padding: 28px 8px;

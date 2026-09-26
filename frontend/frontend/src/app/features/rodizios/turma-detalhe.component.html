@@ -1,0 +1,324 @@
+<a mat-button routerLink="/app/rodizios" class="voltar-lista">
+  <mat-icon>arrow_back</mat-icon> Turmas
+</a>
+
+<div *ngIf="loading()" class="loading-overlay"><mat-spinner diameter="48"></mat-spinner></div>
+
+<div class="empty-state" *ngIf="!loading() && naoEncontrada()">
+  <mat-icon>group_off</mat-icon>
+  <p>Turma não encontrada. Ela pode ter sido excluída.</p>
+</div>
+
+<ng-container *ngIf="!loading() && group() as g">
+  <div class="page-header">
+    <div>
+      <span class="group-code grande">{{ g.code }}</span>
+      <h1>{{ g.name }}</h1>
+      <p class="page-subtitle" *ngIf="g.description">{{ g.description }}</p>
+    </div>
+    <div class="header-acoes">
+      <button mat-stroked-button (click)="vincularAlunos()">
+        <mat-icon>group_add</mat-icon> Vincular alunos
+      </button>
+      <button mat-raised-button color="primary" (click)="abrirAlocacao()" [disabled]="!temAlunosVinculados()">
+        <mat-icon>event_available</mat-icon> Alocar rodízio
+      </button>
+    </div>
+  </div>
+
+  <!-- Conferência do vínculo dos alunos -->
+  <div class="warning-box" *ngIf="!carregandoMembros() && !membros().length">
+    <mat-icon>warning_amber</mat-icon>
+    <span>Nenhum aluno vinculado a esta turma. Vincule os alunos antes de alocar o rodízio.</span>
+  </div>
+
+  <!-- ── Rodízios alocados ────────────────────────────────────────────────── -->
+  <mat-card class="secao-card">
+    <mat-card-header>
+      <mat-card-title>Rodízios alocados</mat-card-title>
+      <mat-card-subtitle>{{ escalas().length }} rodízio(s)</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="schedules-list">
+        <div class="schedule-item" *ngFor="let s of escalas()">
+          <div class="schedule-main">
+            <mat-icon>calendar_today</mat-icon>
+            <span class="schedule-period">{{ s.startDate | date:'dd/MM/yy' }} – {{ s.endDate | date:'dd/MM/yy' }}</span>
+            <span class="schedule-label">{{ s.periodLabel }}</span>
+            <span class="schedule-shift">{{ turnoLabel(s.shift) }}</span>
+            <span class="schedule-type">{{ atividadeLabel(s.activityType) }}</span>
+            <span class="schedule-hours">{{ s.requiredHours }}h</span>
+          </div>
+          <div class="schedule-meta">
+            <span><mat-icon>place</mat-icon> {{ s.locationName }}</span>
+            <span><mat-icon>badge</mat-icon> {{ s.preceptorName || 'Sem preceptor' }}</span>
+          </div>
+          <div class="schedule-dias" *ngIf="s.days?.length">
+            <span class="dia-chip" *ngFor="let d of s.days" [class.remoto]="d.mode === 'remoto'">
+              {{ d.dayLabel.substring(0, 3) }}
+              <ng-container *ngIf="d.mode === 'presencial'">· {{ d.locationName }}</ng-container>
+              <ng-container *ngIf="d.mode === 'remoto'">· remoto</ng-container>
+            </span>
+          </div>
+          <div class="schedule-actions">
+            <button mat-icon-button matTooltip="Editar alocação" (click)="editarAlocacao(s)">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button mat-icon-button color="warn" matTooltip="Excluir alocação" (click)="excluirAlocacao(s)">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        </div>
+        <div class="empty-state small" *ngIf="!escalas().length">
+          Nenhum rodízio alocado para esta turma.
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- ── Formulário de alocação de rodízio ────────────────────────────────── -->
+  <mat-card id="form-alocacao" class="form-card allocation-card" *ngIf="showScheduleForm()">
+    <mat-card-header>
+      <mat-card-title>{{ editingSchedule() ? 'Editar alocação' : 'Alocar rodízio' }}</mat-card-title>
+      <mat-card-subtitle>{{ membros().length }} aluno(s) vinculado(s) a esta turma</mat-card-subtitle>
+    </mat-card-header>
+  <mat-card-content>
+    <form [formGroup]="scheduleForm" (ngSubmit)="salvarAlocacao()">
+      <div class="form-grid">
+        <mat-form-field appearance="outline">
+          <mat-label>Turno</mat-label>
+          <mat-select formControlName="shift">
+            <mat-option *ngFor="let t of turnos" [value]="t.valor">{{ t.rotulo }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Período</mat-label>
+          <input matInput formControlName="periodLabel" maxlength="100" placeholder="Ex.: 2026.1 – 1º rodízio">
+          <mat-error *ngIf="scheduleForm.get('periodLabel')?.hasError('required')">Informe o período</mat-error>
+          <mat-error *ngIf="erroServidor('periodLabel') as e">{{ e }}</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Local do estágio</mat-label>
+          <mat-select formControlName="locationId" (openedChange)="buscaLocal.set('')">
+            <div class="select-busca">
+              <mat-icon>search</mat-icon>
+              <input placeholder="Buscar local…" [value]="buscaLocal()"
+                     (input)="buscaLocal.set($any($event.target).value)" (keydown)="$event.stopPropagation()">
+            </div>
+            <mat-option *ngFor="let l of locaisFiltrados(scheduleForm.value.locationId)" [value]="l.id">{{ l.name }}</mat-option>
+          </mat-select>
+          <mat-error *ngIf="scheduleForm.get('locationId')?.hasError('required')">Selecione o local</mat-error>
+          <mat-error *ngIf="erroServidor('locationId') as e">{{ e }}</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Preceptor responsável</mat-label>
+          <mat-select formControlName="preceptorId">
+            <mat-option *ngFor="let p of preceptors()" [value]="p.id">
+              {{ p.fullName }} <span class="opt-role">({{ p.role }})</span>
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="scheduleForm.get('preceptorId')?.hasError('required')">Informe o preceptor</mat-error>
+          <mat-error *ngIf="erroServidor('preceptorId') as e">{{ e }}</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Data de início</mat-label>
+          <input matInput [matDatepicker]="dp1" formControlName="startDate" placeholder="dd/mm/aaaa">
+          <mat-datepicker-toggle matIconSuffix [for]="dp1"></mat-datepicker-toggle>
+          <mat-datepicker #dp1></mat-datepicker>
+          <mat-error *ngIf="scheduleForm.get('startDate')?.hasError('required')">Informe a data de início</mat-error>
+          <mat-error *ngIf="erroServidor('startDate') as e">{{ e }}</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Data de término</mat-label>
+          <input matInput [matDatepicker]="dp2" formControlName="endDate" placeholder="dd/mm/aaaa">
+          <mat-datepicker-toggle matIconSuffix [for]="dp2"></mat-datepicker-toggle>
+          <mat-datepicker #dp2></mat-datepicker>
+          <mat-error *ngIf="scheduleForm.get('endDate')?.hasError('required')">Informe a data de término</mat-error>
+          <mat-error *ngIf="erroServidor('endDate') as e">{{ e }}</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Atividade a ser desenvolvida</mat-label>
+          <mat-select formControlName="activityType">
+            <mat-option *ngFor="let a of atividades" [value]="a.valor">{{ a.rotulo }}</mat-option>
+          </mat-select>
+          <mat-error *ngIf="erroServidor('activityType') as e">{{ e }}</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Carga horária (horas)</mat-label>
+          <input matInput type="number" min="1" max="2000" step="1" formControlName="requiredHours">
+          <mat-error *ngIf="scheduleForm.get('requiredHours')?.errors && !erroServidor('requiredHours')">Informe de 1 a 2000 horas</mat-error>
+          <mat-error *ngIf="erroServidor('requiredHours') as e">{{ e }}</mat-error>
+        </mat-form-field>
+      </div>
+
+      <!-- Erro do servidor sem campo correspondente (ex.: programação semanal). -->
+      <div class="warning-box erro-servidor" *ngIf="erroGeral() as e">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ e }}</span>
+      </div>
+
+      <!-- Preceptor ja escalado em outro local no mesmo turno/periodo. -->
+      <div class="warning-box conflict-box" *ngIf="conflitoPreceptor() as c">
+        <mat-icon>warning_amber</mat-icon>
+        <span>
+          Este preceptor já está escalado em <strong>{{ c.locationName }}</strong>
+          ({{ c.groupCode }} — {{ c.periodLabel }}) de
+          {{ c.startDate | date:'dd/MM/yy' }} a {{ c.endDate | date:'dd/MM/yy' }},
+          no mesmo turno. Confirme se ele cobre os dois locais antes de salvar.
+        </span>
+      </div>
+
+      <!-- Programação semanal: cadastra o dia da semana em vez de data a data -->
+      <div class="dias-block">
+        <div class="dias-header">
+          <div>
+            <h4>Programação semanal (opcional)</h4>
+            <p>
+              Marque os dias e o sistema gera sozinho a programação de cada data do
+              período. Sem nenhum dia marcado, todo dia útil (segunda a sexta) vale
+              como presencial no local principal. O <strong>sábado</strong> só entra
+              quando marcado — use para plantões, práticas supervisionadas e aulas de
+              campo; as horas registradas nele somam na carga do aluno.
+              Às <strong>sextas</strong> o estágio é na UDF (Laboratórios de Enfermagem) ou remoto.
+            </p>
+          </div>
+          <div class="dias-atalhos">
+            <button mat-button type="button" (click)="marcarTodosPresenciais()">
+              <mat-icon>done_all</mat-icon> Seg. a sex. presencial
+            </button>
+            <button mat-button type="button" *ngIf="temProgramacaoSemanal()"
+                    (click)="limparProgramacao()">
+              <mat-icon>backspace</mat-icon> Limpar
+            </button>
+          </div>
+        </div>
+
+        <div class="dia-linha" *ngFor="let d of dias()" [class.inativo]="!d.ativo">
+          <mat-checkbox [checked]="d.ativo"
+                        (change)="atualizarDia(d.dayOfWeek, { ativo: $event.checked })">
+            {{ d.label }}
+          </mat-checkbox>
+
+          <mat-form-field appearance="outline" class="dia-campo">
+            <mat-label>Atividade</mat-label>
+            <mat-select [value]="d.mode" [disabled]="!d.ativo"
+                        (valueChange)="atualizarDia(d.dayOfWeek, { mode: $event })">
+              <mat-option *ngFor="let m of modosDoDia(d)" [value]="m.valor">{{ m.rotulo }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="dia-campo" *ngIf="!ehSexta(d); else localDaSexta">
+            <mat-label>Local</mat-label>
+            <mat-select [value]="d.locationId"
+                        [disabled]="!d.ativo || d.mode !== 'presencial'"
+                        (openedChange)="buscaLocal.set('')"
+                        (valueChange)="atualizarDia(d.dayOfWeek, { locationId: $event })">
+                <div class="select-busca">
+                  <mat-icon>search</mat-icon>
+                  <input placeholder="Buscar local…" [value]="buscaLocal()"
+                         (input)="buscaLocal.set($any($event.target).value)" (keydown)="$event.stopPropagation()">
+                </div>
+              <mat-option value="">Local principal do rodízio</mat-option>
+              <mat-option *ngFor="let l of locaisFiltrados(d.locationId)" [value]="l.id">{{ l.name }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <ng-template #localDaSexta>
+            <mat-form-field appearance="outline" class="dia-campo">
+              <mat-label>Local</mat-label>
+              <input matInput disabled
+                     [value]="d.mode === 'presencial' ? (localSexta()?.name ?? 'Nenhuma unidade marcada como instituição de ensino') : '—'">
+              <mat-hint>Às sextas: UDF ou remoto.</mat-hint>
+            </mat-form-field>
+          </ng-template>
+
+          <span class="dia-hint" *ngIf="d.ativo && d.mode === 'remoto'">
+            Validação por código de atividade.
+          </span>
+        </div>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Detalhamento da atividade (opcional)</mat-label>
+        <textarea matInput rows="2" formControlName="notes" maxlength="1000"
+                  placeholder="Descreva as atividades previstas para o rodízio"></textarea>
+      </mat-form-field>
+
+      <div class="form-actions">
+        <button mat-button type="button" (click)="showScheduleForm.set(false)">Cancelar</button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="savingSchedule()">
+          <mat-spinner *ngIf="savingSchedule()" diameter="18" class="btn-spinner"></mat-spinner>
+          <span>{{ editingSchedule() ? 'Salvar alterações' : 'Alocar rodízio' }}</span>
+        </button>
+      </div>
+    </form>
+  </mat-card-content>
+  </mat-card>
+
+  <!-- ── Alunos vinculados ────────────────────────────────────────────────── -->
+  <mat-card class="secao-card">
+    <mat-card-header>
+      <mat-card-title>Alunos vinculados</mat-card-title>
+      <mat-card-subtitle>{{ membros().length }} aluno(s)</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="alunos-topo" *ngIf="membros().length">
+        <mat-form-field appearance="outline" class="busca-aluno" subscriptSizing="dynamic">
+          <mat-icon matPrefix>search</mat-icon>
+          <mat-label>Buscar por nome ou RGM</mat-label>
+          <input matInput [value]="buscaAluno()" (input)="buscaAluno.set($any($event.target).value)">
+        </mat-form-field>
+        <button mat-button color="primary" (click)="vincularAlunos()">
+          <mat-icon>edit</mat-icon> Editar vínculos
+        </button>
+      </div>
+
+      <div *ngIf="carregandoMembros()" class="loading-overlay"><mat-spinner diameter="32"></mat-spinner></div>
+
+      <div class="tabela-rolavel" *ngIf="!carregandoMembros() && ordenacaoAlunos.itens().length">
+        <table mat-table [dataSource]="ordenacaoAlunos.itens()" class="full-width"
+               matSort matSortActive="nome" matSortDirection="asc" matSortDisableClear
+               (matSortChange)="ordenacaoAlunos.mudar($event)">
+          <ng-container matColumnDef="nome">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Aluno</th>
+            <td mat-cell *matCellDef="let m">
+              {{ m.fullName }}
+              <span class="inativo" *ngIf="!m.isActive">inativo</span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="rgm">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>RGM</th>
+            <td mat-cell *matCellDef="let m">{{ m.rgm || '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="semester">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Semestre</th>
+            <td mat-cell *matCellDef="let m">{{ m.semester ? m.semester + 'º' : '—' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="turno">
+            <th mat-header-cell *matHeaderCellDef mat-sort-header>Turno</th>
+            <td mat-cell *matCellDef="let m">{{ turnoLabel(m.shift) }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="colunasAlunos"></tr>
+          <tr mat-row *matRowDef="let row; columns: colunasAlunos;"></tr>
+        </table>
+      </div>
+
+      <div class="empty-state small" *ngIf="!carregandoMembros() && membros().length && !membrosFiltrados().length">
+        Nenhum aluno encontrado com essa busca.
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <div class="zona-perigo">
+    <button mat-button color="warn" (click)="deleteGroup()">
+      <mat-icon>delete</mat-icon> Excluir turma
+    </button>
+  </div>
+</ng-container>

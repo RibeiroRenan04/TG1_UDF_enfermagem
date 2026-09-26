@@ -95,6 +95,12 @@ export const routes: Routes = [
         canActivate: [roleGuard(['supervisor', 'secretaria'])],
         loadComponent: () => import('./features/rodizios/rodizios.component').then(m => m.RodiziosComponent)
       },
+      // Página da turma: alunos vinculados, rodízios e alocação.
+      {
+        path: 'rodizios/:id',
+        canActivate: [roleGuard(['supervisor', 'secretaria'])],
+        loadComponent: () => import('./features/rodizios/turma-detalhe.component').then(m => m.TurmaDetalheComponent)
+      },
       // ── Programação do dia ──
       // O aluno acompanha a agenda das atividades remotas da própria turma; a
       // gestão cadastra as atividades e as exceções do calendário.

@@ -36,6 +36,8 @@ export interface RegistrarIrregularidadeData {
  * ele vem pronto: o passo 1 vira uma confirmação, e tipo e data são deduzidos do
  * próprio registro.
  */
+import { DataInputDirective } from '../../core/utils/campos.directive';
+
 @Component({
   selector: 'app-registrar-irregularidade-dialog',
   standalone: true,
@@ -43,7 +45,7 @@ export interface RegistrarIrregularidadeData {
     CommonModule, ReactiveFormsModule,
     MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatDatepickerModule,
-    MatIconModule, MatStepperModule, MatProgressSpinnerModule
+    MatIconModule, MatStepperModule, MatProgressSpinnerModule, DataInputDirective
   ],
   template: `
     <h2 mat-dialog-title>Registrar irregularidade no ponto</h2>

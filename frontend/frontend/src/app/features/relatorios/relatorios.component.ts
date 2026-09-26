@@ -14,6 +14,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { Paginacao, normalizarBusca } from '../../core/utils/paginacao';
+import { Ordenacao } from '../../core/utils/ordenacao';
+import { MatSortModule } from '@angular/material/sort';
 
 /** Valores exibidos numa linha — de uma turma ou do total do aluno. */
 type Valores = Pick<ReportTurma,
@@ -40,7 +42,7 @@ interface LinhaRelatorio {
   imports: [
     CommonModule, MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
     MatProgressSpinnerModule, MatChipsModule, MatTooltipModule,
-    MatFormFieldModule, MatInputModule, MatPaginatorModule
+    MatFormFieldModule, MatInputModule, MatPaginatorModule, MatSortModule
   ],
   templateUrl: './relatorios.component.html',
   styleUrls: ['./relatorios.component.scss']
@@ -58,8 +60,23 @@ export class RelatoriosComponent implements OnInit {
           .some(c => normalizarBusca(c).includes(termo)))
       : this.rows();
   });
+  /**
+   * Ordenado por aluno (pelos valores totais dele), para as linhas das turmas de
+   * um mesmo aluno continuarem juntas. A exportação sai na mesma ordem da tela.
+   */
+  readonly ordenacao = new Ordenacao(this.filtrados, {
+    name: a => a.fullName,
+    turma: a => a.turmas[0]?.groupCode,
+    hours: a => a.hours,
+    required: a => a.required,
+    progress: a => a.progressPercent,
+    approved: a => a.approved,
+    irregular: a => a.irregular,
+    pendencies: a => a.pendencyDays,
+    certificate: a => a.certificateReleased
+  });
   /** Paginado por aluno, para as linhas de um mesmo aluno não se separarem. */
-  readonly paginacao = new Paginacao(this.filtrados);
+  readonly paginacao = new Paginacao(this.ordenacao.itens);
 
   linhas = computed<LinhaRelatorio[]>(() => this.paginacao.pagina().flatMap(a => this.montarLinhas(a)));
 
@@ -101,7 +118,7 @@ export class RelatoriosComponent implements OnInit {
     try {
       // jsPDF e SheetJS são pesados: só carregam quando alguém exporta.
       const { gerarPdf } = await import('./relatorio-exportacao');
-      gerarPdf({ alunos: this.filtrados(), busca: this.busca().trim() }, await this.carregarLogo());
+      gerarPdf({ alunos: this.ordenacao.itens(), busca: this.busca().trim() }, await this.carregarLogo());
     } finally {
       this.gerandoPdf.set(false);
     }
@@ -109,7 +126,7 @@ export class RelatoriosComponent implements OnInit {
 
   async baixarXlsx(): Promise<void> {
     const { gerarXlsx } = await import('./relatorio-exportacao');
-    gerarXlsx({ alunos: this.filtrados(), busca: this.busca().trim() });
+    gerarXlsx({ alunos: this.ordenacao.itens(), busca: this.busca().trim() });
   }
 
   /** Logo da UDF em data URL para embutir no PDF; sem ela o relatório sai só com o nome. */

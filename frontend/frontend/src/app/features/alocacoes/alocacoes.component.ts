@@ -13,6 +13,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatSortModule, Sort, SortDirection } from '@angular/material/sort';
+import { CAMPOS_TIPADOS } from '../../core/utils/campos.directive';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { UnidadesSaudeService } from '../../core/services/unidades-saude.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -27,7 +29,8 @@ import { mensagemErro } from '../../core/utils/api-error';
     MatDatepickerModule, CommonModule, FormsModule, RouterLink,
     MatCardModule, MatButtonModule, MatIconModule, MatTableModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule,
-    MatProgressSpinnerModule, MatSnackBarModule, MatPaginatorModule
+    MatProgressSpinnerModule, MatSnackBarModule, MatPaginatorModule, MatSortModule,
+    ...CAMPOS_TIPADOS
   ],
   templateUrl: './alocacoes.component.html',
   styleUrls: ['./alocacoes.component.scss']
@@ -59,6 +62,10 @@ export class AlocacoesComponent implements OnInit, OnDestroy {
   filtroAte = '';
 
   colunas = ['estagiario', 'rgm', 'unidade', 'turno', 'inicio', 'fim', 'situacao', 'acoes'];
+
+  /** Ordenação escolhida no cabeçalho; vazia mantém a ordem padrão da API (ativas e mais recentes primeiro). */
+  ordenarPor = '';
+  direcao: SortDirection = '';
 
   readonly turnos: Turno[] = ['manha', 'tarde', 'noite'];
 
@@ -92,7 +99,9 @@ export class AlocacoesComponent implements OnInit, OnDestroy {
       ate: this.filtroAte || undefined,
       busca: this.filtroTexto.trim() || undefined,
       pagina: this.pagina + 1,
-      tamanhoPagina: this.tamanhoPagina
+      tamanhoPagina: this.tamanhoPagina,
+      ordenarPor: this.ordenarPor || undefined,
+      direcao: this.direcao || undefined
     }).subscribe({
       next: (p) => {
         this.alocacoes.set(p.itens);
@@ -117,6 +126,13 @@ export class AlocacoesComponent implements OnInit, OnDestroy {
     this.filtroTexto = texto;
     clearTimeout(this.buscaTimer);
     this.buscaTimer = setTimeout(() => this.filtrar(), 350);
+  }
+
+  /** A lista é paginada na API: ordenar só a página exibida misturaria as outras. */
+  ordenar(s: Sort): void {
+    this.ordenarPor = s.direction ? s.active : '';
+    this.direcao = s.direction;
+    this.filtrar();
   }
 
   mudarPagina(e: PageEvent): void {
